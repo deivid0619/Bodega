@@ -1,0 +1,48 @@
+# Levanta todo en local con un solo comando: docker compose up --build
+# Backend en http://localhost:8001, frontend en http://localhost:5173,
+# base de datos Postgres en el puerto 5433 (usuario/clave: bodega/bodega).
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bodega
+      POSTGRES_PASSWORD: bodega
+      POSTGRES_DB: bodega
+    ports:
+      - "5433:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bodega"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: on-failure:5
+    environment:
+      DATABASE_URL: postgresql://bodega:bodega@db:5432/bodega
+      SECRET_KEY: cambia-esto-en-produccion
+      REGISTRATION_CODE: pigmalion
+      ADMIN_EMAIL: admin@pigmalionmoto.com
+      ADMIN_PASSWORD: cambiar123
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: on-failure:5
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
