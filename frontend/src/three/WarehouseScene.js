@@ -411,10 +411,10 @@ export class WarehouseScene {
       // tarjeta con foto + nombre de la prenda, flotando sobre la barra
       // (solo se ve si algun producto de esa ubicacion tiene foto)
       const photo = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }))
-      photo.position.set(0, y + 0.48, 0); photo.scale.set(0.001, 0.001, 1); photo.visible = false
+      photo.position.set(0, y - 0.3, 0); photo.scale.set(0.001, 0.001, 1); photo.visible = false
       g.add(photo)
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }))
-      tag.position.set(0, y + 0.24, 0); tag.scale.set(0.6, 0.16, 1); tag.visible = false
+      tag.position.set(0, y - 0.62, 0); tag.scale.set(0.4, 0.11, 1); tag.visible = false
       g.add(tag)
       const loc = el.locations[i - 1]
       if (loc) {
@@ -627,12 +627,18 @@ export class WarehouseScene {
           o.photo.material.map = tex
           o.photo.material.needsUpdate = true
           o.photo.visible = true
+          // ancho fijo tipo "hombros de una chaqueta" (~0.4 m, similar a las
+          // otras prendas de la escena); el alto sale de la proporcion real
+          // de la foto para no deformarla. Se cuelga justo debajo de la barra.
+          const PW = 0.4
           const img = tex.image
-          if (img && img.width) o.photo.scale.set(0.62, 0.62 * (img.height / img.width), 1)
-          else o.photo.scale.set(0.62, 0.26, 1)
+          const ph = img && img.width ? PW * (img.height / img.width) : PW * 0.41
+          o.photo.scale.set(PW, ph, 1)
+          o.photo.position.y = o.y - 0.08 - ph / 2
           o.tag.material.map = this._nameTex(withPhoto.name)
           o.tag.material.needsUpdate = true
           o.tag.visible = true
+          o.tag.position.y = o.y - 0.08 - ph - 0.09
         } else {
           o.photo.visible = false
           o.tag.visible = false
@@ -792,7 +798,11 @@ export class WarehouseScene {
     dom.addEventListener('pointercancel', onUp)
     dom.addEventListener('wheel', (e) => {
       e.preventDefault()
-      this.goal.r = clamp(this.goal.r * (1 + e.deltaY * 0.0012), 2.2, 26)
+      // el touchpad manda muchos eventos con delta chiquito; con un factor
+      // mas alto (y un tope por evento) tanto el touchpad como una rueda de
+      // mouse de un solo click alejan/acercan a una velocidad pareja.
+      const factor = clamp(1 + e.deltaY * 0.003, 0.85, 1.18)
+      this.goal.r = clamp(this.goal.r * factor, 2.2, 26)
       this.dirty = true
     }, { passive: false })
   }
