@@ -398,13 +398,23 @@ export class WarehouseScene {
   }
 
   _buildTable(el, g) {
-    const W = el.params.w, mat = this.mat
-    this._mk(new THREE.BoxGeometry(W, 0.05, 1.2), mat.table, 0, 0.95, 0, g)
-    const leg = new THREE.BoxGeometry(0.05, 0.93, 0.05)
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) this._mk(leg, mat.post, sx * (W / 2 - 0.08), 0.465, sz * 0.52, g)
-    const cr = new THREE.BoxGeometry(Math.min(1.1, W / 2 - 0.1), 0.38, 0.75)
-    this._mk(cr, mat.crate, -W / 4, 0.19, 0, g); this._mk(cr, mat.crate, W / 4, 0.19, 0, g); this._mk(cr, mat.crate, W / 4, 0.57, 0, g)
-    return { w: W, h: 0.98, d: 1.2, locs: [] }
+    // mesa de despacho real: no tiene patas propias, se apoya directo
+    // sobre una base de canastas apiladas (foto de referencia)
+    const W = el.params.w, D = 1.2, mat = this.mat
+    this._mk(new THREE.BoxGeometry(W, 0.05, D), mat.table, 0, 0.95, 0, g)
+    const cw = 0.4, cd = 0.4, ch = 0.3, stackH = 3
+    const cols = Math.max(1, Math.floor((W - 0.1) / cw))
+    const rows = Math.max(1, Math.floor((D - 0.1) / cd))
+    const crateGeo = new THREE.BoxGeometry(cw * 0.92, ch * 0.92, cd * 0.92)
+    const inst = this._inst(crateGeo, mat.crate, cols * rows * stackH, g)
+    let idx = 0
+    for (let cx = 0; cx < cols; cx++) {
+      for (let cz = 0; cz < rows; cz++) {
+        const x = -((cols - 1) / 2) * cw + cx * cw, z = -((rows - 1) / 2) * cd + cz * cd
+        for (let s = 0; s < stackH; s++) this._setI(inst, idx++, x, 0.02 + ch / 2 + s * ch, z)
+      }
+    }
+    return { w: W, h: 0.98, d: D, locs: [] }
   }
 
   _buildLadder(el, g) {

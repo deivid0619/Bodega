@@ -21,7 +21,7 @@ services:
 
   backend:
     build: ./backend
-    restart: on-failure:5
+    restart: "no"
     environment:
       DATABASE_URL: postgresql://bodega:bodega@db:5432/bodega
       SECRET_KEY: cambia-esto-en-produccion
@@ -38,7 +38,7 @@ services:
   frontend:
     build:
       context: ./frontend
-    restart: on-failure:5
+    restart: "no"
     ports:
       - "5173:80"
     depends_on:
