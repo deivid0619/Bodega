@@ -9,7 +9,9 @@ export default defineConfig({
     proxy: {
       '/api': {
         // 8001, no 8000: en esta maquina el 8000 ya lo usa el backend de Turify.
-        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:8001',
+        // 127.0.0.1 explicito, no "localhost": en esta maquina a veces resuelve
+        // a ::1 (IPv6) y el backend solo escucha en IPv4, lo que daba 502.
+        target: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8001',
         changeOrigin: true,
       },
     },

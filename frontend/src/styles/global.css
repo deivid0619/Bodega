@@ -92,7 +92,21 @@ nav.tabs{flex:none;display:grid;grid-template-columns:repeat(5,1fr);background:v
 .tag.in,.tag.new{background:var(--rack)} .tag.out{background:var(--red);color:#fff} .tag.set{background:var(--ink);color:#fff}
 .undo{background:none;border:0;padding:0;margin-top:10px;font-size:13.5px;text-decoration:underline;text-underline-offset:3px;color:#333}
 
-/* filas de producto (hojas de ubicación) */
+/* tarjeta de producto con foto (hojas de ubicación) */
+.prodcard{display:flex;gap:12px;background:var(--label);color:var(--ink);border-radius:12px;padding:10px;margin:10px 0;box-shadow:0 3px 10px rgba(0,0,0,.22)}
+.prodcard.low{box-shadow:0 3px 10px rgba(0,0,0,.22),inset 0 0 0 1.5px var(--red)}
+.prodcard-photo{flex:none;width:74px;height:74px;background:#fff;border-radius:9px;overflow:hidden;box-shadow:inset 0 0 0 1px #e3e3dd}
+.prodcard-photo img{width:100%;height:100%;object-fit:contain}
+.prodcard-body{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+.prodcard-body .info{background:none;border:0;padding:0;text-align:left;color:var(--ink)}
+.prodcard-body .info b{display:block;font:600 16px/1.2 var(--cond);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prodcard-body .info small{font-size:12px;color:#666}
+.prodcard-body .info small em{font-style:normal;color:var(--red);font-weight:600}
+.prodcard-row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.prodcard .sz{flex:none;width:34px;height:34px;border:2px solid var(--ink);border-radius:8px;display:grid;place-items:center;font:700 15px var(--cond)}
+.prodcard.low .sz{border-color:var(--red);color:var(--red)}
+
+/* filas de producto sin foto (hojas de ubicación) */
 .row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #dcdcd6}
 .row .sz{flex:none;width:42px;height:42px;border:2px solid var(--ink);border-radius:8px;display:grid;place-items:center;font:700 18px var(--cond)}
 .row.low .sz{border-color:var(--red);color:var(--red)}
