@@ -43,6 +43,7 @@ class Element(Base):
     x = Column(Float, nullable=False, default=0)
     z = Column(Float, nullable=False, default=0)
     rot = Column(Integer, nullable=False, default=0)  # 0-3, giros de 90°
+    y0 = Column(Float, nullable=False, default=0)  # altura del piso a la base (para apilar muebles, ej. canastas G/H/I)
     params = Column(JSON, nullable=False, default=dict)  # {cols,rows} | {levels,w} | {bars,w} | {count} | {w}
 
 

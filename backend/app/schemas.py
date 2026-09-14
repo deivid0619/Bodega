@@ -60,6 +60,7 @@ class ElementOut(BaseModel):
     x: float
     z: float
     rot: int
+    y0: float = 0
     params: dict[str, Any]
     locations: list[LocationOut] = []
     name: str
@@ -77,6 +78,7 @@ class ElementUpdateIn(BaseModel):
     x: Optional[float] = None
     z: Optional[float] = None
     rot: Optional[int] = None
+    y0: Optional[float] = None
     params: Optional[dict[str, Any]] = None
 
 

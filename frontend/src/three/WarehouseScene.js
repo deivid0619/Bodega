@@ -103,7 +103,7 @@ export class WarehouseScene {
     const info = this.elInfo[id]
     if (!el || !info) return
     const r = this._fitR(info.w + 0.8, info.h + 0.5)
-    this._setGoal({ th: (el.rot || 0) * (PI / 2), ph: 1.25, r, tx: el.x, ty: info.h / 2 - r * 0.08, tz: el.z })
+    this._setGoal({ th: (el.rot || 0) * (PI / 2), ph: 1.25, r, tx: el.x, ty: (info.y0 || 0) + info.h / 2 - r * 0.08, tz: el.z })
   }
 
   focusLocation(id) {
@@ -292,6 +292,7 @@ export class WarehouseScene {
 
   _buildBins(el, g) {
     const { cols, rows } = el.params, n = cols * rows, mat = this.mat
+    const baseY = el.y0 || 0
     const G = {
       bottom: new THREE.BoxGeometry(BW * 0.94, 0.02, BD), back: new THREE.BoxGeometry(BW * 0.94, BH * 0.94, 0.02),
       side: new THREE.BoxGeometry(0.02, BH * 0.94, BD), lip: new THREE.BoxGeometry(BW * 0.94, BH * 0.42, 0.02),
@@ -306,7 +307,7 @@ export class WarehouseScene {
     let i = 0
     for (let r = 1; r <= rows; r++) {
       for (let c = 1; c <= cols; c++) {
-        const x = -((cols - 1) / 2) * BW + (c - 1) * BW, y = 0.02 + (rows - r) * BH
+        const x = -((cols - 1) / 2) * BW + (c - 1) * BW, y = baseY + 0.02 + (rows - r) * BH
         this._setI(iB, i, x, y + 0.01, 0); this._setI(iK, i, x, y + BH / 2, -BD / 2)
         this._setI(iS, 2 * i, x - BW * 0.46, y + BH / 2, 0); this._setI(iS, 2 * i + 1, x + BW * 0.46, y + BH / 2, 0)
         this._setI(iL, i, x, y + BH * 0.21, BD / 2); this._setI(iLab, i, x, y + BH * 0.22, BD / 2 + 0.012)
@@ -496,12 +497,13 @@ export class WarehouseScene {
       world.add(g)
       this.elGroups[el.id] = g
       const info = this._buildElement(el, g)
+      const y0 = el.y0 || 0
       g.traverse((o) => { if (o.isMesh && o.material !== this.hitMat) { o.castShadow = true; o.receiveShadow = true } })
-      const hit = this._mk(new THREE.BoxGeometry(Math.max(info.w, 0.3), info.h, Math.max(info.d, 0.3)), this.hitMat, 0, info.h / 2, 0, g)
+      const hit = this._mk(new THREE.BoxGeometry(Math.max(info.w, 0.3), info.h, Math.max(info.d, 0.3)), this.hitMat, 0, y0 + info.h / 2, 0, g)
       hit.visible = false
       hit.userData.el = el.id
       this.elHits.push(hit)
-      this.elInfo[el.id] = { w: info.w, h: info.h, d: info.d }
+      this.elInfo[el.id] = { w: info.w, h: info.h, d: info.d, y0 }
       world.updateMatrixWorld(true)
       const odd = (el.rot || 0) % 2 === 1
       for (const L of info.locs) {
@@ -518,7 +520,7 @@ export class WarehouseScene {
           const sp = new THREE.Sprite(sm)
           const long = el.code.length > 2
           sp.scale.set(long ? 0.68 : 0.34, 0.34, 1)
-          sp.position.set(0, info.h + 0.32, 0)
+          sp.position.set(0, y0 + info.h + 0.32, 0)
           g.add(sp)
         }
       }
@@ -614,7 +616,7 @@ export class WarehouseScene {
     if (!info) { this.selLine.visible = false; this.dirty = true; return }
     const odd = (el.rot || 0) % 2 === 1
     this.selLine.scale.set((odd ? info.d : info.w) + 0.06, info.h + 0.06, (odd ? info.w : info.d) + 0.06)
-    this.selLine.position.set(el.x, info.h / 2, el.z)
+    this.selLine.position.set(el.x, (info.y0 || 0) + info.h / 2, el.z)
     this.selLine.visible = true
     this.dirty = true
   }
