@@ -174,8 +174,8 @@ DEFAULT_LAYOUT = [
     {"id": "e4", "type": "rack", "code": "D", "x": -3.92, "z": -1.6, "rot": 1, "y0": 0, "params": {"w": 3.0, "bars": 4}},
     {"id": "e5", "type": "rack", "code": "E", "x": -3.92, "z": 1.6, "rot": 1, "y0": 0, "params": {"w": 3.0, "bars": 4}},
     {"id": "e6", "type": "bins", "code": "F", "x": 2.7, "z": -3.24, "rot": 0, "y0": 0, "params": {"cols": 1, "rows": 8}},
-    {"id": "e7", "type": "bins", "code": "G", "x": -1.2, "z": -3.24, "rot": 0, "y0": 0.8, "params": {"cols": 5, "rows": 1}},
-    {"id": "e8", "type": "bins", "code": "H", "x": -1.2, "z": -3.24, "rot": 0, "y0": 0.4, "params": {"cols": 10, "rows": 1}},
+    {"id": "e7", "type": "bins", "code": "G", "x": -1.2, "z": -3.24, "rot": 0, "y0": 1.4, "params": {"cols": 5, "rows": 1}},
+    {"id": "e8", "type": "bins", "code": "H", "x": -1.2, "z": -3.24, "rot": 0, "y0": 0.7, "params": {"cols": 10, "rows": 1}},
     {"id": "e9", "type": "bins", "code": "I", "x": -1.2, "z": -3.24, "rot": 0, "y0": 0, "params": {"cols": 5, "rows": 1}},
     {"id": "e10", "type": "table", "code": None, "x": 0, "z": 0, "rot": 0, "y0": 0, "params": {"w": 1.3}},
 ]

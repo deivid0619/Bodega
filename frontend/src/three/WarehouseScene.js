@@ -293,14 +293,21 @@ export class WarehouseScene {
   _buildBins(el, g) {
     const { cols, rows } = el.params, n = cols * rows, mat = this.mat
     const baseY = el.y0 || 0
+    // una sola fila (G/H/I, el mueble apilado) son canastas plasticas
+    // sueltas sobre una viga, no la pared de gavetas empotradas de C/F
+    const crateStyle = rows === 1
     const G = {
       bottom: new THREE.BoxGeometry(BW * 0.94, 0.02, BD), back: new THREE.BoxGeometry(BW * 0.94, BH * 0.94, 0.02),
       side: new THREE.BoxGeometry(0.02, BH * 0.94, BD), lip: new THREE.BoxGeometry(BW * 0.94, BH * 0.42, 0.02),
+      crate: new THREE.BoxGeometry(BW * 0.92, BH * 0.86, BD * 0.86),
       label: new THREE.PlaneGeometry(0.13, 0.055), bar: new THREE.BoxGeometry(BW * 0.9, 0.022, 0.026),
       fill: new THREE.BoxGeometry(BW * 0.76, 1, BD * 0.7), hit: new THREE.BoxGeometry(BW, BH, BD),
     }
-    const iB = this._inst(G.bottom, mat.bin, n, g), iK = this._inst(G.back, mat.bin, n, g)
-    const iS = this._inst(G.side, mat.bin, n * 2, g), iL = this._inst(G.lip, mat.bin, n, g)
+    if (crateStyle) this._mk(new THREE.BoxGeometry(cols * BW + 0.06, 0.05, BD + 0.05), mat.rack, 0, baseY, 0, g)
+    const iB = crateStyle ? null : this._inst(G.bottom, mat.bin, n, g)
+    const iK = crateStyle ? this._inst(G.crate, mat.gray, n, g) : this._inst(G.back, mat.bin, n, g)
+    const iS = crateStyle ? null : this._inst(G.side, mat.bin, n * 2, g)
+    const iL = crateStyle ? null : this._inst(G.lip, mat.bin, n, g)
     const iLab = this._inst(G.label, this._tempMat(0xffffff), n, g)
     const iBar = this._inst(G.bar, mat.red, n, g), iFill = this._inst(G.fill, mat.fill, n, g)
     const locs = []
@@ -308,9 +315,14 @@ export class WarehouseScene {
     for (let r = 1; r <= rows; r++) {
       for (let c = 1; c <= cols; c++) {
         const x = -((cols - 1) / 2) * BW + (c - 1) * BW, y = baseY + 0.02 + (rows - r) * BH
-        this._setI(iB, i, x, y + 0.01, 0); this._setI(iK, i, x, y + BH / 2, -BD / 2)
-        this._setI(iS, 2 * i, x - BW * 0.46, y + BH / 2, 0); this._setI(iS, 2 * i + 1, x + BW * 0.46, y + BH / 2, 0)
-        this._setI(iL, i, x, y + BH * 0.21, BD / 2); this._setI(iLab, i, x, y + BH * 0.22, BD / 2 + 0.012)
+        if (crateStyle) {
+          this._setI(iK, i, x, y + BH / 2, 0)
+        } else {
+          this._setI(iB, i, x, y + 0.01, 0); this._setI(iK, i, x, y + BH / 2, -BD / 2)
+          this._setI(iS, 2 * i, x - BW * 0.46, y + BH / 2, 0); this._setI(iS, 2 * i + 1, x + BW * 0.46, y + BH / 2, 0)
+          this._setI(iL, i, x, y + BH * 0.21, BD / 2)
+        }
+        this._setI(iLab, i, x, y + BH * 0.22, BD / 2 + 0.012)
         iLab.setColorAt(i, this._col.setHex(0x55585c))
         this._setI(iBar, i, 0, 0, 0, 0, 0, 0); this._setI(iFill, i, 0, 0, 0, 0, 0, 0)
         const loc = el.locations[i]
