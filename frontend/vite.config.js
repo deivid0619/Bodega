@@ -5,10 +5,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: Number(process.env.PORT) || 5173,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:8000',
+        // 8001, no 8000: en esta maquina el 8000 ya lo usa el backend de Turify.
+        target: process.env.VITE_API_PROXY_TARGET || 'http://localhost:8001',
         changeOrigin: true,
       },
     },

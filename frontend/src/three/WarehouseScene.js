@@ -126,21 +126,42 @@ export class WarehouseScene {
   _initThree() {
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
+    renderer.shadowMap.enabled = true
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
+    renderer.outputColorSpace = THREE.SRGBColorSpace
+    renderer.toneMapping = THREE.ACESFilmicToneMapping
+    renderer.toneMappingExposure = 1.05
     this.container.appendChild(renderer.domElement)
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x34373b)
+    scene.background = new THREE.Color(0x2f3236)
+    scene.fog = new THREE.Fog(0x2f3236, 9, 22)
     const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 150)
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3a3a, 0.78))
-    const dl = new THREE.DirectionalLight(0xffffff, 0.55)
-    dl.position.set(3, 8, 6)
+    scene.add(new THREE.HemisphereLight(0xd9dde2, 0x35322c, 0.7))
+    const dl = new THREE.DirectionalLight(0xfff4e0, 0.9)
+    dl.position.set(4, 9, 5)
+    dl.castShadow = true
+    dl.shadow.mapSize.set(1024, 1024)
+    dl.shadow.bias = -0.0018
+    dl.shadow.normalBias = 0.02
+    dl.shadow.camera.near = 1
+    dl.shadow.camera.far = 26
     scene.add(dl)
+    this.dirLight = dl
+    // luz de relleno tenue y fria, del lado contrario, para que las sombras
+    // del sol de la ventana no queden negras del todo
+    const fill = new THREE.DirectionalLight(0xcfe0ff, 0.22)
+    fill.position.set(-5, 4, -4)
+    scene.add(fill)
 
     const S = (c, o) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.85, metalness: 0.05, ...o })
     this.mat = {
-      floor: S(0x7d8084), wall: S(0xd3cec4), bin: S(0x1c1d1f, { roughness: 0.55 }), fill: S(0x2e3034, { roughness: 0.35, metalness: 0.1 }),
-      rack: S(0xf2b705, { roughness: 0.5, metalness: 0.2 }), post: S(0x1c1d1f), kraft: S(0xb98b57), table: S(0xeeeeea), crate: S(0x3a3c40),
+      floor: S(0xffffff, { roughness: 0.96, map: this._concreteTexture() }),
+      wall: S(0xd3cec4, { roughness: 0.94 }),
+      bin: S(0x1c1d1f, { roughness: 0.55 }), fill: S(0x2e3034, { roughness: 0.35, metalness: 0.1 }),
+      rack: S(0xf2b705, { roughness: 0.42, metalness: 0.3 }), post: S(0x1c1d1f), kraft: S(0xffffff, { roughness: 0.93, map: this._cardboardTexture() }),
+      table: S(0xeeeeea, { roughness: 0.45 }), crate: S(0x3a3c40),
       gray: S(0x5b6168, { roughness: 0.6 }), deck: S(0x2a2c2f), red: S(0xe0322b, { emissive: 0x8a120d }), neon: S(0xc9ef2b, { emissive: 0x2e3a00 }),
-      tube: new THREE.MeshBasicMaterial({ color: 0xffffff }), white: S(0xffffff, { roughness: 0.6 }), string: new THREE.MeshBasicMaterial({ color: 0xdddddd }),
+      tube: new THREE.MeshBasicMaterial({ color: 0xfff8ea }), white: S(0xffffff, { roughness: 0.6 }), string: new THREE.MeshBasicMaterial({ color: 0xdddddd }),
       balloonBlack: S(0x222326, { roughness: 0.4 }),
     }
     this.hitMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false, colorWrite: false })
@@ -203,6 +224,53 @@ export class WarehouseScene {
     m.userData.loc = id
     this.locHits.push(m)
     return m
+  }
+
+  // ---------- texturas procedurales (sin imagenes externas) ----------
+  _concreteTexture() {
+    if (this._floorTex) return this._floorTex
+    const c = document.createElement('canvas')
+    c.width = c.height = 512
+    const x = c.getContext('2d')
+    x.fillStyle = '#84888c'; x.fillRect(0, 0, 512, 512)
+    // moteado sutil, como concreto pulido
+    for (let i = 0; i < 3200; i++) {
+      const v = 120 + Math.random() * 60
+      x.fillStyle = `rgba(${v},${v},${v + 2},${0.05 + Math.random() * 0.07})`
+      const s = 1 + Math.random() * 2.4
+      x.fillRect(Math.random() * 512, Math.random() * 512, s, s)
+    }
+    // juntas de dilatacion
+    x.strokeStyle = 'rgba(60,62,65,.5)'; x.lineWidth = 2
+    for (const p of [128, 256, 384]) {
+      x.beginPath(); x.moveTo(p, 0); x.lineTo(p, 512); x.stroke()
+      x.beginPath(); x.moveTo(0, p); x.lineTo(512, p); x.stroke()
+    }
+    const tex = new THREE.CanvasTexture(c)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(4, 4)
+    tex.anisotropy = 4
+    return (this._floorTex = tex)
+  }
+
+  _cardboardTexture() {
+    if (this._boxTex) return this._boxTex
+    const c = document.createElement('canvas')
+    c.width = c.height = 256
+    const x = c.getContext('2d')
+    x.fillStyle = '#b98b57'; x.fillRect(0, 0, 256, 256)
+    x.strokeStyle = 'rgba(120,84,42,.35)'; x.lineWidth = 1
+    for (let y = 6; y < 256; y += 7) { x.beginPath(); x.moveTo(0, y); x.lineTo(256, y); x.stroke() }
+    // cinta de embalaje
+    x.fillStyle = 'rgba(214,193,150,.9)'
+    x.fillRect(0, 112, 256, 30)
+    x.fillStyle = 'rgba(120,84,42,.18)'
+    x.fillRect(0, 112, 256, 3); x.fillRect(0, 139, 256, 3)
+    const tex = new THREE.CanvasTexture(c)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    return (this._boxTex = tex)
   }
 
   _signTex(ch) {
@@ -389,17 +457,30 @@ export class WarehouseScene {
     const { width: W, depth: D } = this.layout.room, mat = this.mat
     const floor = this._mk(new THREE.PlaneGeometry(W, D), mat.floor, 0, 0, 0, world)
     floor.rotation.x = -PI / 2
+    floor.receiveShadow = true
+    mat.floor.map.repeat.set(W / 1.4, D / 1.4)
     const wallH = 3.2
     const wb = this._mk(new THREE.BoxGeometry(W + 0.2, wallH, 0.1), mat.wall, 0, wallH / 2, -D / 2 - 0.05, world)
     const wf = this._mk(new THREE.BoxGeometry(W + 0.2, wallH, 0.1), mat.wall, 0, wallH / 2, D / 2 + 0.05, world)
     const wl = this._mk(new THREE.BoxGeometry(0.1, wallH, D), mat.wall, -W / 2 - 0.05, wallH / 2, 0, world)
     const wr = this._mk(new THREE.BoxGeometry(0.1, wallH, D), mat.wall, W / 2 + 0.05, wallH / 2, 0, world)
+    for (const w of [wb, wf, wl, wr]) w.receiveShadow = true
     this.walls = [
       { m: wb, t: (p) => p.z > -D / 2 }, { m: wf, t: (p) => p.z < D / 2 },
       { m: wl, t: (p) => p.x > -W / 2 }, { m: wr, t: (p) => p.x < W / 2 },
     ]
     const tube = new THREE.BoxGeometry(0.09, 0.04, Math.min(2.4, D * 0.4))
-    for (const x of [-W * 0.3, 0, W * 0.3]) this._mk(tube, mat.tube, x, 3.3, 0, world)
+    for (const x of [-W * 0.3, 0, W * 0.3]) {
+      this._mk(tube, mat.tube, x, 3.3, 0, world)
+      const glow = new THREE.PointLight(0xfff2d9, 0.55, Math.max(W, D) * 0.9, 2)
+      glow.position.set(x, 3.15, 0)
+      world.add(glow)
+    }
+    // la camara de sombra del sol cubre exactamente este cuarto, ni mas ni menos
+    const half = Math.max(W, D) / 2 + 1
+    const sc = this.dirLight.shadow.camera
+    sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half
+    sc.updateProjectionMatrix()
     const span = Math.max(W, D)
     const grid = new THREE.GridHelper(span, Math.round(span / 0.5), 0x9fa3a8, 0x8f9398)
     grid.position.y = 0.004
@@ -415,6 +496,7 @@ export class WarehouseScene {
       world.add(g)
       this.elGroups[el.id] = g
       const info = this._buildElement(el, g)
+      g.traverse((o) => { if (o.isMesh && o.material !== this.hitMat) { o.castShadow = true; o.receiveShadow = true } })
       const hit = this._mk(new THREE.BoxGeometry(Math.max(info.w, 0.3), info.h, Math.max(info.d, 0.3)), this.hitMat, 0, info.h / 2, 0, g)
       hit.visible = false
       hit.userData.el = el.id

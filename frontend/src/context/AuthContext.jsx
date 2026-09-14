@@ -3,14 +3,18 @@ import { api, setAuthToken, setUnauthorizedHandler } from '../api'
 
 const AuthContext = createContext(null)
 const STORAGE_KEY = 'bodega_token'
+// SOLO DESARROLLO: con VITE_SKIP_AUTH=true no pide login (el backend debe
+// tener SKIP_AUTH=true tambien). Nunca activar esto en produccion.
+const SKIP_AUTH = import.meta.env.VITE_SKIP_AUTH === 'true'
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem(STORAGE_KEY))
+  const [token, setToken] = useState(() => (SKIP_AUTH ? 'dev-skip-auth' : localStorage.getItem(STORAGE_KEY)))
   const [user, setUser] = useState(null)
   const [ready, setReady] = useState(false)
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
+    if (SKIP_AUTH) return // sin login no hay de donde salir
     setAuthToken(null)
     setToken(null)
     setUser(null)

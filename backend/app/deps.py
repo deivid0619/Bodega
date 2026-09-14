@@ -4,6 +4,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from . import models
+from .config import settings
 from .database import get_db
 from .security import decode_access_token
 
@@ -14,6 +15,17 @@ def get_current_user(
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> models.User:
+    if settings.skip_auth:
+        # SOLO DESARROLLO (ver config.py): sin login, actua como el primer
+        # usuario admin que exista.
+        dev_user = (
+            db.query(models.User)
+            .filter(models.User.role == "admin")
+            .order_by(models.User.id)
+            .first()
+        )
+        if dev_user:
+            return dev_user
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Sesion invalida o vencida. Vuelve a iniciar sesion.",

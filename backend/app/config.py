@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     admin_name: str = "Administrador"
     admin_password: str = "cambiar123"
     cors_origins: str = "http://localhost:5173"
+    # SOLO DESARROLLO: si es true, todas las rutas se tratan como si hubiera
+    # iniciado sesion el primer usuario admin, sin pedir login. Nunca poner
+    # en true en produccion.
+    skip_auth: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
