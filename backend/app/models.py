@@ -55,6 +55,7 @@ class Product(Base):
     location_id = Column(String(32), nullable=False, index=True)
     qty = Column(Integer, nullable=False, default=0)
     min_qty = Column(Integer, nullable=False, default=0)
+    image_url = Column(String(500), nullable=True)
     demo = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)

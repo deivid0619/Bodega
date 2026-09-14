@@ -95,6 +95,7 @@ class ProductOut(BaseModel):
     location_name: str
     qty: int
     min_qty: int
+    image_url: Optional[str] = None
     demo: bool
     out_30d: int = 0
     created_at: datetime
@@ -108,6 +109,7 @@ class ProductCreateIn(BaseModel):
     location_id: str
     qty: int = Field(ge=0, default=0)
     min_qty: int = Field(ge=0, default=0)
+    image_url: Optional[str] = None
 
 
 class ProductUpdateIn(BaseModel):
@@ -115,6 +117,7 @@ class ProductUpdateIn(BaseModel):
     size: Optional[str] = None
     min_qty: Optional[int] = Field(default=None, ge=0)
     location_id: Optional[str] = None
+    image_url: Optional[str] = None
 
 
 # ---------- movements ----------

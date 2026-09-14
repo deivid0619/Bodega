@@ -42,6 +42,8 @@ export class WarehouseScene {
     this.locHits = []
     this.walls = []
     this.signCache = {}
+    this.imgCache = {}
+    this.nameCache = {}
     this._disposed = false
 
     this._initThree()
@@ -273,6 +275,43 @@ export class WarehouseScene {
     return (this._boxTex = tex)
   }
 
+  // foto real de un producto (subida por nosotros), cacheada por url
+  _productTexture(url) {
+    if (this.imgCache[url]) return this.imgCache[url]
+    const loader = new THREE.TextureLoader()
+    const tex = loader.load(url, () => { this.dirty = true })
+    tex.colorSpace = THREE.SRGBColorSpace
+    return (this.imgCache[url] = tex)
+  }
+
+  // etiqueta con el nombre de la prenda, como una tarjeta blanca (mismo
+  // espiritu que la etiqueta de tela del inventario)
+  _nameTex(name) {
+    if (this.nameCache[name]) return this.nameCache[name]
+    const c = document.createElement('canvas')
+    c.width = 320; c.height = 90
+    const x = c.getContext('2d')
+    x.fillStyle = '#f4f4f1'; x.beginPath()
+    x.roundRect ? x.roundRect(0, 0, 320, 90, 10) : x.rect(0, 0, 320, 90)
+    x.fill()
+    x.fillStyle = '#151515'; x.font = '600 26px Arial'
+    x.textAlign = 'center'; x.textBaseline = 'middle'
+    const words = name.split(' '), lines = []
+    let line = ''
+    for (const w of words) {
+      const test = line ? `${line} ${w}` : w
+      if (x.measureText(test).width > 290 && line) { lines.push(line); line = w } else line = test
+    }
+    if (line) lines.push(line)
+    const shown = lines.slice(0, 2)
+    const lh = 30
+    const y0 = 45 - ((shown.length - 1) * lh) / 2
+    shown.forEach((ln, i) => x.fillText(ln, 160, y0 + i * lh))
+    const tex = new THREE.CanvasTexture(c)
+    tex.colorSpace = THREE.SRGBColorSpace
+    return (this.nameCache[name] = tex)
+  }
+
   _signTex(ch) {
     if (this.signCache[ch]) return this.signCache[ch]
     try {
@@ -369,10 +408,18 @@ export class WarehouseScene {
       for (let k = 0; k < cap; k++) { this._setI(jk, k, 0, 0, 0, 0, 0, 0); this._setI(cl, k, 0, 0, 0, 0, 0, 0); jk.setColorAt(k, this._col.setHex(0x222326)) }
       jk.count = 0; cl.count = 0; jk.visible = cl.visible = false
       const bar = this._mk(mG, mat.red, -W / 2 - 0.17, y, 0, g); bar.visible = false
+      // tarjeta con foto + nombre de la prenda, flotando sobre la barra
+      // (solo se ve si algun producto de esa ubicacion tiene foto)
+      const photo = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }))
+      photo.position.set(0, y + 0.48, 0); photo.scale.set(0.001, 0.001, 1); photo.visible = false
+      g.add(photo)
+      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthWrite: false }))
+      tag.position.set(0, y + 0.24, 0); tag.scale.set(0.6, 0.16, 1); tag.visible = false
+      g.add(tag)
       const loc = el.locations[i - 1]
       if (loc) {
         this._locHit(g, loc.id, hit, 0, y - 0.33, 0)
-        locs.push({ id: loc.id, kind: 'rod', c: new THREE.Vector3(0, y - 0.33, 0), s: new THREE.Vector3(W, 0.64, 0.48), jk, cl, cap, x0: -W / 2, y, bar })
+        locs.push({ id: loc.id, kind: 'rod', c: new THREE.Vector3(0, y - 0.33, 0), s: new THREE.Vector3(W, 0.64, 0.48), jk, cl, cap, x0: -W / 2, y, bar, photo, tag })
       }
     }
     return { w: W + 0.2, h: 2.96, d: 0.55, locs }
@@ -572,6 +619,24 @@ export class WarehouseScene {
         o.jk.visible = o.cl.visible = k > 0
         o.bar.visible = low
         touched.add(o.jk); touched.add(o.cl)
+        // si alguna prenda de esta barra tiene foto real, mostrar su
+        // tarjeta (foto + nombre) flotando encima
+        const withPhoto = items.find((p) => p.image_url)
+        if (withPhoto) {
+          const tex = this._productTexture(withPhoto.image_url)
+          o.photo.material.map = tex
+          o.photo.material.needsUpdate = true
+          o.photo.visible = true
+          const img = tex.image
+          if (img && img.width) o.photo.scale.set(0.62, 0.62 * (img.height / img.width), 1)
+          else o.photo.scale.set(0.62, 0.26, 1)
+          o.tag.material.map = this._nameTex(withPhoto.name)
+          o.tag.material.needsUpdate = true
+          o.tag.visible = true
+        } else {
+          o.photo.visible = false
+          o.tag.visible = false
+        }
       } else if (o.kind === 'boxes') {
         o.bar.visible = low
       }

@@ -17,7 +17,8 @@ def _out(db: Session, p: models.Product) -> schemas.ProductOut:
     return schemas.ProductOut(
         sku=p.sku, name=p.name, size=p.size, location_id=p.location_id,
         location_name=inv._loc_name(db, p.location_id), qty=p.qty, min_qty=p.min_qty,
-        demo=p.demo, out_30d=inv.out_30d(db, p.sku), created_at=p.created_at, updated_at=p.updated_at,
+        image_url=p.image_url, demo=p.demo, out_30d=inv.out_30d(db, p.sku),
+        created_at=p.created_at, updated_at=p.updated_at,
     )
 
 
@@ -63,7 +64,7 @@ def create_product(payload: schemas.ProductCreateIn, db: Session = Depends(get_d
     try:
         product, movement = inv.register_product(
             db, payload.sku, payload.name, payload.size, payload.location_id,
-            payload.qty, payload.min_qty, user,
+            payload.qty, payload.min_qty, user, image_url=payload.image_url,
         )
     except inv.InventoryError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
@@ -98,6 +99,8 @@ def update_product(sku: str, payload: schemas.ProductUpdateIn, db: Session = Dep
         p.size = payload.size.strip().upper()
     if payload.min_qty is not None:
         p.min_qty = payload.min_qty
+    if payload.image_url is not None:
+        p.image_url = payload.image_url or None
     db.commit()
     db.refresh(p)
     return _out(db, p)

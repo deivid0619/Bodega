@@ -36,7 +36,8 @@ def out_30d(db: Session, sku: str) -> int:
 
 
 def register_product(db: Session, sku: str, name: str, size: str, location_id: str,
-                      qty: int, min_qty: int, user: models.User) -> tuple[models.Product, models.Movement]:
+                      qty: int, min_qty: int, user: models.User,
+                      image_url: str | None = None) -> tuple[models.Product, models.Movement]:
     sku = sku.strip().upper()
     if db.get(models.Product, sku):
         raise InventoryError(f"El código {sku} ya está registrado.")
@@ -45,7 +46,8 @@ def register_product(db: Session, sku: str, name: str, size: str, location_id: s
     if location_id not in locs:
         raise InventoryError("Esa ubicación no existe.")
     product = models.Product(sku=sku, name=name.strip().upper(), size=size.strip().upper(),
-                              location_id=location_id, qty=qty, min_qty=min_qty)
+                              location_id=location_id, qty=qty, min_qty=min_qty,
+                              image_url=(image_url or None))
     db.add(product)
     movement = models.Movement(
         sku=sku, type="new", qty=qty, before=0, after=qty, location_id=location_id,
