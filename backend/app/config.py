@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     secret_key: str = "cambia-esto-por-un-valor-aleatorio-largo"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480
-    registration_code: str = "pigmalion"
-    admin_email: str = "admin@pigmalionmoto.com"
+    registration_code: str = "bodega"
+    admin_email: str = "admin@bodega.local"
     admin_name: str = "Administrador"
     admin_password: str = "cambiar123"
     cors_origins: str = "http://localhost:5173"

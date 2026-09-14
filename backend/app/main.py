@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Bodega Pigmalion API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Bodega API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

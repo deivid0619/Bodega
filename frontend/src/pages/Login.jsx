@@ -32,7 +32,7 @@ export default function Login() {
   return (
     <div className="login-wrap">
       <div className="login-card">
-        <h1>Bodega Pigmalion</h1>
+        <h1>Bodega</h1>
         <p>{mode === 'login' ? 'Entra con tu cuenta de la bodega.' : 'Crea tu cuenta con el código del equipo.'}</p>
         <form onSubmit={submit}>
           {mode === 'register' && (

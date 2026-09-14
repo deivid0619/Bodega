@@ -22,7 +22,7 @@ function Shell() {
       <header className="top">
         <div className="zone" aria-hidden="true">C</div>
         <div>
-          <h1>Bodega Pigmalion</h1>
+          <h1>Bodega</h1>
           <p>Conectado a la base de datos compartida</p>
         </div>
         <div className="who">

@@ -25,8 +25,8 @@ services:
     environment:
       DATABASE_URL: postgresql://bodega:bodega@db:5432/bodega
       SECRET_KEY: cambia-esto-en-produccion
-      REGISTRATION_CODE: pigmalion
-      ADMIN_EMAIL: admin@pigmalionmoto.com
+      REGISTRATION_CODE: bodega
+      ADMIN_EMAIL: admin@bodega.local
       ADMIN_PASSWORD: cambiar123
       CORS_ORIGINS: http://localhost:5173
     ports:

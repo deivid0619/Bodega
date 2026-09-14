@@ -68,7 +68,7 @@ nav.tabs{flex:none;display:grid;grid-template-columns:repeat(5,1fr);background:v
 .login-toggle button{background:none;border:0;color:var(--rack);font-weight:600;padding:0 4px}
 .login-err{color:#ff8a84;font-size:13.5px;margin-top:10px}
 
-/* etiqueta estilo Pigmalion */
+/* etiqueta estilo bodega */
 .label{background:var(--label);color:var(--ink);border-radius:12px;padding:12px 14px;margin-bottom:12px;position:relative;box-shadow:0 3px 10px rgba(0,0,0,.28)}
 .bars{display:flex;height:22px;margin-bottom:6px;max-width:60%;overflow:hidden}
 .bars i{display:block;background:var(--ink);flex:none;height:100%}

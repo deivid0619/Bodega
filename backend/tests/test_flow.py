@@ -34,7 +34,7 @@ def _run_flow(client):
 
     r = client.post("/api/auth/register", json={
         "email": "op@test.com", "password": "operador1", "name": "Operador",
-        "invite_code": "pigmalion",
+        "invite_code": "bodega",
     })
     assert r.status_code == 200, r.text
     op_token = r.json()["access_token"]

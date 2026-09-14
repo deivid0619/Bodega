@@ -1,6 +1,6 @@
 // Barritas decorativas que imitan un código de barras, generadas siempre
 // igual a partir del texto (no son un código de barras real y escaneable,
-// solo el estilo visual de la etiqueta de Pigmalion).
+// solo el estilo visual de la etiqueta de la prenda).
 export default function BarcodeBars({ code }) {
   const str = String(code || '')
   const bars = []

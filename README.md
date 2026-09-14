@@ -1,6 +1,6 @@
-# Bodega Pigmalion
+# Bodega
 
-Sistema de inventario para la bodega de Pigmalion Moto: distribución de la
+Sistema de inventario para la bodega: distribución de la
 bodega en 3D (armada a partir del recorrido en video), escaneo de códigos
 para entradas/salidas/conteos, pedidos sugeridos y editor de la
 distribución (canastas, estanterías, percheros, cajas). Pensado para que
@@ -58,7 +58,7 @@ docker compose up --build
   choques con otros Postgres que ya tengas corriendo, como el de Turify.
 
 La primera vez que arranca el backend, crea automáticamente:
-- Un usuario **administrador**: correo `admin@pigmalionmoto.com`, clave
+- Un usuario **administrador**: correo `admin@bodega.local`, clave
   `cambiar123` (cámbialos con las variables `ADMIN_EMAIL`/`ADMIN_PASSWORD`
   antes del primer arranque).
 - La distribución de la bodega tal como se ve en el video (pared de
@@ -66,7 +66,7 @@ La primera vez que arranca el backend, crea automáticamente:
 - La prenda de ejemplo de la etiqueta (`P-WPM210200L`).
 
 Cualquier persona nueva se registra con el **código de invitación**
-(`REGISTRATION_CODE`, por defecto `pigmalion`) y entra como operador
+(`REGISTRATION_CODE`, por defecto `bodega`) y entra como operador
 (puede escanear y consultar, no puede editar la distribución ni borrar
 código). Para dar permisos de administrador a alguien más, cámbiale el
 `role` a `admin` directamente en la base de datos.
