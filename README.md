@@ -104,20 +104,55 @@ npm run dev
 Abre http://localhost:5173. Asegúrate de tener el backend corriendo en
 `http://localhost:8000` (o cambia el proxy en `vite.config.js`).
 
-## Desplegar en producción (Render, como Turify)
+## Desplegar en producción (para usarla desde el celular)
 
-1. **Base de datos**: crea un proyecto en Supabase (o una base Postgres en
-   Render) y copia el `DATABASE_URL`.
-2. **Backend**: nuevo Web Service en Render apuntando a `backend/`, con
-   `Dockerfile` como entorno. Variables de entorno: `DATABASE_URL`,
-   `SECRET_KEY` (genera uno con
-   `python -c "import secrets; print(secrets.token_hex(32))"`),
-   `REGISTRATION_CODE`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, y `CORS_ORIGINS`
-   con la URL del frontend una vez la tengas.
-3. **Frontend**: nuevo Static Site o Web Service en Render (o Vercel)
-   apuntando a `frontend/`, con `VITE_API_URL` = la URL pública del
-   backend (por ejemplo `https://bodega-api.onrender.com`).
-4. Actualiza `CORS_ORIGINS` en el backend con la URL final del frontend.
+Con esto queda con una URL real, accesible desde cualquier celular con
+internet, con los datos guardados en una base de datos de verdad (no en tu
+computador). Son dos cuentas gratis y ~10 minutos.
+
+### 1. Base de datos: Supabase
+
+1. Crea una cuenta en [supabase.com](https://supabase.com) y un proyecto
+   nuevo (elige una contraseña de base de datos y guárdala).
+2. En el proyecto, ve a **Project Settings → Database → Connection string**
+   y copia la que dice **URI** (modo "Transaction pooler" si te la ofrece,
+   funciona mejor con la nube). Se ve algo así:
+   `postgresql://postgres.xxxx:TU-CLAVE@aws-0-xxxx.pooler.supabase.com:6543/postgres`
+
+### 2. Backend + frontend: Render (con el blueprint incluido)
+
+1. Crea una cuenta en [render.com](https://render.com) (puedes entrar con
+   tu cuenta de GitHub).
+2. **New → Blueprint**, conecta el repo `deivid0619/Bodega`. Render lee
+   [`render.yaml`](render.yaml) y arma dos servicios: `bodega-backend` y
+   `bodega-frontend`.
+3. Antes de confirmar, te va a pedir estas variables del backend:
+   - `DATABASE_URL`: la de Supabase del paso anterior.
+   - `SECRET_KEY`: un valor aleatorio largo (genera el tuyo con
+     `python -c "import secrets; print(secrets.token_hex(32))"` — nunca
+     lo subas al repo, solo pégalo aquí).
+   - `REGISTRATION_CODE`: la palabra que van a usar tus compañeros para
+     registrarse (cámbiala del valor por defecto `bodega`).
+   - `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME`: tu cuenta de
+     administrador real. **No dejes `cambiar123`.**
+   - `CORS_ORIGINS`: déjalo vacío por ahora, lo completas en el paso 5.
+   - Para el frontend te va a pedir `VITE_API_URL`: déjalo vacío también
+     por ahora (ver paso 4).
+4. Cuando el backend termine de desplegar, copia su URL (algo como
+   `https://bodega-backend-xxxx.onrender.com`). Ve a
+   `bodega-frontend → Environment`, pon `VITE_API_URL` con esa URL, y
+   vuelve a desplegar el frontend (**Manual Deploy**).
+5. Copia la URL del frontend (`https://bodega-frontend-xxxx.onrender.com`).
+   Ve a `bodega-backend → Environment`, pon `CORS_ORIGINS` con esa URL, y
+   vuelve a desplegar el backend.
+6. Abre la URL del frontend desde el celular — ya es la app real, con
+   login de verdad (no el modo sin login que usamos para desarrollar).
+
+Si el importe del blueprint falla por algún detalle de Render, los mismos
+servicios se pueden crear a mano (New → Web Service para el backend con
+`Dockerfile`, New → Static Site para el frontend con
+`npm install && npm run build` / carpeta `dist`) usando las mismas
+variables de arriba.
 
 ## Limitaciones a propósito (y el siguiente paso natural)
 

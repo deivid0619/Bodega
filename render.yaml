@@ -1,0 +1,41 @@
+# Blueprint de Render: crea el backend y el frontend de un solo golpe.
+# En Render: New > Blueprint > conecta este repo > Render lee este archivo.
+# La base de datos (Postgres) NO está aquí a propósito: se usa Supabase
+# (ver README, sección "Desplegar en producción"), así que DATABASE_URL
+# se pega a mano después de crear el proyecto en Supabase.
+services:
+  - type: web
+    name: bodega-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: REGISTRATION_CODE
+        sync: false
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_NAME
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: static
+    name: bodega-frontend
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

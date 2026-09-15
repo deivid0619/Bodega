@@ -74,6 +74,9 @@ export default function Scan() {
 
   const { status, message, videoRef, containerRef, start, stop } = useBarcodeScanner(handleCode)
   const camOn = status === 'native' || status === 'lib'
+  // el recuadro sigue visible en 'fail' para poder mostrar el aviso de
+  // error (si no, el mensaje queda escrito pero oculto por el CSS)
+  const camVisible = status !== 'off'
 
   useEffect(() => () => { stop() }, [stop])
 
@@ -113,7 +116,7 @@ export default function Scan() {
         </div>
       </div>
 
-      <div className={`cam ${camOn ? 'on' : ''} ${status === 'fail' ? 'fail' : ''}`}>
+      <div className={`cam ${camVisible ? 'on' : ''} ${status === 'fail' ? 'fail' : ''}`}>
         {status !== 'lib' && <video ref={videoRef} playsInline muted />}
         <div id="cam-reader" ref={containerRef} />
         {camOn && status === 'native' && <div className="aim" />}
