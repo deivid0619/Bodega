@@ -26,7 +26,7 @@ services:
       DATABASE_URL: postgresql://bodega:bodega@db:5432/bodega
       SECRET_KEY: cambia-esto-en-produccion
       REGISTRATION_CODE: bodega
-      ADMIN_EMAIL: admin@bodega.local
+      ADMIN_EMAIL: admin@bodega.app
       ADMIN_PASSWORD: cambiar123
       CORS_ORIGINS: http://localhost:5173
     ports:

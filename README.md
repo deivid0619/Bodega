@@ -58,7 +58,7 @@ docker compose up --build
   choques con otros Postgres que ya tengas corriendo, como el de Turify.
 
 La primera vez que arranca el backend, crea automáticamente:
-- Un usuario **administrador**: correo `admin@bodega.local`, clave
+- Un usuario **administrador**: correo `admin@bodega.app`, clave
   `cambiar123` (cámbialos con las variables `ADMIN_EMAIL`/`ADMIN_PASSWORD`
   antes del primer arranque).
 - La distribución de la bodega tal como se ve en el video (pared de

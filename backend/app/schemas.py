@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 ElementType = Literal["bins", "shelf", "rack", "boxes", "table", "ladder", "balloons"]
 MovementType = Literal["in", "out", "set"]
@@ -18,14 +18,14 @@ class UserOut(BaseModel):
 
 
 class RegisterIn(BaseModel):
-    email: str
+    email: EmailStr
     password: str = Field(min_length=6)
-    name: str
+    name: str = Field(min_length=1, max_length=120)
     invite_code: str
 
 
 class LoginIn(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 
