@@ -6,7 +6,7 @@
 services:
   - type: web
     name: bodega-backend
-    env: docker
+    runtime: docker
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
     plan: free
@@ -27,8 +27,9 @@ services:
       - key: CORS_ORIGINS
         sync: false
 
-  - type: static
+  - type: web
     name: bodega-frontend
+    runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
@@ -37,5 +38,5 @@ services:
         sync: false
     routes:
       - type: rewrite
-        source: /*
+        source: /**
         destination: /index.html
