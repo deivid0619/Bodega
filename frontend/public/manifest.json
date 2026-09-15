@@ -1,0 +1,14 @@
+{
+  "name": "Bodega",
+  "short_name": "Bodega",
+  "description": "Inventario de la bodega: distribución 3D, escaneo y pedidos.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#34373b",
+  "theme_color": "#1c1d1f",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
