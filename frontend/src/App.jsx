@@ -7,6 +7,7 @@ import Login from './pages/Login'
 import Warehouse from './pages/Warehouse'
 import Scan from './pages/Scan'
 import Inventory from './pages/Inventory'
+import Reserve from './pages/Reserve'
 import Orders from './pages/Orders'
 import History from './pages/History'
 
@@ -39,6 +40,7 @@ function Shell() {
           <Route path="/" element={<Warehouse />} />
           <Route path="/scan" element={<Scan />} />
           <Route path="/inventory" element={<Inventory />} />
+          <Route path="/reserve" element={<Reserve />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/history" element={<History />} />
           <Route path="*" element={<Navigate to="/" replace />} />

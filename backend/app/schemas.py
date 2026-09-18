@@ -151,6 +151,43 @@ class MovementResult(BaseModel):
     movement: MovementOut
 
 
+# ---------- bodega de reserva ----------
+class ReserveItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    sku: Optional[str] = None
+    name: str
+    size: str
+    qty: int
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReserveItemCreateIn(BaseModel):
+    sku: Optional[str] = None
+    name: str = Field(min_length=1, max_length=200)
+    size: str = ""
+    qty: int = Field(ge=0, default=0)
+
+
+class ReserveItemUpdateIn(BaseModel):
+    sku: Optional[str] = None
+    name: Optional[str] = None
+    size: Optional[str] = None
+    qty: Optional[int] = Field(default=None, ge=0)
+
+
+class ReserveTransferIn(BaseModel):
+    qty: int = Field(gt=0)
+    location_id: str
+    sku: Optional[str] = None  # obligatorio solo si el item de reserva todavia no tiene sku
+
+
+class ReserveTransferResult(BaseModel):
+    reserve: ReserveItemOut
+    product: ProductOut
+
+
 # ---------- reportes ----------
 class NeedOut(BaseModel):
     product: ProductOut

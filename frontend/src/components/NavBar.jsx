@@ -21,6 +21,10 @@ export default function NavBar() {
         <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>
         Inventario
       </NavLink>
+      <NavLink to="/reserve" className={cls}>
+        <svg viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3M4 8h16v11a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8ZM10 12h4" /></svg>
+        Reserva
+      </NavLink>
       <NavLink to="/orders" className={cls} style={{ position: 'relative' }}>
         <svg viewBox="0 0 24 24"><rect x="5.5" y="4.5" width="13" height="16" rx="2" /><path d="M9 4.5h6v3H9zM9 12h6M9 16h4" /></svg>
         Pedidos

@@ -12,7 +12,7 @@ from sqlalchemy.exc import OperationalError
 from . import models
 from .config import settings
 from .database import Base, SessionLocal, engine
-from .routers import auth, layout, movements, products, reports
+from .routers import auth, layout, movements, products, reports, reserve
 from .seed import seed
 
 logger = logging.getLogger("uvicorn.error")
@@ -65,6 +65,7 @@ app.include_router(layout.router)
 app.include_router(products.router)
 app.include_router(movements.router)
 app.include_router(reports.router)
+app.include_router(reserve.router)
 
 
 @app.get("/api/health")

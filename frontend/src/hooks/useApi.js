@@ -64,3 +64,7 @@ export function useNeeds() {
 export function useTop() {
   return usePolling('/api/reports/top')
 }
+
+export function useReserve() {
+  return usePolling('/api/reserve')
+}
