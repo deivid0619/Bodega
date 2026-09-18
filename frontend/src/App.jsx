@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import NavBar from './components/NavBar'
+import NotificationBell from './components/NotificationBell'
+import { useMovementNotifications } from './hooks/useMovementNotifications'
 import Login from './pages/Login'
 import Warehouse from './pages/Warehouse'
 import Scan from './pages/Scan'
@@ -17,6 +19,7 @@ function RequireAuth({ children }) {
 
 function Shell() {
   const { user } = useAuth()
+  useMovementNotifications()
   return (
     <div className="app">
       <header className="top">
@@ -27,6 +30,7 @@ function Shell() {
         </div>
         <div className="who">
           {user?.name}
+          <NotificationBell />
           <LogoutButton />
         </div>
       </header>

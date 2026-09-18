@@ -6,6 +6,7 @@
 // (layout.elements[].locations), nunca se recalculan aquí, para que el
 // visor 3D jamás pueda desincronizarse de la base de datos.
 import * as THREE from 'three'
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 
 const BW = 0.42, BH = 0.3, BD = 0.42, PI = Math.PI
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v))
@@ -135,6 +136,12 @@ export class WarehouseScene {
     const scene = new THREE.Scene()
     scene.background = new THREE.Color(0x2f3236)
     scene.fog = new THREE.Fog(0x2f3236, 9, 22)
+    // mapa de entorno tipo "estudio" (generado, no es una foto real) para que
+    // el metal amarillo y los pisos brillen con reflejos suaves en vez de
+    // verse planos - el truco de PBR que mas "profesionaliza" una escena
+    const pmrem = new THREE.PMREMGenerator(renderer)
+    scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.045).texture
+    pmrem.dispose()
     const camera = new THREE.PerspectiveCamera(48, 1, 0.1, 150)
     scene.add(new THREE.HemisphereLight(0xd9dde2, 0x35322c, 0.7))
     const dl = new THREE.DirectionalLight(0xfff4e0, 0.9)
@@ -158,8 +165,8 @@ export class WarehouseScene {
       floor: S(0xffffff, { roughness: 0.96, map: this._concreteTexture() }),
       wall: S(0xd3cec4, { roughness: 0.94 }),
       bin: S(0x1c1d1f, { roughness: 0.55 }), fill: S(0x2e3034, { roughness: 0.35, metalness: 0.1 }),
-      rack: S(0xf2b705, { roughness: 0.42, metalness: 0.3 }), post: S(0x1c1d1f), kraft: S(0xffffff, { roughness: 0.93, map: this._cardboardTexture() }),
-      table: S(0xeeeeea, { roughness: 0.45 }), crate: S(0x3a3c40),
+      rack: S(0xf2b705, { roughness: 0.4, metalness: 0.4, envMapIntensity: 1.1 }), post: S(0x1c1d1f), kraft: S(0xffffff, { roughness: 0.93, map: this._cardboardTexture() }),
+      table: S(0xeeeeea, { roughness: 0.4, envMapIntensity: 0.9 }), crate: S(0x3a3c40),
       gray: S(0x5b6168, { roughness: 0.6 }), deck: S(0x2a2c2f), red: S(0xe0322b, { emissive: 0x8a120d }), neon: S(0xc9ef2b, { emissive: 0x2e3a00 }),
       tube: new THREE.MeshBasicMaterial({ color: 0xfff8ea }), white: S(0xffffff, { roughness: 0.6 }), string: new THREE.MeshBasicMaterial({ color: 0xdddddd }),
       balloonBlack: S(0x222326, { roughness: 0.4 }),
