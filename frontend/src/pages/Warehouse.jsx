@@ -7,7 +7,23 @@ import WarehouseCanvas from '../components/WarehouseCanvas'
 import LocationSheet from '../components/LocationSheet'
 import EditPanel from '../components/EditPanel'
 import ProductModal from '../components/ProductModal'
+import Icon from '../components/Icon'
+import { ProductThumb, SearchField } from '../components/Bits'
 import { locationGroups } from '../locationGroups'
+
+const STORAGE = ['bins', 'shelf', 'rack', 'boxes']
+const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
+const isWide = () => window.matchMedia('(min-width: 900px)').matches
+
+// Pixeles que tapa la interfaz sobre el 3D (buscador arriba, dock y
+// controles abajo, hojas abiertas), para encuadrar en el espacio libre.
+function insetsFor({ sheet, editMode }) {
+  const wide = isWide()
+  const top = editMode ? 76 : wide ? 76 : 120
+  if (wide) return { top, bottom: 150, left: 0, right: sheet || editMode ? 440 : 0 }
+  if (sheet || editMode) return { top, bottom: Math.min(window.innerHeight * (editMode ? 0.46 : 0.52), 540), left: 0, right: 0 }
+  return { top, bottom: 156, left: 0, right: 0 }
+}
 
 export default function Warehouse() {
   const { isAdmin } = useAuth()
@@ -17,7 +33,13 @@ export default function Warehouse() {
   const [selLoc, setSelLoc] = useState(null)
   const [selEl, setSelEl] = useState(null)
   const [openSku, setOpenSku] = useState(null)
+  const [highlightSku, setHighlightSku] = useState(null)
+  const [view, setView] = useState('all')
+  const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
   const sceneRef = useRef(null)
+  const sheetRef = useRef(null)
+  const searchRef = useRef(null)
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -25,124 +47,236 @@ export default function Warehouse() {
   const withStock = useMemo(() => (products || []).filter((p) => p.qty > 0).length, [products])
   const needCount = useMemo(() => (products || []).filter((p) => p.min_qty > 0 && p.qty <= p.min_qty).length, [products])
   const groupsLoc = useMemo(() => locationGroups(layout?.elements), [layout])
-  const storageEls = useMemo(() => (layout?.elements || []).filter((e) => ['bins', 'shelf', 'rack', 'boxes'].includes(e.type)), [layout])
+  const storageEls = useMemo(() => (layout?.elements || []).filter((e) => STORAGE.includes(e.type) && e.code), [layout])
+  const locIndex = useMemo(() => {
+    const m = new Map()
+    for (const el of layout?.elements || []) for (const l of el.locations) m.set(l.id, { ...l, el })
+    return m
+  }, [layout])
 
-  // deep link desde Inventario: /?loc=C-1-1
+  const results = useMemo(() => {
+    const q = norm(query.trim())
+    if (!q) return []
+    const out = []
+    const loc = locIndex.get(q)
+    if (loc) out.push({ type: 'loc', id: loc.id, label: loc.name })
+    const el = storageEls.find((e) => norm(e.code) === q)
+    if (el) out.push({ type: 'el', id: el.id, label: el.name })
+    const prods = (products || [])
+      .filter((p) => norm(`${p.name} ${p.sku} ${p.size} ${p.location_id} ${p.location_name}`).includes(q))
+      .sort((a, b) => (b.qty > 0) - (a.qty > 0) || a.name.localeCompare(b.name))
+      .slice(0, 7)
+    for (const p of prods) out.push({ type: 'prod', p })
+    return out
+  }, [query, products, locIndex, storageEls])
+
+  const prevEdit = useRef(editMode)
+  useEffect(() => {
+    const s = sceneRef.current
+    if (!s) return
+    s.setViewInsets(insetsFor({ sheet: !!selLoc, editMode }))
+    if (prevEdit.current !== editMode) {
+      prevEdit.current = editMode
+      s.applyPreset(editMode ? 'plan' : 'all')
+    }
+  }, [selLoc, editMode])
+
+  const locate = (loc, sku = null) => {
+    if (!locIndex.has(loc)) return
+    setQuery('')
+    setSearchOpen(false)
+    searchRef.current?.blur()
+    setHighlightSku(sku)
+    setSelLoc(loc)
+    setView(null)
+    sceneRef.current?.setViewInsets(insetsFor({ sheet: true, editMode: false }))
+    sceneRef.current?.selectLocation(loc)
+    sceneRef.current?.focusLocation(loc)
+    sceneRef.current?.pulse()
+  }
+
+  // enlace directo desde Inventario o el detalle de una prenda: /?loc=C-1-1
   useEffect(() => {
     const loc = params.get('loc')
     if (loc && layout) {
-      setSelLoc(loc)
-      sceneRef.current?.focusLocation(loc)
-      sceneRef.current?.selectLocation(loc)
-      sceneRef.current?.pulse()
+      locate(loc)
       setParams({}, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout])
+  }, [layout, params])
 
-  const locationName = (id) => {
-    for (const el of layout?.elements || []) {
-      const l = el.locations.find((x) => x.id === id)
-      if (l) return l.name
-    }
-    return `${id} (ya no existe)`
+  const closeLocation = () => {
+    setSelLoc(null)
+    setHighlightSku(null)
+    sceneRef.current?.selectLocation(null)
   }
 
   const tapLocation = (id) => {
+    if (!id) {
+      if (selLoc) sheetRef.current?.close()
+      return
+    }
+    setHighlightSku(null)
     setSelLoc(id)
     sceneRef.current?.selectLocation(id)
   }
 
-  const tapElement = (id) => {
-    setSelEl(id)
+  const focusEl = (id) => {
+    if (editMode) {
+      setSelEl(id)
+      sceneRef.current?.selectElement(id)
+      return
+    }
+    if (selLoc) sheetRef.current?.close()
+    setView(id)
+    sceneRef.current?.setViewInsets(insetsFor({ sheet: false, editMode: false }))
+    sceneRef.current?.focusElement(id)
+  }
+
+  const preset = (name) => {
+    setView(name)
+    sceneRef.current?.applyPreset(name)
   }
 
   const moveElement = async (id, x, z) => {
     try {
       await api.patch(`/api/layout/elements/${id}`, { x, z })
+    } finally {
       reloadLayout()
-    } catch {
-      reloadLayout() // el backend rechazó el arrastre (por ejemplo, choque de ubicaciones); recarga la posición real
     }
   }
 
-  const enterEdit = () => { setSelLoc(null); sceneRef.current?.selectLocation(null); setEditMode(true) }
-  const exitEdit = () => { setSelEl(null); setEditMode(false) }
-
+  const enterEdit = () => {
+    closeLocation()
+    setView('plan')
+    setEditMode(true)
+  }
+  const exitEdit = () => {
+    setSelEl(null)
+    setEditMode(false)
+    setView('all')
+  }
   const onEditChanged = (focusId) => {
     reloadLayout()
     reloadProducts()
-    if (focusId !== undefined) setSelEl(focusId)
+    if (focusId !== undefined) {
+      setSelEl(focusId)
+      sceneRef.current?.selectElement(focusId)
+    }
   }
 
   const currentElement = layout?.elements.find((e) => e.id === selEl) || null
+  const showResults = searchOpen && query.trim().length > 0
 
   return (
-    <section className="view canvas-view" aria-label="Modelo 3D de la bodega">
+    <section className="page full wh" aria-label="Bodega en 3D">
       <WarehouseCanvas
         layout={layout}
         products={products}
         editMode={editMode}
         onTapLocation={tapLocation}
-        onTapElement={tapElement}
+        onTapElement={(id) => { setSelEl(id); sceneRef.current?.selectElement(id) }}
+        onTapTag={focusEl}
         onElementMoved={moveElement}
         sceneRef={sceneRef}
       />
 
       {!editMode && (
-        <div className="hud">
-          <div className="stat"><b>{units}</b><span>prendas</span></div>
-          <div className="stat"><b>{withStock}</b><span>códigos con stock</span></div>
-          <button className={`stat alert ${needCount ? 'has' : ''}`} onClick={() => navigate('/orders')}>
-            <b>{needCount}</b><span>por pedir</span>
-          </button>
+        <div className="wh-top">
+          <SearchField
+            className="wh-search"
+            inputRef={searchRef}
+            value={query}
+            onChange={(v) => { setQuery(v); setSearchOpen(true) }}
+            onFocus={() => setSearchOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && results[0]) {
+                const r = results[0]
+                if (r.type === 'prod') locate(r.p.location_id, r.p.sku)
+                else if (r.type === 'loc') locate(r.id)
+                else { setQuery(''); focusEl(r.id) }
+              }
+              if (e.key === 'Escape') { setQuery(''); e.currentTarget.blur() }
+            }}
+            placeholder="¿Dónde está…? Busca una prenda"
+            aria-label="Buscar en la bodega"
+          />
+          {showResults && (
+            <div className="wh-results" role="listbox">
+              {results.length ? results.map((r) => (
+                r.type === 'prod' ? (
+                  <button key={r.p.sku} className="wh-result" role="option" onClick={() => locate(r.p.location_id, r.p.sku)}>
+                    <ProductThumb src={r.p.image_url} alt="" size="sm" />
+                    <span className="wh-result-t">
+                      <b>{r.p.name}{r.p.size ? ` · ${r.p.size}` : ''}</b>
+                      <small><span className="code dark"><Icon name="pin" size={12} stroke={2.2} />{r.p.location_id}</span>{r.p.sku}</small>
+                    </span>
+                    <span className="qty">{r.p.qty}</span>
+                  </button>
+                ) : (
+                  <button key={`${r.type}-${r.id}`} className="wh-result" role="option" onClick={() => (r.type === 'loc' ? locate(r.id) : (setQuery(''), setSearchOpen(false), focusEl(r.id)))}>
+                    <span className="thumb sm" style={{ background: 'var(--ink)', color: 'var(--lime)' }}><Icon name={r.type === 'loc' ? 'pin' : 'warehouse'} size={20} /></span>
+                    <span className="wh-result-t"><b>{r.label}</b><small>{r.type === 'loc' ? 'Ubicación' : 'Mueble completo'}</small></span>
+                  </button>
+                )
+              )) : <p className="wh-noresult">Nada con “{query.trim()}” en la bodega.</p>}
+            </div>
+          )}
+          {!showResults && (
+            <div className="wh-stats">
+              <span className="pill dark"><b>{units}</b>prendas</span>
+              <span className="pill"><b>{withStock}</b>{withStock === 1 ? 'código' : 'códigos'}</span>
+              {needCount > 0 && (
+                <button className="pill warn" onClick={() => navigate('/summary')}><i /><b>{needCount}</b>por reponer</button>
+              )}
+            </div>
+          )}
         </div>
       )}
-      {!editMode && (
-        <div className="legend">
-          <span><i className="lg-ok" />Con stock</span>
-          <span><i className="lg-low" />Bajo mínimo</span>
-          <span><i className="lg-empty" />Vacía</span>
-        </div>
-      )}
+      {showResults && <div className="menu-scrim" style={{ zIndex: 9 }} onClick={() => setSearchOpen(false)} />}
+
       {editMode && (
-        <div className="editbar">
-          <span>Editando la distribución</span>
-          <button onClick={exitEdit}>Listo</button>
+        <div className="wh-editbar">
+          <span><i />Editando la distribución</span>
+          <button className="btn btn-lime btn-sm" onClick={exitEdit}>Listo</button>
         </div>
       )}
 
-      {!editMode && units === 0 && !selLoc && (
-        <div className="emptycard">
-          <h3>La bodega está vacía en el sistema</h3>
-          <p>Escanea la etiqueta de cada prenda y la verás aparecer en su canasta, estantería o perchero.</p>
-          <div className="actions">
-            <button className="btn primary" onClick={() => navigate('/scan')}>Escanear</button>
+      {!editMode && !selLoc && (
+        <div className="wh-bottom">
+          <div className="wh-views" role="toolbar" aria-label="Vista">
+            <button aria-pressed={view === 'all'} onClick={() => preset('all')}><Icon name="orbit" size={17} />General</button>
+            <button aria-pressed={view === 'plan'} onClick={() => preset('plan')}><Icon name="plan" size={17} />Planta</button>
           </div>
+          <div className="wh-els">
+            {storageEls.map((e) => (
+              <button key={e.id} className="el-btn" aria-pressed={view === e.id} onClick={() => focusEl(e.id)} aria-label={e.name}>{e.code}</button>
+            ))}
+          </div>
+          {isAdmin && (
+            <button className="wh-edit" onClick={enterEdit} aria-label="Editar distribución"><Icon name="pencil" size={20} /></button>
+          )}
         </div>
       )}
 
-      {!editMode && (
-        <div className="presets">
-          {isAdmin && <button className="edit" onClick={enterEdit}>Editar bodega</button>}
-          <button onClick={() => sceneRef.current?.applyPreset('all')}>Vista general</button>
-          <button onClick={() => sceneRef.current?.applyPreset('plan')}>Planta</button>
-          {storageEls.map((e) => (
-            <button key={e.id} onClick={() => { setSelLoc(null); sceneRef.current?.selectLocation(null); sceneRef.current?.focusElement(e.id) }}>
-              {e.name}
-            </button>
-          ))}
+      {!editMode && layout && products && units === 0 && !selLoc && (
+        <div className="wh-empty">
+          <h3>La bodega está vacía en el sistema</h3>
+          <p>Escanea la etiqueta de cada prenda y la verás aparecer en su canasta o perchero.</p>
+          <button className="btn btn-lime btn-block" onClick={() => navigate('/scan')}><Icon name="scan" size={20} />Escanear</button>
         </div>
       )}
 
       {!editMode && selLoc && layout && (
         <LocationSheet
+          ref={sheetRef}
           locationId={selLoc}
-          locationName={locationName(selLoc)}
+          locationName={locIndex.get(selLoc)?.name || selLoc}
           products={products || []}
-          onClose={() => { setSelLoc(null); sceneRef.current?.selectLocation(null) }}
+          highlightSku={highlightSku}
+          onClose={closeLocation}
           onChanged={reloadProducts}
-          onScanHere={() => navigate('/scan')}
+          onScanHere={() => navigate(`/scan?loc=${encodeURIComponent(selLoc)}`)}
           onOpenProduct={setOpenSku}
         />
       )}
@@ -151,9 +285,10 @@ export default function Warehouse() {
         <EditPanel
           room={layout.room}
           element={currentElement}
-          getTheta={() => sceneRef.current?.cur?.th || 0}
-          onDone={() => setSelEl(null)}
+          getTheta={() => sceneRef.current?.getTheta() || 0}
+          onDone={() => { setSelEl(null); sceneRef.current?.selectElement(null) }}
           onChanged={onEditChanged}
+          onExit={exitEdit}
         />
       )}
 
@@ -163,7 +298,7 @@ export default function Warehouse() {
           locations={groupsLoc}
           onClose={() => setOpenSku(null)}
           onChanged={reloadProducts}
-          onLocate={(loc) => { setOpenSku(null); tapLocation(loc); sceneRef.current?.focusLocation(loc) }}
+          onLocate={(loc) => { setOpenSku(null); locate(loc) }}
         />
       )}
     </section>

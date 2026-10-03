@@ -15,12 +15,21 @@ export function usePolling(path, { enabled = true, interval = POLL_MS } = {}) {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(true)
   const timer = useRef(null)
+  const lastJson = useRef('')
+
+  useEffect(() => { lastJson.current = '' }, [path])
 
   const load = useCallback(async () => {
     if (!token || !enabled) return
     try {
       const res = await api.get(path)
-      setData(res)
+      // el sondeo trae casi siempre lo mismo: solo se actualiza el estado si
+      // cambio algo, para no redibujar listas ni reconstruir el 3D cada 4 s
+      const json = typeof res === 'string' ? res : JSON.stringify(res)
+      if (json !== lastJson.current) {
+        lastJson.current = json
+        setData(res)
+      }
       setError(null)
     } catch (e) {
       setError(e)

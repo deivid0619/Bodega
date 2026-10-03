@@ -1,10 +1,17 @@
+import { forwardRef } from 'react'
 import { api, ApiError } from '../api'
 import { useToast } from './ToastContext'
+import Sheet, { SheetHeader } from './Sheet'
+import Icon from './Icon'
+import { ProductThumb, Stepper, plural } from './Bits'
 
-export default function LocationSheet({ locationId, locationName, products, onClose, onChanged, onScanHere, onOpenProduct }) {
+const LocationSheet = forwardRef(function LocationSheet(
+  { locationId, locationName, products, highlightSku, onClose, onChanged, onScanHere, onOpenProduct }, ref,
+) {
   const showToast = useToast()
-  const items = products.filter((p) => p.location_id === locationId)
+  const items = products.filter((p) => p.location_id === locationId).sort((a, b) => (a.sku === highlightSku ? -1 : b.sku === highlightSku ? 1 : b.qty - a.qty))
   const units = items.reduce((a, p) => a + p.qty, 0)
+  const lowCount = items.filter((p) => p.min_qty > 0 && p.qty <= p.min_qty).length
 
   const bump = async (sku, type) => {
     try {
@@ -15,61 +22,46 @@ export default function LocationSheet({ locationId, locationName, products, onCl
     }
   }
 
-  if (!locationId) return null
-
   return (
-    <div className="sheet open">
-      <div className="grab" />
-      <div className="sh-head">
-        <div>
-          <h2>{locationName}</h2>
-          <p>{units} {units === 1 ? 'prenda' : 'prendas'}{items.length ? `, ${items.length} ${items.length === 1 ? 'código' : 'códigos'}` : ''}</p>
-        </div>
-        <button className="x" onClick={onClose} aria-label="Cerrar">×</button>
-      </div>
+    <Sheet ref={ref} onClose={onClose} size="half" label={`Ubicación ${locationId}`}>
+      <SheetHeader
+        eyebrow={
+          <div className="sheet-eyebrow">
+            <span className="code lime"><Icon name="pin" size={13} stroke={2.2} />{locationId}</span>
+            {lowCount > 0 && <span className="tag tag-warn">{plural(lowCount, 'talla por reponer', 'tallas por reponer')}</span>}
+          </div>
+        }
+        title={locationName}
+        subtitle={items.length ? `${plural(units, 'prenda', 'prendas')} · ${plural(items.length, 'código', 'códigos')}` : 'Vacía en el sistema'}
+      />
       {items.length ? (
-        items.map((p) => {
-          const low = p.min_qty > 0 && p.qty <= p.min_qty
-          if (p.image_url) {
+        <div>
+          {items.map((p) => {
+            const low = p.min_qty > 0 && p.qty <= p.min_qty
             return (
-              <div className={`prodcard ${low ? 'low' : ''}`} key={p.sku}>
-                <div className="prodcard-photo"><img src={p.image_url} alt={p.name} /></div>
-                <div className="prodcard-body">
-                  <button className="info" onClick={() => onOpenProduct(p.sku)}>
-                    <b>{p.name}</b>
-                    <small>{p.sku}{low ? <em> bajo mínimo ({p.min_qty})</em> : null}</small>
-                  </button>
-                  <div className="prodcard-row">
-                    <div className="sz">{p.size || 'U'}</div>
-                    <div className="pm">
-                      <button onClick={() => bump(p.sku, 'out')} aria-label="Registrar salida de 1">−</button>
-                      <output>{p.qty}</output>
-                      <button onClick={() => bump(p.sku, 'in')} aria-label="Registrar entrada de 1">+</button>
-                    </div>
-                  </div>
-                </div>
+              <div className={`prow ${p.sku === highlightSku ? 'hl' : ''}`} key={p.sku}>
+                {p.image_url ? <ProductThumb src={p.image_url} alt={p.name} size="sm" /> : <div className={`sz ${low ? 'low' : ''}`}>{p.size || 'U'}</div>}
+                <button className="prow-info" onClick={() => onOpenProduct(p.sku)}>
+                  <b>{p.name}</b>
+                  <span className="prow-meta">
+                    <span className="mono">{p.sku}</span>
+                    {p.image_url && p.size && <span>· {p.size}</span>}
+                    {low && <span className="warn">· bajo mínimo</span>}
+                  </span>
+                </button>
+                <Stepper value={p.qty} onMinus={() => bump(p.sku, 'out')} onPlus={() => bump(p.sku, 'in')} minusLabel="Registrar salida de 1" plusLabel="Registrar entrada de 1" disabledMinus={p.qty === 0} />
               </div>
             )
-          }
-          return (
-            <div className={`row ${low ? 'low' : ''}`} key={p.sku}>
-              <div className="sz">{p.size || 'U'}</div>
-              <button className="info" onClick={() => onOpenProduct(p.sku)}>
-                <b>{p.name}</b>
-                <small>{p.sku}{low ? <em> bajo mínimo ({p.min_qty})</em> : null}</small>
-              </button>
-              <div className="pm">
-                <button onClick={() => bump(p.sku, 'out')} aria-label="Registrar salida de 1">−</button>
-                <output>{p.qty}</output>
-                <button onClick={() => bump(p.sku, 'in')} aria-label="Registrar entrada de 1">+</button>
-              </div>
-            </div>
-          )
-        })
+          })}
+        </div>
       ) : (
-        <p className="muted">Esta ubicación está vacía en el sistema.</p>
+        <p className="muted" style={{ padding: '6px 0 4px' }}>Escanea prendas con esta ubicación elegida y aparecen aquí.</p>
       )}
-      <button className="btn dark big" onClick={onScanHere}>Escanear prendas nuevas para aquí</button>
-    </div>
+      <button className="btn btn-lime btn-block" style={{ marginTop: 16 }} onClick={onScanHere}>
+        <Icon name="scan" size={20} />Escanear prendas para aquí
+      </button>
+    </Sheet>
   )
-}
+})
+
+export default LocationSheet

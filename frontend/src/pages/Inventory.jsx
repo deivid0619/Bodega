@@ -1,79 +1,119 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useLayout, useProducts } from '../hooks/useApi'
 import { locationGroups } from '../locationGroups'
-import BarcodeBars from '../components/BarcodeBars'
 import ProductModal from '../components/ProductModal'
-import { useNavigate } from 'react-router-dom'
+import Icon from '../components/Icon'
+import { Empty, PageHead, ProductThumb, SearchField, plural } from '../components/Bits'
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', 'XXXL', '4XL']
 const sizeIdx = (s) => { const i = SIZE_ORDER.indexOf(s); return i < 0 ? 99 : i }
 const baseOf = (p) => (p.size && p.sku.endsWith(p.size) ? p.sku.slice(0, -p.size.length) : p.sku)
+const isLow = (p) => p.min_qty > 0 && p.qty <= p.min_qty
 
 function groupProducts(list) {
   const map = new Map()
-  for (const p of [...list].sort((a, b) => baseOf(a).localeCompare(baseOf(b)) || sizeIdx(a.size) - sizeIdx(b.size))) {
+  for (const p of [...list].sort((a, b) => a.name.localeCompare(b.name) || baseOf(a).localeCompare(baseOf(b)) || sizeIdx(a.size) - sizeIdx(b.size))) {
     const base = baseOf(p)
-    if (!map.has(base)) map.set(base, { base, name: p.name, items: [], total: 0, locs: new Set() })
+    if (!map.has(base)) map.set(base, { base, name: p.name, image: null, items: [], total: 0, locs: new Map() })
     const g = map.get(base)
     g.items.push(p)
     g.total += p.qty
-    g.locs.add(p.location_name)
+    if (!g.image && p.image_url) g.image = p.image_url
+    if (p.location_id) g.locs.set(p.location_id, p.location_name)
   }
   return [...map.values()]
 }
+
+const FILTERS = [['all', 'Todo'], ['low', 'Bajo mínimo'], ['zero', 'Agotado'], ['orphan', 'Sin ubicación']]
 
 export default function Inventory() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const { data: products, reload } = useProducts(search, filter)
+  const { data: all } = useProducts()
   const { data: layout } = useLayout()
   const [openSku, setOpenSku] = useState(null)
   const navigate = useNavigate()
 
   const groups = useMemo(() => groupProducts(products || []), [products])
   const groupsLoc = useMemo(() => locationGroups(layout?.elements), [layout])
-
-  const isLow = (p) => p.min_qty > 0 && p.qty <= p.min_qty
+  const totals = useMemo(() => {
+    const list = all || []
+    return {
+      units: list.reduce((s, p) => s + p.qty, 0),
+      refs: new Set(list.map(baseOf)).size,
+      low: list.filter(isLow).length,
+      zero: list.filter((p) => p.qty === 0).length,
+    }
+  }, [all])
 
   return (
-    <section className="view" aria-label="Inventario">
-      <h2>Inventario</h2>
-      <input className="search" type="search" placeholder="Buscar por código, nombre, talla o ubicación"
-             value={search} onChange={(e) => setSearch(e.target.value)} />
-      <div className="chips">
-        {[['all', 'Todo'], ['low', 'Bajo mínimo'], ['zero', 'Agotado'], ['orphan', 'Sin ubicación']].map(([f, label]) => (
-          <button key={f} className={`chip ${filter === f ? 'on' : ''}`} onClick={() => setFilter(f)}>{label}</button>
-        ))}
-      </div>
-      {!products ? (
-        <p className="muted">Cargando…</p>
-      ) : groups.length ? (
-        groups.map((g) => (
-          <article className="label" key={g.base}>
-            <BarcodeBars code={g.base} />
-            <div className="sku">{g.base}</div>
-            <div className="total"><b>{g.total}</b><span>{g.total === 1 ? 'prenda' : 'prendas'}</span></div>
-            <h3 className="name">{g.name}</h3>
-            <div className="sizes">
-              {g.items.map((p) => (
-                <button key={p.sku} className={`size ${p.qty === 0 ? 'zero' : isLow(p) ? 'low' : ''}`} onClick={() => setOpenSku(p.sku)}>
-                  {p.size || 'Única'} <b>{p.qty}</b>
-                </button>
-              ))}
-            </div>
-            <div className="where">
-              {[...g.locs].map((l) => <span key={l}>{l}</span>)}
-            </div>
-          </article>
-        ))
-      ) : products.length === 0 && !search && filter === 'all' ? (
-        <div className="empty">
-          El inventario está vacío. Escanea una etiqueta para registrar la primera prenda.
-          <br /><button className="btn primary" onClick={() => navigate('/scan')}>Escanear</button>
+    <section className="page" aria-label="Inventario">
+      <div className="page-inner">
+        <PageHead
+          title="Inventario"
+          lede={all ? `${plural(totals.units, 'prenda', 'prendas')} en ${plural(totals.refs, 'referencia', 'referencias')}` : 'Cargando…'}
+        />
+        <SearchField value={search} onChange={setSearch} placeholder="Buscar nombre, código o talla" />
+        <div className="chips" role="toolbar" aria-label="Filtrar">
+          {FILTERS.map(([f, label]) => (
+            <button key={f} className="chip" aria-pressed={filter === f} onClick={() => setFilter(f)}>
+              {label}
+              {f === 'low' && totals.low > 0 && <span className="n">{totals.low}</span>}
+              {f === 'zero' && totals.zero > 0 && <span className="n">{totals.zero}</span>}
+            </button>
+          ))}
         </div>
-      ) : (
-        <div className="empty">Nada coincide con la búsqueda o el filtro.</div>
-      )}
+
+        <div className="list" style={{ marginTop: 10 }}>
+          {!products ? (
+            [0, 1, 2].map((i) => <div key={i} className="skeleton" />)
+          ) : groups.length ? (
+            groups.map((g, i) => (
+              <article className="card ref rise" key={g.base} style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
+                <ProductThumb src={g.image} alt={g.name} />
+                <div style={{ minWidth: 0 }}>
+                  <h3 className="ref-name">{g.name}</h3>
+                  <div className="ref-code"><span className="code">{g.base}</span></div>
+                </div>
+                <div className="ref-total">
+                  <b>{g.total}</b>
+                  <span>{g.total === 1 ? 'prenda' : 'prendas'}</span>
+                </div>
+                <div className="ref-sizes">
+                  {g.items.map((p) => (
+                    <button
+                      key={p.sku}
+                      className={`size ${p.qty === 0 ? 'zero' : isLow(p) ? 'low' : ''}`}
+                      onClick={() => setOpenSku(p.sku)}
+                      aria-label={`Talla ${p.size || 'única'}: ${p.qty}`}
+                    >
+                      {p.size || 'Única'} <b>{p.qty}</b>
+                    </button>
+                  ))}
+                </div>
+                {g.locs.size > 0 && (
+                  <div className="ref-locs">
+                    {[...g.locs].map(([id, label]) => (
+                      <button key={id} className="code dark" onClick={() => navigate(`/?loc=${encodeURIComponent(id)}`)} title={label}>
+                        <Icon name="pin" size={13} stroke={2.2} />{id}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))
+          ) : products.length === 0 && !search && filter === 'all' ? (
+            <Empty icon="scan" title="Todavía no hay prendas" action={<button className="btn btn-lime" onClick={() => navigate('/scan')}>Escanear la primera</button>}>
+              Escanea la etiqueta de una prenda para registrarla en su ubicación.
+            </Empty>
+          ) : (
+            <Empty icon="search" title="Nada coincide">Prueba con otra palabra o quita el filtro.</Empty>
+          )}
+        </div>
+      </div>
+
       {openSku && (
         <ProductModal
           sku={openSku}

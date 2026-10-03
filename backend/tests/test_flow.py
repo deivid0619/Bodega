@@ -45,7 +45,7 @@ def _run_flow(client):
     layout = r.json()
     assert layout["room"]["width"] == 8.4
     bins = [e for e in layout["elements"] if e["code"] == "C"][0]
-    assert len(bins["locations"]) == 9 * 8
+    assert len(bins["locations"]) == 10 * 8
 
     seeded = client.get("/api/products/P-WPM210200L", headers=auth_headers(op_token))
     assert seeded.status_code == 200
@@ -89,18 +89,18 @@ def _run_flow(client):
     r = client.patch("/api/products/TEST-CHAQ-L", headers=auth_headers(op_token), json={"location_id": "C-8-9"})
     assert r.status_code == 200
 
-    r = client.patch("/api/layout/elements/e1", headers=auth_headers(admin_token),
+    r = client.patch(f"/api/layout/elements/{bins['id']}", headers=auth_headers(admin_token),
                       json={"params": {"cols": 1, "rows": 1}})
     assert r.status_code == 400
     assert "sin ubicación" in r.json()["detail"]
 
     r = client.patch("/api/products/TEST-CHAQ-L", headers=auth_headers(op_token), json={"location_id": "C-1-1"})
     assert r.status_code == 200
-    r = client.patch("/api/layout/elements/e1", headers=auth_headers(admin_token),
+    r = client.patch(f"/api/layout/elements/{bins['id']}", headers=auth_headers(admin_token),
                       json={"params": {"cols": 1, "rows": 1}})
     assert r.status_code == 200
-    r = client.patch("/api/layout/elements/e1", headers=auth_headers(admin_token),
-                      json={"params": {"cols": 9, "rows": 8}})
+    r = client.patch(f"/api/layout/elements/{bins['id']}", headers=auth_headers(admin_token),
+                      json={"params": {"cols": 10, "rows": 8}})
     assert r.status_code == 200
 
     r = client.post("/api/layout/elements", headers=auth_headers(admin_token), json={"type": "shelf", "x": 0, "z": 0, "rot": 0})

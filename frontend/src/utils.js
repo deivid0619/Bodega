@@ -12,9 +12,11 @@ export function fmtTime(iso) {
   if (d < 3_600_000) return `hace ${Math.floor(d / 60_000)} min`
   const dt = new Date(t)
   const today = new Date()
-  const hm = dt.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
-  if (dt.toDateString() === today.toDateString()) return `hoy ${hm}`
-  return dt.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) + ' ' + hm
+  if (dt.toDateString() === today.toDateString()) return dt.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  if (dt.toDateString() === yesterday.toDateString()) return 'ayer'
+  return dt.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '')
 }
 
 export function downloadCsv(text, filename) {

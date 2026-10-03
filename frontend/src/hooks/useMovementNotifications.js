@@ -40,7 +40,7 @@ export function useMovementNotifications() {
           if (m.user_name && m.user_name === user?.name) continue // no avisar tus propios movimientos
           if (!prefsRef.current[PREF_KEY[m.type]]) continue
           const qty = m.type === 'set' ? m.after : m.qty
-          showToast(`${VERB[m.type] || 'Movimiento:'} ${qty} ${m.product_name} · ${m.user_name} · ${m.location_name}`, m.type === 'out' ? 'err' : 'ok')
+          showToast(`${VERB[m.type] || 'Movimiento:'} ${qty} ${m.product_name} · ${m.user_name} · ${m.location_name}`, 'info')
         }
       } catch { /* si la red falla, se reintenta en el proximo sondeo */ }
     }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNotificationPrefs } from '../context/NotificationPrefsContext'
+import Icon from './Icon'
 
 const OPTIONS = [
   { key: 'in', label: 'Entradas' },
@@ -13,25 +14,32 @@ export default function NotificationBell() {
   const anyOn = Object.values(prefs).some(Boolean)
 
   return (
-    <div className="bell-wrap">
-      <button className={`bell ${anyOn ? 'on' : ''}`} onClick={() => setOpen((o) => !o)} aria-label="Preferencias de notificación">
-        <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 9a6 6 0 0 1 12 0c0 4 1.5 5.5 2 6H4c.5-.5 2-2 2-6Z" />
-          <path d="M10 19a2 2 0 0 0 4 0" />
-        </svg>
+    <div style={{ position: 'relative' }}>
+      <button className="icon-btn" onClick={() => setOpen((o) => !o)} aria-label="Avisos" aria-expanded={open}>
+        <Icon name="bell" />
+        {anyOn && <span className="pip" />}
       </button>
       {open && (
         <>
-          <div className="bell-scrim" onClick={() => setOpen(false)} />
-          <div className="bell-menu">
-            <p className="bell-title">Avisarme cuando alguien más registre:</p>
+          <div className="menu-scrim" onClick={() => setOpen(false)} />
+          <div className="menu">
+            <div className="menu-head">
+              <b>Avisos en vivo</b>
+              <span>Cuando otra persona registre:</span>
+            </div>
             {OPTIONS.map((o) => (
-              <label key={o.key} className="bell-opt">
-                <input type="checkbox" checked={!!prefs[o.key]} onChange={(e) => setPref(o.key, e.target.checked)} />
+              <div key={o.key} className="menu-check">
                 {o.label}
-              </label>
+                <button
+                  className="switch"
+                  role="switch"
+                  aria-checked={!!prefs[o.key]}
+                  aria-label={`Avisar ${o.label.toLowerCase()}`}
+                  onClick={() => setPref(o.key, !prefs[o.key])}
+                />
+              </div>
             ))}
-            <p className="bell-hint">Nunca te avisa de lo que tú mismo registras.</p>
+            <p className="menu-note">Nunca te avisa de lo que registras tú.</p>
           </div>
         </>
       )}

@@ -1,5 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect x="2" y="2" width="60" height="60" fill="#fff" stroke="#000" stroke-width="4"/>
-  <text x="32" y="42" font-family="'Barlow Condensed','Arial Narrow',sans-serif" font-weight="700" font-size="38" fill="#000" text-anchor="middle">C</text>
-  <rect x="2" y="52" width="60" height="10" fill="#F2B705"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#0B0B0B"/><g transform="translate(2.55 2)" fill="#C0FF00"><path d="M10.2 4.5h14.3l-2.6 4.6H7.6z"/><path d="M7.6 11.7h14.3l-2.6 4.6H5z"/><path d="M5 18.9h14.3l-2.6 4.6H2.4z"/></g></svg>

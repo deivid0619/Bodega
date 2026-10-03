@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { api, ApiError } from '../api'
 import { useToast } from './ToastContext'
-import Modal from './Modal'
+import Sheet, { SheetHeader, useSheet } from './Sheet'
+import { LocationSelect } from './ProductModal'
 import { guessSizeFromSku } from '../utils'
 
-export default function NewProductModal({ sku, defaultLocation, locations, onClose, onCreated }) {
+function Form({ sku, defaultLocation, locations, onCreated }) {
   const showToast = useToast()
+  const { close } = useSheet()
   const [name, setName] = useState('')
   const [size, setSize] = useState(guessSizeFromSku(sku))
-  const [qty, setQty] = useState(0)
+  const [qty, setQty] = useState(1)
   const [minQty, setMinQty] = useState(3)
   const [locationId, setLocationId] = useState(defaultLocation)
   const [error, setError] = useState('')
@@ -16,10 +18,7 @@ export default function NewProductModal({ sku, defaultLocation, locations, onClo
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!name.trim()) {
-      setError('Escribe la referencia para poder registrarla.')
-      return
-    }
+    if (!name.trim()) return setError('Escribe la referencia como aparece en la etiqueta.')
     setBusy(true)
     try {
       const res = await api.post('/api/products', {
@@ -28,48 +27,59 @@ export default function NewProductModal({ sku, defaultLocation, locations, onClo
       })
       showToast(`${res.product.name} ${res.product.size} registrada`)
       onCreated(res)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No se pudo registrar la prenda.')
+      close()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo registrar la prenda.')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Modal open onClose={onClose}>
-      <h2>Prenda nueva</h2>
-      <p className="muted">El código <b>{sku}</b> no está registrado.</p>
+    <>
+      <SheetHeader
+        eyebrow={<div className="sheet-eyebrow"><span className="tag tag-in">Código nuevo</span><span className="code">{sku}</span></div>}
+        title="Registrar prenda"
+        subtitle="Este código todavía no existe en la bodega."
+      />
       <form onSubmit={submit}>
-        <label className="field">Referencia
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Como aparece en la etiqueta" autoFocus />
-          {error && <small className="err">{error}</small>}
+        <label className="field" style={{ marginTop: 0 }}>
+          <span className="field-label">Referencia</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Chaqueta Fenix Black Fem" autoFocus />
         </label>
-        <div className="two">
-          <label className="field">Talla
-            <input value={size} onChange={(e) => setSize(e.target.value)} placeholder="Única" />
+        <div className="grid-2">
+          <label className="field">
+            <span className="field-label">Talla</span>
+            <input className="input" value={size} onChange={(e) => setSize(e.target.value)} placeholder="Única" />
           </label>
-          <label className="field">Cantidad
-            <input type="number" min="0" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
+          <label className="field">
+            <span className="field-label">Cantidad</span>
+            <input className="input" type="number" min="0" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
           </label>
         </div>
-        <label className="field">Ubicación
-          <select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
-            {locations.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
+        <label className="field">
+          <span className="field-label">Ubicación</span>
+          <LocationSelect value={locationId} onChange={setLocationId} locations={locations} currentName={locationId} />
         </label>
-        <label className="field">Stock mínimo
-          <input type="number" min="0" inputMode="numeric" value={minQty} onChange={(e) => setMinQty(e.target.value)} />
-          <small>Si llega a este número aparece en Pedidos. 0 para no avisar.</small>
+        <label className="field">
+          <span className="field-label">Stock mínimo</span>
+          <input className="input" type="number" min="0" inputMode="numeric" value={minQty} onChange={(e) => setMinQty(e.target.value)} />
+          <span className="field-hint">Al llegar a este número aparece en “Por reponer”. Pon 0 para no avisar.</span>
         </label>
-        <div className="actions">
-          <button type="button" className="btn ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn primary" disabled={busy}>{busy ? 'Guardando…' : 'Registrar prenda'}</button>
+        {error && <p className="form-err" role="alert">{error}</p>}
+        <div className="btn-row">
+          <button type="button" className="btn btn-ghost" onClick={() => close()}>Cancelar</button>
+          <button className="btn btn-lime" disabled={busy}>{busy ? 'Registrando…' : 'Registrar prenda'}</button>
         </div>
       </form>
-    </Modal>
+    </>
+  )
+}
+
+export default function NewProductModal({ onClose, ...props }) {
+  return (
+    <Sheet modal onClose={onClose} label="Registrar prenda nueva">
+      <Form {...props} />
+    </Sheet>
   )
 }

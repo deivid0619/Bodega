@@ -1,24 +1,36 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { WarehouseScene } from '../three/WarehouseScene'
 
 // Puente entre React y el motor 3D imperativo: crea la escena una sola vez
 // y le empuja los datos nuevos cuando cambian, en vez de recrearla en cada
 // render.
-export default function WarehouseCanvas({ layout, products, editMode, onTapLocation, onTapElement, onElementMoved, sceneRef }) {
+export default function WarehouseCanvas({ layout, products, editMode, onTapLocation, onTapElement, onTapTag, onElementMoved, sceneRef }) {
   const containerRef = useRef(null)
   const engineRef = useRef(null)
   const cbRef = useRef({})
-  cbRef.current = { onTapLocation, onTapElement, onElementMoved }
+  const [failed, setFailed] = useState(false)
+  cbRef.current = { onTapLocation, onTapElement, onTapTag, onElementMoved }
 
   useEffect(() => {
-    const engine = new WarehouseScene(containerRef.current, {
-      onTapLocation: (id) => cbRef.current.onTapLocation?.(id),
-      onTapElement: (id) => cbRef.current.onTapElement?.(id),
-      onElementMoved: (id, x, z) => cbRef.current.onElementMoved?.(id, x, z),
-    })
+    let engine
+    try {
+      engine = new WarehouseScene(containerRef.current, {
+        onTapLocation: (id) => cbRef.current.onTapLocation?.(id),
+        onTapElement: (id) => cbRef.current.onTapElement?.(id),
+        onTapTag: (id) => cbRef.current.onTapTag?.(id),
+        onElementMoved: (id, x, z) => cbRef.current.onElementMoved?.(id, x, z),
+      })
+    } catch {
+      setFailed(true)
+      return undefined
+    }
     engineRef.current = engine
     if (sceneRef) sceneRef.current = engine
-    return () => engine.dispose()
+    if (import.meta.env.DEV) window.__bodega3d = engine
+    return () => {
+      engine.dispose()
+      if (sceneRef) sceneRef.current = null
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -34,5 +46,13 @@ export default function WarehouseCanvas({ layout, products, editMode, onTapLocat
     engineRef.current?.setEditMode(editMode)
   }, [editMode])
 
+  if (failed) {
+    return (
+      <div className="wh-empty" style={{ top: '40%' }}>
+        <h3>Este dispositivo no muestra el 3D</h3>
+        <p>El navegador no tiene WebGL activo. El inventario, el escaneo y la reserva funcionan igual desde el menú de abajo.</p>
+      </div>
+    )
+  }
   return <div className="scene-wrap" ref={containerRef} />
 }

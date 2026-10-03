@@ -1,8 +1,11 @@
-export default function Modal({ open, onClose, children }) {
-  if (!open) return null
+import Sheet from './Sheet'
+
+// Ventana modal = hoja inferior con fondo oscurecido (dialogo centrado en
+// pantallas grandes). Ver Sheet para el comportamiento de arrastre.
+export default function Modal({ onClose, label, children }) {
   return (
-    <div className="modal" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="panel">{children}</div>
-    </div>
+    <Sheet modal onClose={onClose} label={label}>
+      {children}
+    </Sheet>
   )
 }

@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api'
 import { useToast } from './ToastContext'
+import Sheet, { SheetHeader } from './Sheet'
+import Icon from './Icon'
 
 const PARAMS = {
   bins: [['cols', 'Columnas'], ['rows', 'Filas']],
@@ -24,7 +26,7 @@ const ICONS = {
   balloons: <svg viewBox="0 0 44 36"><circle cx="16" cy="10" r="6" /><circle cx="28" cy="12" r="6" /><path d="M16 16l5 18M28 18l-7 16" /></svg>,
 }
 const HINTS = {
-  shelf: 'Niveles con canastillas grises, como la estantería H.',
+  shelf: 'Niveles con canastillas grises.',
   rack: 'Barras amarillas para colgar chaquetas.',
   bins: 'Gavetas negras por filas y columnas, como la pared C.',
   boxes: 'Cajas de cartón en el piso.',
@@ -33,12 +35,24 @@ const HINTS = {
   balloons: 'Solo de referencia.',
 }
 
-export default function EditPanel({ room, element, getTheta, onDone, onChanged }) {
+function Mini({ value, onMinus, onPlus }) {
+  return (
+    <div className="mini">
+      <button onClick={onMinus} aria-label="Menos"><Icon name="minus" size={17} stroke={2.4} /></button>
+      <output>{value}</output>
+      <button onClick={onPlus} aria-label="Más"><Icon name="plus" size={17} stroke={2.4} /></button>
+    </div>
+  )
+}
+
+export default function EditPanel({ room, element, getTheta, onDone, onChanged, onExit }) {
   const showToast = useToast()
   const [adding, setAdding] = useState(false)
   const [armedDelete, setArmedDelete] = useState(false)
   const [armedReset, setArmedReset] = useState(false)
   const [codeInput, setCodeInput] = useState(element?.code || '')
+
+  useEffect(() => { setCodeInput(element?.code || ''); setArmedDelete(false) }, [element?.id, element?.code])
 
   const fail = (e, fallback) => showToast(e instanceof ApiError ? e.message : fallback, 'err')
 
@@ -52,8 +66,6 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged }
   }
 
   const paramStep = async (key, dir) => {
-    const def = PARAMS[element.type].find((p) => p[0] === key)
-    if (!def) return
     try {
       await api.patch(`/api/layout/elements/${element.id}`, { params: { [key]: element.params[key] + dir * STEP[key] } })
       onChanged()
@@ -123,14 +135,11 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged }
     } catch (e) { fail(e, 'No se pudo restaurar.') }
   }
 
+  let body
   if (adding) {
-    return (
-      <div className="sheet open">
-        <div className="grab" />
-        <div className="sh-head">
-          <div><h2>Agregar a la bodega</h2><p>Aparece en el centro de la vista. Después lo arrastras a su lugar.</p></div>
-          <button className="x" onClick={() => setAdding(false)} aria-label="Cancelar">×</button>
-        </div>
+    body = (
+      <>
+        <SheetHeader title="Agregar a la bodega" subtitle="Aparece en el centro. Después lo arrastras a su lugar." onClose={() => setAdding(false)} />
         <div className="types">
           {Object.keys(ICONS).map((k) => (
             <button className="type" key={k} onClick={() => addElement(k)}>
@@ -138,61 +147,63 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged }
             </button>
           ))}
         </div>
-      </div>
+      </>
     )
-  }
-
-  if (!element) {
-    return (
-      <div className="sheet open">
-        <div className="grab" />
-        <div className="sh-head"><div><h2>Distribución</h2><p>Toca un elemento para moverlo o cambiarlo.</p></div></div>
-        <button className="btn primary big" style={{ margin: '4px 0 8px' }} onClick={() => setAdding(true)}>Agregar elemento</button>
-        <div className="ctl"><span>Ancho del cuarto</span><div className="mini">
-          <button onClick={() => roomStep('width', -1)}>−</button><output>{room.width.toFixed(1)} m</output><button onClick={() => roomStep('width', 1)}>+</button>
-        </div></div>
-        <div className="ctl"><span>Fondo del cuarto</span><div className="mini">
-          <button onClick={() => roomStep('depth', -1)}>−</button><output>{room.depth.toFixed(1)} m</output><button onClick={() => roomStep('depth', 1)}>+</button>
-        </div></div>
-        <button className="btn warn big" onClick={resetLayout}>
-          {armedReset ? 'Toca otra vez para confirmar' : 'Volver a la distribución del video'}
+  } else if (!element) {
+    body = (
+      <>
+        <SheetHeader title="Distribución" subtitle="Toca un mueble para moverlo o cambiarlo." onClose={onExit} />
+        <button className="btn btn-lime btn-block" onClick={() => setAdding(true)}><Icon name="plus" size={19} stroke={2.4} />Agregar mueble</button>
+        <div className="ctl" style={{ marginTop: 10 }}><span>Ancho del cuarto</span>
+          <Mini value={`${room.width.toFixed(1)} m`} onMinus={() => roomStep('width', -1)} onPlus={() => roomStep('width', 1)} />
+        </div>
+        <div className="ctl"><span>Fondo del cuarto</span>
+          <Mini value={`${room.depth.toFixed(1)} m`} onMinus={() => roomStep('depth', -1)} onPlus={() => roomStep('depth', 1)} />
+        </div>
+        <button className="btn btn-danger btn-block" style={{ marginTop: 10 }} onClick={resetLayout}>
+          {armedReset ? 'Toca otra vez para confirmar' : 'Volver a la distribución original'}
         </button>
-      </div>
+      </>
+    )
+  } else {
+    const storage = ['bins', 'shelf', 'rack', 'boxes'].includes(element.type)
+    body = (
+      <>
+        <SheetHeader
+          title={element.name}
+          subtitle={storage ? `${element.locations.length} ${element.locations.length === 1 ? 'ubicación' : 'ubicaciones'}` : HINTS[element.type]}
+          onClose={() => onDone()}
+        />
+        {storage && (
+          <div className="ctl"><span>Código</span>
+            <input className="code-in" value={codeInput} maxLength={6} autoCapitalize="characters" autoComplete="off" spellCheck="false"
+                   onChange={(e) => setCodeInput(e.target.value)} onBlur={renameCode} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
+          </div>
+        )}
+        <div className="ctl"><span>Mover</span><div className="pad">
+          <button onClick={() => move('l')} aria-label="Mover a la izquierda"><Icon name="arrowRight" size={18} stroke={2.3} style={{ transform: 'rotate(180deg)' }} /></button>
+          <button onClick={() => move('u')} aria-label="Mover hacia el fondo"><Icon name="arrowRight" size={18} stroke={2.3} style={{ transform: 'rotate(-90deg)' }} /></button>
+          <button onClick={() => move('d')} aria-label="Mover hacia el frente"><Icon name="arrowRight" size={18} stroke={2.3} style={{ transform: 'rotate(90deg)' }} /></button>
+          <button onClick={() => move('r')} aria-label="Mover a la derecha"><Icon name="arrowRight" size={18} stroke={2.3} /></button>
+          <button className="rot" onClick={rotate} aria-label="Girar 90 grados"><Icon name="undo" size={18} stroke={2.3} style={{ transform: 'scaleX(-1)' }} /></button>
+        </div></div>
+        {PARAMS[element.type].map(([key, label]) => (
+          <div className="ctl" key={key}><span>{label}</span>
+            <Mini value={fmtParam(key, element.params[key])} onMinus={() => paramStep(key, -1)} onPlus={() => paramStep(key, 1)} />
+          </div>
+        ))}
+        <div className="btn-row">
+          <button className="btn btn-ghost" onClick={duplicate}><Icon name="copy" size={18} />Duplicar</button>
+          <button className="btn btn-danger" onClick={del}>{armedDelete ? 'Toca otra vez' : 'Eliminar'}</button>
+        </div>
+        <p className="tip">También lo puedes arrastrar con un dedo. Las flechas lo mueven 10 cm.</p>
+      </>
     )
   }
-
-  const storage = ['bins', 'shelf', 'rack', 'boxes'].includes(element.type)
 
   return (
-    <div className="sheet open">
-      <div className="grab" />
-      <div className="sh-head">
-        <div><h2>{element.name}</h2><p>{storage ? `${element.locations.length} ${element.locations.length === 1 ? 'ubicación' : 'ubicaciones'}` : HINTS[element.type]}</p></div>
-        <button className="x" onClick={() => onDone()} aria-label="Quitar selección">×</button>
-      </div>
-      {storage && (
-        <div className="ctl"><span>Código</span>
-          <input className="codein" value={codeInput} maxLength={6} autoCapitalize="characters" autoComplete="off" spellCheck="false"
-                 onChange={(e) => setCodeInput(e.target.value)} onBlur={renameCode} />
-        </div>
-      )}
-      <div className="ctl"><span>Mover</span><div className="pad">
-        <button onClick={() => move('l')} aria-label="Mover a la izquierda">←</button>
-        <button onClick={() => move('u')} aria-label="Mover arriba">↑</button>
-        <button onClick={() => move('d')} aria-label="Mover abajo">↓</button>
-        <button onClick={() => move('r')} aria-label="Mover a la derecha">→</button>
-        <button className="rot" onClick={rotate} aria-label="Girar 90 grados">⟳</button>
-      </div></div>
-      {PARAMS[element.type].map(([key, label]) => (
-        <div className="ctl" key={key}><span>{label}</span><div className="mini">
-          <button onClick={() => paramStep(key, -1)}>−</button><output>{fmtParam(key, element.params[key])}</output><button onClick={() => paramStep(key, 1)}>+</button>
-        </div></div>
-      ))}
-      <div className="actions">
-        <button className="btn ghost" onClick={duplicate}>Duplicar</button>
-        <button className="btn warn" onClick={del}>{armedDelete ? 'Toca otra vez' : 'Eliminar'}</button>
-      </div>
-      <p className="tip">También puedes arrastrarlo con un dedo. Las flechas lo mueven 10 cm.</p>
-    </div>
+    <Sheet onClose={onExit} size="half" label="Editar distribución">
+      {body}
+    </Sheet>
   )
 }

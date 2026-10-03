@@ -145,16 +145,19 @@ def top_movers(db: Session, days: int = 30, limit: int = 5) -> list[dict]:
     return [{"sku": r.sku, "name": r.product_name, "size": r.product_size, "qty_out": int(r.total)} for r in rows]
 
 
+# (codigo base, referencia, tallas, va colgada en perchero)
 DEMO_REFS = [
-    ("D-CHQ5001", "CHAQUETA CAMO NEÓN", ["M", "L", "XL"]),
-    ("D-CHQ5002", "CHAQUETA TOURING NEGRO", ["S", "M", "L", "XL"]),
-    ("D-CHQ5003", "CHAQUETA URBAN AZUL", ["M", "L"]),
-    ("D-IMP3001", "IMPERMEABLE 2 PIEZAS NEGRO", ["S", "M", "L", "XL"]),
-    ("D-PAN4001", "PANTALÓN CORDURA NEGRO", ["M", "L", "XL"]),
-    ("D-GUA6001", "GUANTES VERANO NEGRO", ["S", "M", "L"]),
-    ("D-CHL9001", "CHALECO REFLECTIVO NEÓN", ["M", "L"]),
-    ("D-BOT2001", "BOTAS IMPERMEABLES", ["M", "L"]),
-    ("D-RZ884", "RODILLERA Y CODERA RZ-884", [""]),
+    ("D-FNX01", "CHAQUETA FENIX BLACK FEM", ["S", "M", "L", "XL"], True),
+    ("D-GNS02", "CHAQUETA GENESIS INVIERNO MASC", ["M", "L", "XL"], True),
+    ("D-TRG03", "CHAQUETA TOURING GRIS", ["S", "M", "L", "XL"], True),
+    ("D-URB04", "CORTAVIENTOS URBAN AZUL", ["M", "L", "XL"], True),
+    ("D-CMO05", "CHAQUETA CAMO NEÓN", ["M", "L"], True),
+    ("D-IMP06", "IMPERMEABLE 2 PIEZAS NEGRO", ["S", "M", "L", "XL"], True),
+    ("D-XPL07", "BODY ARMOR XPLORER", ["M", "L", "XL"], False),
+    ("D-PAN08", "PANTALÓN CORDURA NEGRO", ["M", "L", "XL"], False),
+    ("D-GUA09", "GUANTES VERANO NEGRO", ["S", "M", "L"], False),
+    ("D-CHL10", "CHALECO REFLECTIVO NEÓN", ["M", "L"], False),
+    ("D-RZ884", "RODILLERA Y CODERA RZ-884", [""], False),
 ]
 
 
@@ -175,17 +178,22 @@ def load_demo_data(db: Session, user: models.User) -> None:
     free = [l for l in all_locs if l not in used]
     rnd = random.Random(418)
     rnd.shuffle(free)
+    # como en la bodega real: cada chaqueta cuelga con todas sus tallas en una
+    # misma barra de perchero; lo pequeno va en canastas
+    bars = [l for l in free if l.startswith("P-")]
+    boxes = [l for l in free if not l.startswith("P-")]
     made: list[models.Product] = []
-    for base, name, sizes in DEMO_REFS:
+    for base, name, sizes, hangs in DEMO_REFS:
+        bar = bars.pop() if hangs and bars else None
         for size in sizes:
-            if not free:
+            loc = bar or (boxes.pop() if boxes else None)
+            if not loc:
                 break
             sku = base + size
             if db.get(models.Product, sku):
                 continue
-            loc = free.pop()
-            qty = rnd.randint(0, 12)
-            p = models.Product(sku=sku, name=name, size=size, location_id=loc, qty=qty, min_qty=3, demo=True)
+            qty = rnd.randint(1, 7) if bar else rnd.randint(0, 10)
+            p = models.Product(sku=sku, name=name, size=size, location_id=loc, qty=qty, min_qty=2 if bar else 3, demo=True)
             db.add(p)
             made.append(p)
     db.flush()

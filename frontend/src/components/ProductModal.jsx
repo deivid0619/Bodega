@@ -2,24 +2,39 @@ import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ToastContext'
-import Modal from './Modal'
-import BarcodeBars from './BarcodeBars'
+import Sheet, { SheetHeader, useSheet } from './Sheet'
+import Icon from './Icon'
+import { ProductThumb, Stepper, StockMeter } from './Bits'
 
-export default function ProductModal({ sku, locations, onClose, onChanged, onLocate }) {
+function LocationSelect({ value, onChange, locations, currentName }) {
+  return (
+    <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
+      {!locations.some((g) => g.options.some((l) => l.id === value)) && <option value={value}>{currentName}</option>}
+      {locations.map((group) => (
+        <optgroup key={group.label} label={group.label}>
+          {group.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+        </optgroup>
+      ))}
+    </select>
+  )
+}
+
+function Body({ sku, locations, onChanged, onLocate }) {
   const { isAdmin } = useAuth()
   const showToast = useToast()
+  const { close } = useSheet()
   const [product, setProduct] = useState(null)
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const [form, setForm] = useState(null)
-
-  const load = async () => {
-    const p = await api.get(`/api/products/${encodeURIComponent(sku)}`)
-    setProduct(p)
-    setForm({ name: p.name, size: p.size, min_qty: p.min_qty, location_id: p.location_id })
-  }
+  const [armed, setArmed] = useState(false)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    load().catch(() => showToast('No se pudo cargar ese código.', 'err'))
+    api.get(`/api/products/${encodeURIComponent(sku)}`)
+      .then((p) => {
+        setProduct(p)
+        setForm({ name: p.name, size: p.size, min_qty: p.min_qty, location_id: p.location_id })
+      })
+      .catch(() => showToast('No se pudo cargar ese código.', 'err'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sku])
 
@@ -34,88 +49,121 @@ export default function ProductModal({ sku, locations, onClose, onChanged, onLoc
   }
 
   const save = async () => {
+    setBusy(true)
     try {
       const p = await api.patch(`/api/products/${encodeURIComponent(sku)}`, {
-        name: form.name,
-        size: form.size,
-        min_qty: Number(form.min_qty),
-        location_id: form.location_id,
+        name: form.name, size: form.size, min_qty: Number(form.min_qty), location_id: form.location_id,
       })
       setProduct(p)
       onChanged()
       showToast('Cambios guardados')
-      onClose()
+      close()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo guardar.', 'err')
+    } finally {
+      setBusy(false)
     }
   }
 
   const remove = async () => {
-    if (!confirmDelete) {
-      setConfirmDelete(true)
-      setTimeout(() => setConfirmDelete(false), 3000)
+    if (!armed) {
+      setArmed(true)
+      setTimeout(() => setArmed(false), 3000)
       return
     }
     try {
       await api.delete(`/api/products/${encodeURIComponent(sku)}`)
       onChanged()
       showToast('Código eliminado')
-      onClose()
+      close()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo eliminar.', 'err')
     }
   }
 
-  if (!product || !form) return <Modal open onClose={onClose}><p className="muted">Cargando…</p></Modal>
+  if (!product || !form) {
+    return (
+      <>
+        <SheetHeader title="Cargando…" />
+        <div className="skeleton" style={{ height: 120 }} />
+      </>
+    )
+  }
 
+  const low = product.min_qty > 0 && product.qty <= product.min_qty
   return (
-    <Modal open onClose={onClose}>
-      <div className="label">
-        <BarcodeBars code={product.sku} />
-        <div className="sku">{product.sku}</div>
-        <h3 className="name">{product.name}</h3>
+    <>
+      <SheetHeader
+        eyebrow={<div className="sheet-eyebrow"><span className="code">{product.sku}</span>{product.size && <span className="tag tag-out">Talla {product.size}</span>}</div>}
+        title={product.name}
+      />
+      <div className="prod-hero">
+        <ProductThumb src={product.image_url} alt={product.name} size="lg" />
+        <div style={{ minWidth: 0 }}>
+          <button className="code dark" onClick={() => onLocate(product.location_id)}>
+            <Icon name="pin" size={13} stroke={2.2} />{product.location_id}
+          </button>
+          <p className="muted" style={{ marginTop: 8, fontSize: 13.5 }}>{product.location_name}</p>
+        </div>
       </div>
-      <div className="stock">
-        <button className="round" onClick={() => bump('out')} aria-label="Registrar salida de 1">−</button>
-        <div><b>{product.qty}</b><span>en bodega</span></div>
-        <button className="round" onClick={() => bump('in')} aria-label="Registrar entrada de 1">+</button>
+
+      <div className="prod-stock">
+        <div className="count">
+          <b>{product.qty}</b>
+          <span>en bodega{product.min_qty > 0 ? ` · mínimo ${product.min_qty}` : ''}</span>
+        </div>
+        <Stepper onMinus={() => bump('out')} onPlus={() => bump('in')} minusLabel="Registrar salida de 1" plusLabel="Registrar entrada de 1" disabledMinus={product.qty === 0} large>
+          <span style={{ width: 8 }} />
+        </Stepper>
       </div>
-      <p className="muted" style={{ textAlign: 'center' }}>
-        {product.out_30d} {product.out_30d === 1 ? 'salió' : 'salieron'} en los últimos 30 días.
-      </p>
-      <label className="field">Referencia
-        <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+      <div className="prod-note">
+        <span>{product.out_30d} {product.out_30d === 1 ? 'salió' : 'salieron'} en los últimos 30 días</span>
+        {product.min_qty > 0 && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            {low && <span className="tag tag-warn">Por reponer</span>}
+            <StockMeter qty={product.qty} min={product.min_qty} />
+          </span>
+        )}
+      </div>
+
+      <h3 className="h-sec">Datos de la prenda</h3>
+      <label className="field" style={{ marginTop: 0 }}>
+        <span className="field-label">Referencia</span>
+        <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       </label>
-      <div className="two">
-        <label className="field">Talla
-          <input value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
+      <div className="grid-2">
+        <label className="field">
+          <span className="field-label">Talla</span>
+          <input className="input" value={form.size} onChange={(e) => setForm({ ...form, size: e.target.value })} />
         </label>
-        <label className="field">Stock mínimo
-          <input type="number" min="0" inputMode="numeric" value={form.min_qty}
-                 onChange={(e) => setForm({ ...form, min_qty: e.target.value })} />
+        <label className="field">
+          <span className="field-label">Stock mínimo</span>
+          <input className="input" type="number" min="0" inputMode="numeric" value={form.min_qty} onChange={(e) => setForm({ ...form, min_qty: e.target.value })} />
         </label>
       </div>
-      <label className="field">Ubicación
-        <select value={form.location_id} onChange={(e) => setForm({ ...form, location_id: e.target.value })}>
-          {!locations.some((l) => l.id === form.location_id) && (
-            <option value={form.location_id}>{product.location_name}</option>
-          )}
-          {locations.map((group) => (
-            <optgroup key={group.label} label={group.label}>
-              {group.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </optgroup>
-          ))}
-        </select>
+      <label className="field">
+        <span className="field-label">Ubicación</span>
+        <LocationSelect value={form.location_id} onChange={(v) => setForm({ ...form, location_id: v })} locations={locations} currentName={product.location_name} />
       </label>
-      <div className="actions">
-        <button className="btn ghost" onClick={() => onLocate(product.location_id)}>Ver en la bodega</button>
-        <button className="btn primary" onClick={save}>Guardar cambios</button>
+      <div className="btn-row">
+        <button className="btn btn-ghost" onClick={() => onLocate(product.location_id)}><Icon name="warehouse" size={19} />Ver en 3D</button>
+        <button className="btn btn-lime" onClick={save} disabled={busy}>{busy ? 'Guardando…' : 'Guardar cambios'}</button>
       </div>
       {isAdmin && (
-        <button className="btn danger" onClick={remove}>
-          {confirmDelete ? 'Toca otra vez para eliminar' : 'Eliminar este código'}
+        <button className="btn btn-danger btn-block" style={{ marginTop: 8 }} onClick={remove}>
+          {armed ? 'Toca otra vez para eliminar' : 'Eliminar este código'}
         </button>
       )}
-    </Modal>
+    </>
   )
 }
+
+export default function ProductModal({ sku, locations, onClose, onChanged, onLocate }) {
+  return (
+    <Sheet modal onClose={onClose} label="Detalle de la prenda">
+      <Body sku={sku} locations={locations} onChanged={onChanged} onLocate={onLocate} />
+    </Sheet>
+  )
+}
+
+export { LocationSelect }

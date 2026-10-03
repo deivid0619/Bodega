@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { api, ApiError } from '../api'
 import { useToast } from './ToastContext'
-import Modal from './Modal'
+import Sheet, { SheetHeader, useSheet } from './Sheet'
 
-export default function NewReserveModal({ onClose, onCreated }) {
+function Form({ onCreated }) {
   const showToast = useToast()
+  const { close } = useSheet()
   const [name, setName] = useState('')
   const [size, setSize] = useState('')
   const [qty, setQty] = useState(1)
@@ -14,50 +15,59 @@ export default function NewReserveModal({ onClose, onCreated }) {
 
   const submit = async (e) => {
     e.preventDefault()
-    if (!name.trim()) {
-      setError('Escribe la referencia.')
-      return
-    }
+    if (!name.trim()) return setError('Escribe la referencia.')
     setBusy(true)
     try {
       const item = await api.post('/api/reserve', {
         name: name.trim().toUpperCase(), size: size.trim().toUpperCase(),
-        qty: Number(qty), sku: sku.trim() || undefined,
+        qty: Number(qty), sku: sku.trim().toUpperCase() || undefined,
       })
-      showToast(`${item.name} ${item.size} guardada en reserva`)
+      showToast(`${item.name} ${item.size} guardada en la reserva`)
       onCreated(item)
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'No se pudo guardar.')
+      close()
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo guardar.')
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Modal open onClose={onClose}>
-      <h2>Nueva mercancía en reserva</h2>
-      <p className="muted">Todavía sin ubicación — se guarda aparte hasta que la envíes a un perchero o canasta.</p>
+    <>
+      <SheetHeader title="Agregar a la reserva" subtitle="Mercancía guardada aparte, sin ubicación todavía. Después la envías a un perchero o canasta." />
       <form onSubmit={submit}>
-        <label className="field">Referencia
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Chaqueta Fenix Black Fem" autoFocus />
-          {error && <small className="err">{error}</small>}
+        <label className="field" style={{ marginTop: 0 }}>
+          <span className="field-label">Referencia</span>
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Chaqueta Fenix Black Fem" autoFocus />
         </label>
-        <div className="two">
-          <label className="field">Talla
-            <input value={size} onChange={(e) => setSize(e.target.value)} placeholder="Única" />
+        <div className="grid-2">
+          <label className="field">
+            <span className="field-label">Talla</span>
+            <input className="input" value={size} onChange={(e) => setSize(e.target.value)} placeholder="Única" />
           </label>
-          <label className="field">Cantidad
-            <input type="number" min="0" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
+          <label className="field">
+            <span className="field-label">Cantidad</span>
+            <input className="input" type="number" min="0" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
           </label>
         </div>
-        <label className="field">Código (SKU) — si ya lo sabes
-          <input value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Opcional por ahora" autoCapitalize="characters" />
+        <label className="field">
+          <span className="field-label">Código (opcional)</span>
+          <input className="input mono" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Si ya lo sabes" autoCapitalize="characters" />
         </label>
-        <div className="actions">
-          <button type="button" className="btn ghost" onClick={onClose}>Cancelar</button>
-          <button className="btn primary" disabled={busy}>{busy ? 'Guardando…' : 'Guardar en reserva'}</button>
+        {error && <p className="form-err" role="alert">{error}</p>}
+        <div className="btn-row">
+          <button type="button" className="btn btn-ghost" onClick={() => close()}>Cancelar</button>
+          <button className="btn btn-lime" disabled={busy}>{busy ? 'Guardando…' : 'Guardar en reserva'}</button>
         </div>
       </form>
-    </Modal>
+    </>
+  )
+}
+
+export default function NewReserveModal({ onClose, onCreated }) {
+  return (
+    <Sheet modal onClose={onClose} label="Agregar a la reserva">
+      <Form onCreated={onCreated} />
+    </Sheet>
   )
 }
