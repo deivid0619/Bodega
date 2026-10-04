@@ -204,7 +204,7 @@ export class WarehouseScene {
   // ---------- inicializacion ----------
   _initThree() {
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.mobile ? 2 : 1.75))
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.mobile ? 1.5 : 1.75))
     renderer.setClearColor(0x000000, 0)
     renderer.outputColorSpace = THREE.SRGBColorSpace
     renderer.toneMapping = THREE.AgXToneMapping
@@ -296,8 +296,13 @@ export class WarehouseScene {
   }
 
   _initPost() {
-    // AO: en computador siempre; en celular solo al quedar quieta la camara
-    // (se "revela" en un cuarto de segundo), para que girar sea fluido.
+    // Oclusion ambiental solo en computador: en celular costaba demasiado y
+    // hacia lento todo lo demas (las sombras de contacto bastan ahi).
+    if (this.mobile) {
+      this.composer = null
+      this.gtao = null
+      return
+    }
     try {
       const size = this.renderer.getDrawingBufferSize(new THREE.Vector2())
       const rt = new THREE.WebGLRenderTarget(size.x || 1, size.y || 1, { type: THREE.HalfFloatType, samples: 4 })

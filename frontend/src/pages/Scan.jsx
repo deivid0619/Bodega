@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api'
-import { useLayout } from '../hooks/useApi'
+import { moveStock, refreshInventory, useLayout } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { locationGroups } from '../locationGroups'
 import NewProductModal from '../components/NewProductModal'
@@ -55,28 +55,28 @@ export default function Scan() {
     setNewLoc(exists ? wanted : groups[0].options[0]?.id || '')
   }, [groups, newLoc, params])
 
+  const pendingRef = useRef(null)
+  pendingRef.current = pendingSku
+
+  // un solo viaje al servidor por codigo: si no existe, responde 404 y se
+  // ofrece registrarlo
   const handleCode = async (raw) => {
     const sku = String(raw || '').trim().toUpperCase().replace(/\s+/g, '')
-    if (!sku || pendingSku) return
+    if (!sku || pendingRef.current) return
     try {
-      await api.get(`/api/products/${encodeURIComponent(sku)}`)
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 404) {
-        beep(true)
-        setPendingSku(sku)
-        return
-      }
-      showToast('No se pudo consultar ese código.', 'err')
-      return
-    }
-    try {
-      const res = await api.post('/api/movements', { sku, type: mode, qty })
+      const res = await moveStock(sku, mode, qty)
       beep(true)
       setLastMove(res)
       setSession((s) => [res.movement, ...s].slice(0, 25))
     } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        beep(true)
+        pendingRef.current = sku
+        setPendingSku(sku)
+        return
+      }
       beep(false)
-      showToast(e instanceof ApiError ? e.message : 'No se pudo registrar el movimiento.', 'err')
+      showToast(e instanceof ApiError ? e.message : 'No hay conexión con el servidor. Intenta otra vez.', 'err')
     }
   }
 
@@ -93,6 +93,7 @@ export default function Scan() {
   const undo = async (id) => {
     try {
       await api.post(`/api/movements/${id}/undo`)
+      refreshInventory()
       setSession((s) => s.filter((m) => m.id !== id))
       if (lastMove?.movement?.id === id) setLastMove(null)
       showToast('Movimiento deshecho')
@@ -131,9 +132,10 @@ export default function Scan() {
             <div className="vf-fail">
               <Icon name="alert" size={28} />
               {message}
+              <button className="btn btn-lime btn-sm" onClick={start}>Intentar de nuevo</button>
             </div>
           )}
-          {status === 'native' && (
+          {camOn && (
             <>
               <div className="vf-corners" aria-hidden="true"><i /><i /><i /><i /></div>
               <div className="vf-laser" aria-hidden="true" />
@@ -224,6 +226,7 @@ export default function Scan() {
           locations={groups}
           onClose={() => setPendingSku(null)}
           onCreated={(res) => {
+            refreshInventory()
             setLastMove(res)
             setSession((s) => [res.movement, ...s].slice(0, 25))
           }}

@@ -1,12 +1,13 @@
 import { forwardRef } from 'react'
-import { api, ApiError } from '../api'
+import { ApiError } from '../api'
+import { moveStock } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader } from './Sheet'
 import Icon from './Icon'
 import { ProductThumb, Stepper, plural } from './Bits'
 
 const LocationSheet = forwardRef(function LocationSheet(
-  { locationId, locationName, products, highlightSku, onClose, onChanged, onScanHere, onOpenProduct }, ref,
+  { locationId, locationName, products, highlightSku, onClose, onScanHere, onOpenProduct }, ref,
 ) {
   const showToast = useToast()
   const items = products.filter((p) => p.location_id === locationId).sort((a, b) => (a.sku === highlightSku ? -1 : b.sku === highlightSku ? 1 : b.qty - a.qty))
@@ -15,8 +16,7 @@ const LocationSheet = forwardRef(function LocationSheet(
 
   const bump = async (sku, type) => {
     try {
-      await api.post('/api/movements', { sku, type, qty: 1 })
-      onChanged()
+      await moveStock(sku, type, 1)
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo registrar.', 'err')
     }

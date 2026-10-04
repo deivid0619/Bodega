@@ -18,21 +18,8 @@ class InventoryError(Exception):
     suficiente existencia, ubicacion inexistente...)."""
 
 
-def _loc_name(db: Session, location_id: str) -> str:
-    locs = all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}
-                           for e in db.query(models.Element).all()])
-    loc = locs.get(location_id)
-    return loc["name"] if loc else f"{location_id} (ya no existe)"
-
-
-def out_30d(db: Session, sku: str) -> int:
-    since = datetime.now(timezone.utc) - timedelta(days=30)
-    total = (
-        db.query(func.coalesce(func.sum(models.Movement.qty), 0))
-        .filter(models.Movement.sku == sku, models.Movement.type == "out", models.Movement.created_at >= since)
-        .scalar()
-    )
-    return int(total or 0)
+class UnknownSku(InventoryError):
+    """El codigo escaneado no esta registrado (la app ofrece registrarlo)."""
 
 
 def register_product(db: Session, sku: str, name: str, size: str, location_id: str,
@@ -72,7 +59,7 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
         .first()
     )
     if not product:
-        raise InventoryError("Ese código no está registrado todavía.")
+        raise UnknownSku("Ese código no está registrado todavía.")
 
     before = product.qty
     if type_ == "in":

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ToastContext'
+import { moveStock } from '../hooks/useApi'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { ProductThumb, Stepper, StockMeter } from './Bits'
@@ -39,12 +40,13 @@ function Body({ sku, locations, onChanged, onLocate }) {
   }, [sku])
 
   const bump = async (type) => {
+    setProduct((p) => ({ ...p, qty: type === 'in' ? p.qty + 1 : Math.max(0, p.qty - 1) }))
     try {
-      const res = await api.post('/api/movements', { sku, type, qty: 1 })
-      setProduct(res.product)
-      onChanged()
+      const res = await moveStock(sku, type, 1)
+      setProduct((p) => ({ ...p, qty: res.product.qty, out_30d: res.product.out_30d }))
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo registrar.', 'err')
+      api.get(`/api/products/${encodeURIComponent(sku)}`).then(setProduct).catch(() => {})
     }
   }
 

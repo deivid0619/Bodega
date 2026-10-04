@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from .. import inventory_service as inv
 from .. import layout_service as lsvc
 from .. import models, schemas
+from .. import serializers as ser
 from ..database import get_db
 from ..deps import get_current_user, require_admin
 
@@ -14,12 +15,7 @@ router = APIRouter(prefix="/api/products", tags=["inventario"])
 
 
 def _out(db: Session, p: models.Product) -> schemas.ProductOut:
-    return schemas.ProductOut(
-        sku=p.sku, name=p.name, size=p.size, location_id=p.location_id,
-        location_name=inv._loc_name(db, p.location_id), qty=p.qty, min_qty=p.min_qty,
-        image_url=p.image_url, demo=p.demo, out_30d=inv.out_30d(db, p.sku),
-        created_at=p.created_at, updated_at=p.updated_at,
-    )
+    return ser.one_product_out(db, p)
 
 
 @router.get("", response_model=list[schemas.ProductOut])
@@ -47,7 +43,7 @@ def list_products(
     elif filter == "orphan":
         products = [p for p in products if p.location_id not in loc_map]
     products.sort(key=lambda p: (p.name, p.size))
-    return [_out(db, p) for p in products]
+    return ser.products_out(db, products)
 
 
 @router.get("/{sku}", response_model=schemas.ProductOut)
@@ -68,15 +64,10 @@ def create_product(payload: schemas.ProductCreateIn, db: Session = Depends(get_d
         )
     except inv.InventoryError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    names = ser.loc_names(db)
     return schemas.MovementResult(
-        product=_out(db, product),
-        movement=schemas.MovementOut(
-            id=movement.id, sku=movement.sku, type=movement.type, qty=movement.qty,
-            before=movement.before, after=movement.after, location_id=movement.location_id,
-            location_name=inv._loc_name(db, movement.location_id), product_name=movement.product_name,
-            product_size=movement.product_size, user_name=movement.user_name, demo=movement.demo,
-            created_at=movement.created_at,
-        ),
+        product=ser.product_out(product, names, ser.out_30d_map(db, [product.sku])),
+        movement=ser.movement_out(movement, names),
     )
 
 

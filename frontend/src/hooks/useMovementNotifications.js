@@ -8,7 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { useToast } from '../components/ToastContext'
 import { useNotificationPrefs } from '../context/NotificationPrefsContext'
 
-const POLL_MS = 5000
+const POLL_MS = 8000
 const VERB = { in: 'Entraron', new: 'Registraron', out: 'Salieron', set: 'Conteo:' }
 const PREF_KEY = { in: 'in', new: 'in', out: 'out', set: 'set' }
 
@@ -25,6 +25,7 @@ export function useMovementNotifications() {
     let cancelled = false
 
     const poll = async () => {
+      if (document.visibilityState !== 'visible') return
       try {
         const rows = await api.get('/api/movements?limit=20')
         if (cancelled || !rows.length) return

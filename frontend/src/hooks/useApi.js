@@ -1,79 +1,185 @@
-// Hooks de datos compartidos. Usan sondeo (polling) simple en vez de
-// WebSockets: cada pocos segundos se vuelve a pedir la lista, así que si
-// otra persona escanea algo, tú lo ves aparecer solo. Es más simple que un
-// socket y, para el ritmo de una bodega, es suficiente. El siguiente paso
-// natural (ver README) es cambiar esto por Supabase Realtime.
-import { useCallback, useEffect, useRef, useState } from 'react'
+// Datos compartidos con sondeo (polling): cada pocos segundos se vuelve a
+// pedir la lista, asi lo que otra persona escanea aparece solo.
+//
+// Hay UNA cache por ruta para toda la app: si dos pantallas piden lo mismo,
+// se hace una sola peticion. Las acciones (+1, -1, enviar...) actualizan la
+// cache al instante y el servidor confirma por detras; con el servidor lejos,
+// esperar cada respuesta hacia que todo se sintiera lento en el celular.
+// Con la app en segundo plano no se consulta nada.
+import { useEffect, useReducer } from 'react'
 import { api } from '../api'
 import { useAuth } from '../context/AuthContext'
 
-const POLL_MS = 4000
+const store = new Map()
+let ownerToken = null
+let epoch = 0 // sube con cada cambio optimista: una respuesta vieja no lo pisa
 
-export function usePolling(path, { enabled = true, interval = POLL_MS } = {}) {
+function entry(path) {
+  if (!store.has(path)) store.set(path, { data: null, json: '', error: null, subs: new Set(), refs: 0, timer: null, inflight: null })
+  return store.get(path)
+}
+
+function set(e, data) {
+  const json = typeof data === 'string' ? data : JSON.stringify(data)
+  if (json === e.json) return
+  e.json = json
+  e.data = data
+  e.subs.forEach((f) => f())
+}
+
+function fetchPath(path) {
+  const e = entry(path)
+  if (e.inflight) return e.inflight
+  const started = epoch
+  e.inflight = api.get(path)
+    .then((res) => {
+      e.error = null
+      if (started === epoch) set(e, res)
+    })
+    .catch((err) => {
+      e.error = err
+      e.subs.forEach((f) => f())
+    })
+    .finally(() => { e.inflight = null })
+  return e.inflight
+}
+
+export function revalidate(prefix) {
+  for (const [path, e] of store) if (path.startsWith(prefix) && e.refs > 0) fetchPath(path)
+}
+
+// Cambia en el acto todas las listas cuya ruta empieza por `prefix`.
+export function mutate(prefix, updater) {
+  epoch++
+  for (const [path, e] of store) {
+    if (path.startsWith(prefix) && Array.isArray(e.data)) set(e, updater(e.data))
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') for (const [path, e] of store) if (e.refs > 0) fetchPath(path)
+})
+
+export function usePolling(path, { interval = 6000 } = {}) {
   const { token } = useAuth()
-  const [data, setData] = useState(null)
-  const [error, setError] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const timer = useRef(null)
-  const lastJson = useRef('')
-
-  useEffect(() => { lastJson.current = '' }, [path])
-
-  const load = useCallback(async () => {
-    if (!token || !enabled) return
-    try {
-      const res = await api.get(path)
-      // el sondeo trae casi siempre lo mismo: solo se actualiza el estado si
-      // cambio algo, para no redibujar listas ni reconstruir el 3D cada 4 s
-      const json = typeof res === 'string' ? res : JSON.stringify(res)
-      if (json !== lastJson.current) {
-        lastJson.current = json
-        setData(res)
-      }
-      setError(null)
-    } catch (e) {
-      setError(e)
-    } finally {
-      setLoading(false)
-    }
-  }, [path, token, enabled])
+  const [, rerender] = useReducer((n) => n + 1, 0)
+  if (token !== ownerToken) {
+    // otra sesion: nada de los datos del usuario anterior
+    for (const e of store.values()) clearInterval(e.timer)
+    store.clear()
+    ownerToken = token
+  }
+  const e = entry(path)
 
   useEffect(() => {
-    load()
-    if (!enabled) return
-    timer.current = setInterval(load, interval)
-    return () => clearInterval(timer.current)
-  }, [load, enabled, interval])
+    if (!token) return undefined
+    const en = entry(path)
+    en.subs.add(rerender)
+    en.refs++
+    fetchPath(path)
+    if (!en.timer) {
+      en.timer = setInterval(() => {
+        if (document.visibilityState === 'visible') fetchPath(path)
+      }, interval)
+    }
+    return () => {
+      en.subs.delete(rerender)
+      en.refs--
+      if (en.refs <= 0) {
+        clearInterval(en.timer)
+        en.timer = null
+      }
+    }
+  }, [path, token, interval])
 
-  return { data, error, loading, reload: load }
+  return { data: e.data, error: e.error, loading: e.data == null && !e.error, reload: () => fetchPath(path) }
 }
 
 export function useLayout() {
-  return usePolling('/api/layout', { interval: 6000 })
+  return usePolling('/api/layout', { interval: 30000 })
 }
 
 export function useProducts(search, filter) {
   const qs = new URLSearchParams()
   if (search) qs.set('search', search)
   if (filter && filter !== 'all') qs.set('filter', filter)
-  const path = `/api/products${qs.toString() ? `?${qs}` : ''}`
-  return usePolling(path)
+  return usePolling(`/api/products${qs.toString() ? `?${qs}` : ''}`)
 }
 
 export function useMovements(filter) {
-  const qs = new URLSearchParams()
+  const qs = new URLSearchParams({ limit: '60' })
   if (filter && filter !== 'all') qs.set('type', filter)
-  return usePolling(`/api/movements${qs.toString() ? `?${qs}` : ''}`)
+  return usePolling(`/api/movements?${qs}`, { interval: 8000 })
 }
 
 export function useNeeds() {
-  return usePolling('/api/reports/needs')
+  return usePolling('/api/reports/needs', { interval: 10000 })
 }
 
 export function useTop() {
-  return usePolling('/api/reports/top')
+  return usePolling('/api/reports/top', { interval: 30000 })
 }
 
 export function useReserve() {
-  return usePolling('/api/reserve')
+  return usePolling('/api/reserve', { interval: 8000 })
+}
+
+// ---------- acciones con respuesta inmediata ----------
+const pendingBySku = new Map()
+const queues = new Map()
+
+// Los cambios de un mismo codigo viajan en fila (uno tras otro): la pantalla
+// no espera, pero el servidor nunca recibe dos a la vez del mismo codigo.
+function enqueue(key, task) {
+  const run = (queues.get(key) || Promise.resolve()).catch(() => {}).then(task)
+  queues.set(key, run)
+  return run
+}
+
+const nextQty = (qty, type, n) => (type === 'in' ? qty + n : type === 'out' ? Math.max(0, qty - n) : n)
+
+// Entrada / salida / conteo de un codigo ya registrado. La pantalla cambia
+// en el acto; si el servidor lo rechaza, se vuelve a lo que diga el servidor.
+export async function moveStock(sku, type, qty = 1) {
+  mutate('/api/products', (list) => list.map((p) => (p.sku === sku ? { ...p, qty: nextQty(p.qty, type, qty) } : p)))
+  pendingBySku.set(sku, (pendingBySku.get(sku) || 0) + 1)
+  try {
+    const res = await enqueue(sku, () => api.post('/api/movements', { sku, type, qty }))
+    const left = pendingBySku.get(sku) - 1
+    pendingBySku.set(sku, left)
+    // con varios toques seguidos, solo la ultima respuesta trae el total final
+    if (left === 0) mutate('/api/products', (list) => list.map((p) => (p.sku === sku ? res.product : p)))
+    revalidate('/api/reports/needs')
+    revalidate('/api/movements')
+    return res
+  } catch (err) {
+    pendingBySku.set(sku, pendingBySku.get(sku) - 1)
+    revalidate('/api/products')
+    throw err
+  }
+}
+
+export async function setReserveQty(item, qty) {
+  const key = `reserve-${item.id}`
+  mutate('/api/reserve', (list) => list.map((i) => (i.id === item.id ? { ...i, qty } : i)))
+  pendingBySku.set(key, (pendingBySku.get(key) || 0) + 1)
+  try {
+    const res = await enqueue(key, () => api.patch(`/api/reserve/${item.id}`, { qty }))
+    const left = pendingBySku.get(key) - 1
+    pendingBySku.set(key, left)
+    if (left === 0) mutate('/api/reserve', (list) => list.map((i) => (i.id === item.id ? res : i)))
+    return res
+  } catch (err) {
+    pendingBySku.set(key, pendingBySku.get(key) - 1)
+    revalidate('/api/reserve')
+    throw err
+  }
+}
+
+// tras registrar algo nuevo o mover entre bodega y reserva
+export function refreshInventory() {
+  revalidate('/api/products')
+  revalidate('/api/reports/needs')
+  revalidate('/api/movements')
+  revalidate('/api/reserve')
 }

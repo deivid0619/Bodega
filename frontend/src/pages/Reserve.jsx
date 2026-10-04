@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
-import { api, ApiError } from '../api'
-import { useLayout, useReserve } from '../hooks/useApi'
+import { ApiError } from '../api'
+import { refreshInventory, setReserveQty, useLayout, useReserve } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { locationGroups } from '../locationGroups'
 import NewReserveModal from '../components/NewReserveModal'
@@ -9,7 +9,7 @@ import Icon from '../components/Icon'
 import { Empty, PageHead, ProductThumb, Stepper, plural } from '../components/Bits'
 
 export default function Reserve() {
-  const { data: items, reload } = useReserve()
+  const { data: items } = useReserve()
   const { data: layout } = useLayout()
   const showToast = useToast()
   const [adding, setAdding] = useState(false)
@@ -21,8 +21,7 @@ export default function Reserve() {
     const next = item.qty + delta
     if (next < 0) return
     try {
-      await api.patch(`/api/reserve/${item.id}`, { qty: next })
-      reload()
+      await setReserveQty(item, next)
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo ajustar.', 'err')
     }
@@ -70,9 +69,9 @@ export default function Reserve() {
         </div>
       </div>
 
-      {adding && <NewReserveModal onClose={() => setAdding(false)} onCreated={() => reload()} />}
+      {adding && <NewReserveModal onClose={() => setAdding(false)} onCreated={refreshInventory} />}
       {sending && layout && (
-        <ReserveTransferModal item={sending} locations={groups} onClose={() => setSending(null)} onDone={() => reload()} />
+        <ReserveTransferModal item={sending} locations={groups} onClose={() => setSending(null)} onDone={refreshInventory} />
       )}
     </section>
   )

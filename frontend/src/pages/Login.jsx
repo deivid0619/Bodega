@@ -9,7 +9,7 @@ function Stripes() {
     <svg className="login-stripes" viewBox="0 0 420 420" aria-hidden="true">
       <defs>
         <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#C0FF00" stopOpacity=".55" />
+          <stop offset="0" stopColor="#C0FF00" stopOpacity=".5" />
           <stop offset="1" stopColor="#C0FF00" stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -46,35 +46,24 @@ export default function Login() {
     }
   }
 
-  const switchMode = () => {
-    setMode(mode === 'login' ? 'register' : 'login')
-    setError('')
-  }
-
   return (
     <div className="login">
-      <div className="login-art">
-        <Stripes />
+      <Stripes />
+      <div className="login-box">
         <div className="login-brand">
-          <BrandMark size={30} />
+          <BrandMark size={38} />
           <span className="brand-word">bodega</span>
         </div>
-        <div className="login-hero">
-          <h1>Cada prenda,<br /><em>en su lugar.</em></h1>
-          <p>Lo que entra, lo que sale y dónde está, al día y desde el celular.</p>
-        </div>
-      </div>
-      <div className="login-panel">
-        <form className="login-form" onSubmit={submit}>
+        <form onSubmit={submit}>
           {mode === 'register' && (
             <label className="field">
-              <span className="field-label">Tu nombre</span>
+              <span className="field-label">Nombre</span>
               <input className="input" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
             </label>
           )}
           <label className="field">
             <span className="field-label">Correo</span>
-            <input className="input" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" placeholder="tu@correo.com" />
+            <input className="input" type="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
           </label>
           <label className="field">
             <span className="field-label">Contraseña</span>
@@ -92,18 +81,16 @@ export default function Login() {
             <label className="field">
               <span className="field-label">Código de invitación</span>
               <input className="input" value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} required />
-              <span className="field-hint" style={{ color: '#8A8E87' }}>Te lo da quien administra la bodega.</span>
             </label>
           )}
           {error && <p className="form-err" role="alert">{error}</p>}
-          <button className="btn btn-lime btn-lg btn-block" style={{ marginTop: 22 }} disabled={busy}>
+          <button className="btn btn-lime btn-lg btn-block" style={{ marginTop: 24 }} disabled={busy}>
             {busy ? 'Entrando…' : mode === 'login' ? 'Entrar' : 'Crear cuenta'}
           </button>
         </form>
-        <p className="login-switch">
-          {mode === 'login' ? '¿Primera vez aquí?' : '¿Ya tienes cuenta?'}
-          <button type="button" onClick={switchMode}>{mode === 'login' ? 'Crear cuenta' : 'Entrar'}</button>
-        </p>
+        <button type="button" className="login-switch" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
+          {mode === 'login' ? 'Crear cuenta' : 'Ya tengo cuenta'}
+        </button>
       </div>
     </div>
   )

@@ -275,7 +275,6 @@ export default function Warehouse() {
           products={products || []}
           highlightSku={highlightSku}
           onClose={closeLocation}
-          onChanged={reloadProducts}
           onScanHere={() => navigate(`/scan?loc=${encodeURIComponent(selLoc)}`)}
           onOpenProduct={setOpenSku}
         />

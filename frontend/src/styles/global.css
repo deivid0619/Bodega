@@ -262,34 +262,19 @@ button.code:active{transform:scale(.95)}
 @media (prefers-reduced-motion:reduce){.toast{transition:opacity 200ms ease;transform:translate(-50%,0)}}
 
 /* ---------- login ---------- */
-.login{min-height:100dvh;display:flex;flex-direction:column;background:var(--ink);color:#fff;padding:calc(28px + var(--safe-t)) 24px calc(28px + var(--safe-b));position:relative;overflow:hidden}
-.login-stripes{position:absolute;right:-90px;top:-40px;width:420px;height:420px;pointer-events:none;opacity:.9}
-.login-art{flex:1;display:flex;flex-direction:column}
-.login-panel{position:relative}
-.install-steps{margin:4px 0 6px;padding-left:22px;display:grid;gap:12px;font-size:15px;line-height:1.4}
-.install-steps li::marker{font-weight:800;font-style:italic}
-.login-brand{display:flex;align-items:center;gap:9px;position:relative}
-.login-brand .brand-word{font-size:27px}
-.login-hero{margin-top:auto;padding-top:56px;position:relative}
-.login-hero h1{font:800 italic clamp(46px,13vw,70px)/.94 var(--font);letter-spacing:-.04em;word-spacing:.04em;padding-right:.08em}
-.login-hero h1 em{font-style:inherit;color:var(--lime)}
-.login-hero p{margin-top:16px;color:#A9ADA6;font-size:15.5px;max-width:30ch}
-.login-form{margin-top:30px;position:relative}
+.login{min-height:100dvh;display:flex;align-items:center;justify-content:center;background:var(--ink);color:#fff;padding:calc(24px + var(--safe-t)) 24px calc(24px + var(--safe-b));position:relative;overflow:hidden}
+.login-stripes{position:absolute;right:-110px;top:-60px;width:420px;height:420px;pointer-events:none;opacity:.75}
+.login-box{position:relative;width:min(400px,100%)}
+.login-brand{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:34px}
+.login-brand .brand-word{font-size:40px}
 .login .field-label{color:#B9BDB6}
 .login .input{background:var(--ink-2);border-color:#2E302E;color:#fff}
-.login .input::placeholder{color:#62665F}
 .login .input:focus{border-color:var(--lime);box-shadow:0 0 0 4px rgba(192,255,0,.18)}
 .login .form-err{background:rgba(229,105,15,.14);color:#FFB27A}
-.login-switch{margin-top:18px;text-align:center;font-size:14px;color:#9A9E97}
-.login-switch button{color:var(--lime);font-weight:700;padding:6px 4px}
-@media (min-width:900px){
-  .login{flex-direction:row;align-items:stretch;padding:0}
-  .login-art{position:relative;padding:48px;border-right:1px solid #1F201F;overflow:hidden}
-  .login-stripes{right:auto;left:42%;top:-60px;width:620px;height:620px}
-  .login-panel{width:460px;flex:none;display:flex;flex-direction:column;justify-content:center;padding:48px}
-  .login-hero{margin-top:auto}
-  .login-hero h1{font-size:84px}
-}
+.login-switch{display:block;margin:18px auto 0;padding:10px 14px;color:var(--lime);font-weight:700;font-size:14.5px}
+.install-steps{margin:4px 0 6px;padding-left:22px;display:grid;gap:12px;font-size:15px;line-height:1.4}
+.install-steps li::marker{font-weight:800;font-style:italic}
+@media (min-width:900px){.login-stripes{right:6%;top:-80px;width:640px;height:640px}}
 
 /* ---------- escanear ---------- */
 .seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;border-radius:var(--pill);background:#E2E6DE}
@@ -298,10 +283,12 @@ button.code:active{transform:scale(.95)}
 .seg button[aria-pressed="true"][data-m="out"]{background:var(--ink);color:#fff;box-shadow:0 2px 8px -2px rgba(0,0,0,.5)}
 .seg button[aria-pressed="true"][data-m="set"]{background:var(--paper);color:var(--ink);box-shadow:0 2px 8px -2px rgba(0,0,0,.2)}
 .mode-hint{margin:10px 4px 0;color:var(--muted);font-size:13.5px}
-.viewfinder{position:relative;margin-top:16px;border-radius:24px;overflow:hidden;background:var(--ink);aspect-ratio:4/3;display:grid;place-items:center;color:#8F938C}
-.viewfinder video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.viewfinder #cam-reader{position:absolute;inset:0}
-.viewfinder #cam-reader video{object-fit:cover}
+.viewfinder{position:relative;margin-top:16px;border-radius:24px;overflow:hidden;background:var(--ink);aspect-ratio:4/3;color:#8F938C}
+/* la libreria de escaneo (iPhone) le pone tamanos fijos y position:relative a
+   su contenedor; aqui se obliga a que el video llene siempre el visor */
+.viewfinder > video,.viewfinder #cam-reader{position:absolute!important;inset:0;width:100%!important;height:100%!important}
+.viewfinder video{width:100%!important;height:100%!important;object-fit:cover;display:block}
+.viewfinder #cam-reader > div{display:none!important}
 .vf-corners{position:absolute;left:12%;right:12%;top:30%;bottom:30%;pointer-events:none}
 .vf-corners i{position:absolute;width:26px;height:26px;border:3.5px solid var(--lime)}
 .vf-corners i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-top-left-radius:10px}
@@ -310,10 +297,11 @@ button.code:active{transform:scale(.95)}
 .vf-corners i:nth-child(4){right:0;bottom:0;border-left:0;border-top:0;border-bottom-right-radius:10px}
 .vf-laser{position:absolute;left:14%;right:14%;top:50%;height:2px;background:var(--lime);box-shadow:0 0 12px 2px rgba(192,255,0,.7);animation:laser 1.6s var(--ease-io) infinite alternate}
 @keyframes laser{from{transform:translateY(-34px)}to{transform:translateY(34px)}}
-.vf-idle{position:relative;display:grid;justify-items:center;gap:10px;padding:20px;text-align:center;font-size:14px}
+.vf-idle{position:absolute;inset:0;width:100%;display:grid;place-content:center;justify-items:center;gap:10px;padding:20px;text-align:center;font-size:14px;color:#A9ADA6}
 .vf-idle svg{color:var(--lime)}
 .vf-msg{position:absolute;left:12px;right:12px;bottom:12px;padding:9px 14px;border-radius:14px;background:rgba(11,11,11,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);color:#fff;font-size:13px;text-align:center}
-.vf-fail{position:relative;padding:22px;text-align:center;color:#DADDD6;font-size:14px;display:grid;gap:8px;justify-items:center}
+.vf-fail{position:absolute;inset:0;padding:22px;text-align:center;color:#DADDD6;font-size:14px;display:grid;place-content:center;gap:10px;justify-items:center}
+.vf-fail .btn{margin-top:4px}
 .vf-fail svg{color:var(--amber)}
 @media (prefers-reduced-motion:reduce){.vf-laser{animation:none}}
 .scan-qty{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:12px 12px 12px 18px}
@@ -506,6 +494,14 @@ button.pill:active{transform:scale(.95)}
 @keyframes dialog-out{to{opacity:0;transform:scale(.97)}}
 @keyframes side-in{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
 @keyframes side-out{to{opacity:0;transform:translateX(16px)}}
+/* en celular, el desenfoque sobre el 3D se recalcula en cada cuadro al
+   girar la camara: fondos solidos en vez de vidrio */
+@media (pointer:coarse){
+  .dock,.pill,.el-btn,.wh-views,.wh-empty{-webkit-backdrop-filter:none;backdrop-filter:none}
+  .dock{background:#0E0E0E}
+  .pill{background:rgba(255,255,255,.96)}
+  .pill.dark,.wh-views{background:#111}
+}
 @media (prefers-reduced-transparency:reduce){
   .dock,.pill,.el-btn,.wh-views,.wh-empty,.vf-msg{-webkit-backdrop-filter:none;backdrop-filter:none}
   .dock{background:var(--ink)} .pill,.el-btn,.wh-empty{background:var(--paper)}
