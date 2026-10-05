@@ -48,10 +48,10 @@ frontend (React + Vite + Three.js)  →  backend (FastAPI)  →  PostgreSQL
 docker compose up --build
 ```
 
-- Frontend: http://localhost:5173
-- Backend: http://localhost:8001/api/health (se publica en 8001, no 8000, para
-  no chocar con otros proyectos que ya usen esa puerta en tu máquina — como
-  Turify; el frontend sigue hablando con el backend por dentro de la red de
+- Frontend: http://localhost:5190
+- Backend: http://localhost:8090/api/health (puertos propios de Bodega, para
+  no chocar con otros proyectos de tu máquina — Turify usa 5173, 5180, 8000 y
+  8001; el frontend sigue hablando con el backend por dentro de la red de
   Docker, así que esto no le afecta)
 - Postgres queda arriba en el puerto 5433 (usuario/clave `bodega`/`bodega`).
   Se publica en 5433 y no 5432 por la misma razón que el backend: evitar
@@ -80,10 +80,10 @@ cd backend
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env        # ajusta lo que necesites; sqlite funciona sin tocar nada
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8090
 ```
 
-Documentación interactiva de la API: http://localhost:8000/docs
+Documentación interactiva de la API: http://localhost:8090/docs
 
 Pruebas (flujo completo: login, escanear, sobreventa bloqueada, deshacer,
 editar la bodega, proteger el stock al achicar un mueble):
@@ -101,8 +101,10 @@ cp .env.example .env   # déjalo vacío: en desarrollo Vite ya hace de proxy par
 npm run dev
 ```
 
-Abre http://localhost:5173. Asegúrate de tener el backend corriendo en
-`http://localhost:8000` (o cambia el proxy en `vite.config.js`).
+Abre http://localhost:5190. Asegúrate de tener el backend corriendo en
+`http://localhost:8090`. En VS Code, `Ctrl+Shift+B` ("Iniciar Bodega")
+arranca los dos. Los puertos son fijos: si alguno está ocupado, no arranca y
+avisa, en vez de saltar a otro puerto y mezclarse con otro proyecto.
 
 ## Desplegar en producción (para usarla desde el celular)
 

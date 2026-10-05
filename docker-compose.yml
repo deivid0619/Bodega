@@ -1,5 +1,5 @@
 # Levanta todo en local con un solo comando: docker compose up --build
-# Backend en http://localhost:8001, frontend en http://localhost:5173,
+# Backend en http://localhost:8090, frontend en http://localhost:5190,
 # base de datos Postgres en el puerto 5433 (usuario/clave: bodega/bodega).
 
 services:
@@ -28,9 +28,9 @@ services:
       REGISTRATION_CODE: bodega
       ADMIN_EMAIL: admin@bodega.app
       ADMIN_PASSWORD: cambiar123
-      CORS_ORIGINS: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5190
     ports:
-      - "8001:8000"
+      - "8090:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -40,7 +40,7 @@ services:
       context: ./frontend
     restart: "no"
     ports:
-      - "5173:80"
+      - "5190:80"
     depends_on:
       - backend
 

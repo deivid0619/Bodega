@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     admin_email: str = "admin@bodega.app"
     admin_name: str = "Administrador"
     admin_password: str = "cambiar123"
-    cors_origins: str = "http://localhost:5173"
+    cors_origins: str = "http://localhost:5190"
     # SOLO DESARROLLO: si es true, todas las rutas se tratan como si hubiera
     # iniciado sesion el primer usuario admin, sin pedir login. Nunca poner
     # en true en produccion.
