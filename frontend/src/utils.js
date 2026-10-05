@@ -1,5 +1,15 @@
 const SIZE_RE = /(XXXL|XXL|4XL|3XL|2XL|XL|XS|S|M|L)$/
 
+// orden natural de tallas: XS, S, M, L, XL, 2XL... y luego las numericas (06, 30, 32)
+const SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', 'XXXL', '3XL', '4XL', '5XL']
+export function sizeRank(size) {
+  const s = String(size || '').toUpperCase()
+  const i = SIZE_ORDER.indexOf(s)
+  if (i >= 0) return i
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? 100 + n : 500
+}
+
 export function guessSizeFromSku(sku) {
   const m = String(sku || '').toUpperCase().match(SIZE_RE)
   return m ? m[1] : ''

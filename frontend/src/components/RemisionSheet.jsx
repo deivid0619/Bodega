@@ -4,6 +4,7 @@ import { api, ApiError } from '../api'
 import { refreshInventory, revalidate, useLayout, usePolling, useProducts, useReserve } from '../hooks/useApi'
 import { locationGroups } from '../locationGroups'
 import { cleanCode } from '../lib/facturaParser'
+import { sizeRank } from '../utils'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
@@ -11,13 +12,6 @@ import { SearchField, Stepper, plural } from './Bits'
 
 // la plantilla de remision de Pigmalion trae estas tallas
 const TEMPLATE = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']
-const ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', 'XXXL', '3XL', '4XL', '5XL']
-const sizeRank = (s) => {
-  const i = ORDER.indexOf(s)
-  if (i >= 0) return i
-  const n = parseFloat(s)
-  return Number.isFinite(n) ? 100 + n : 500
-}
 const norm = (s) => String(s || '').toUpperCase().replace(/\s+/g, '')
 const localToday = () => {
   const d = new Date()

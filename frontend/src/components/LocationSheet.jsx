@@ -19,7 +19,7 @@ export function itemsAt(products, locationId) {
 }
 
 const LocationSheet = forwardRef(function LocationSheet(
-  { locationId, locationName, products, locations, highlightSku, onClose, onScanHere, onOpenProduct }, ref,
+  { locationId, locationName, products, locations, highlightSku, onClose, onScanHere, onCount, onOpenProduct }, ref,
 ) {
   const showToast = useToast()
   const [moving, setMoving] = useState(null)
@@ -82,9 +82,14 @@ const LocationSheet = forwardRef(function LocationSheet(
       ) : (
         <p className="muted" style={{ padding: '6px 0 4px' }}>Escanea prendas con esta ubicación elegida y aparecen aquí.</p>
       )}
-      <button className="btn btn-lime btn-block" style={{ marginTop: 16 }} onClick={onScanHere}>
-        <Icon name="scan" size={20} />Escanear prendas para aquí
-      </button>
+      <div className="btn-row" style={{ marginTop: 16 }}>
+        <button className="btn btn-ghost" onClick={onCount}>
+          <Icon name="equals" size={19} />Contar
+        </button>
+        <button className="btn btn-lime" onClick={onScanHere}>
+          <Icon name="scan" size={20} />Escanear aquí
+        </button>
+      </div>
       {moving && <MoveSheet product={moving} from={locationId} locations={locations} onClose={() => setMoving(null)} />}
     </Sheet>
   )

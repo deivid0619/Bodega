@@ -613,6 +613,35 @@ button.pill:active{transform:scale(.95)}
 @media (hover:hover) and (pointer:fine){.ref-result:hover{background:var(--fog-2)}}
 @media (prefers-reduced-motion:reduce){.zoom{animation:none}}
 
+/* ---------- conteo por ubicacion ---------- */
+.viewfinder.compact{aspect-ratio:16/10;margin-top:0}
+.count-link{margin:8px 4px 0;text-align:left;line-height:1.35;color:var(--lime-deep)}
+.count-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px 0;border-top:1px solid var(--line)}
+.count-row:first-child{border-top:0}
+.count-t{min-width:0}
+.count-t b{display:block;font-weight:700;font-size:14px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.count-t small{display:block;margin-top:3px;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.count-state{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;margin-top:6px;font-size:12.5px}
+.count-state > *{white-space:nowrap}
+.count-state .sys{font-weight:600;color:var(--graphite)}
+.count-state .link-btn{padding:2px 0;color:var(--lime-deep)}
+.count-state b{font-weight:800}
+.count-row.ok .count-state b{color:var(--lime-deep)}
+.count-row.short .count-state b{color:#A9480A}
+.count-row.over .count-state b{color:var(--ink)}
+.count-row.ok .sz{background:var(--lime);color:var(--ink)}
+.count-row.short .sz{background:var(--amber)}
+.count-footer{position:sticky;bottom:-12px;z-index:5;margin:16px -16px 0;padding:14px 16px 4px;background:linear-gradient(to bottom,rgba(243,246,239,0),var(--fog) 24%)}
+.count-footer p{margin:0 4px 8px;font-size:13.5px;font-weight:600;color:var(--graphite)}
+.count-done h2{margin-top:12px;font:800 italic 28px/1.05 var(--font);letter-spacing:-.04em}
+.count-done ul{list-style:none;margin:14px 0 0;padding:0}
+.count-done li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid var(--line);font-size:14px}
+.count-done li span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.count-done li b{flex:none;font:800 italic 16px/1 var(--font);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.count-done li b.ok{color:var(--lime-deep)}
+button.recent-count{width:100%;text-align:left}
+button.recent-count svg{flex:none;color:var(--muted)}
+
 /* ---------- transiciones entre pestanas ---------- */
 .topbar{view-transition-name:topbar}
 .dock{view-transition-name:dock}

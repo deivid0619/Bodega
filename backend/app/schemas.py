@@ -202,6 +202,16 @@ class RemisionIn(BaseModel):
     lines: list[RemisionLineIn] = Field(min_length=1)
 
 
+class CountLineIn(BaseModel):
+    sku: str = Field(min_length=1, max_length=64)
+    qty: int = Field(ge=0)  # lo que se conto en la ubicacion
+
+
+class CountIn(BaseModel):
+    location_id: str = Field(min_length=1, max_length=32)
+    lines: list[CountLineIn] = Field(min_length=1)
+
+
 class DocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

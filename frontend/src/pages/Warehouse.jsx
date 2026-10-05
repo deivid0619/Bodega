@@ -281,6 +281,7 @@ export default function Warehouse() {
           locations={groupsLoc}
           onClose={closeLocation}
           onScanHere={() => navigate(`/scan?loc=${encodeURIComponent(selLoc)}`)}
+          onCount={() => navigate(`/count?loc=${encodeURIComponent(selLoc)}`)}
           onOpenProduct={setOpenSku}
         />
       )}

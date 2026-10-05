@@ -13,6 +13,7 @@ import Scan from './pages/Scan'
 import Inventory from './pages/Inventory'
 import Reserve from './pages/Reserve'
 import Summary from './pages/Summary'
+import Count from './pages/Count'
 
 // el 3D (three.js) es lo mas pesado: se descarga aparte, asi el login y las
 // demas pantallas abren rapido en el celular
@@ -111,6 +112,7 @@ function Shell() {
           <Route path="/scan" element={<Scan />} />
           <Route path="/reserve" element={<Reserve />} />
           <Route path="/summary" element={<Summary />} />
+          <Route path="/count" element={<Count />} />
           <Route path="/orders" element={<Navigate to="/summary" replace />} />
           <Route path="/history" element={<Navigate to="/summary" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

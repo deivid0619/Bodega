@@ -1,6 +1,8 @@
 """Documentos que mueven inventario de una vez: la factura (todo lo que
-salio en un despacho) y la remision de un proveedor (lo que llego). Se
-aplican completos o nada, y el mismo numero no se puede aplicar dos veces."""
+salio en un despacho), la remision de un proveedor (lo que llego) y el
+conteo de una ubicacion. Se aplican completos o nada, y el mismo numero no
+se puede aplicar dos veces."""
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -27,13 +29,16 @@ def _already(db: Session, kind: str, number: str) -> Optional[models.Document]:
 
 @router.get("", response_model=list[schemas.DocumentOut])
 def list_documents(kind: Optional[Literal["factura", "remision", "conteo"]] = None, number: Optional[str] = None,
-                   base: Optional[str] = None, limit: int = Query(default=30, le=200),
+                   base: Optional[str] = None, prefix: Optional[str] = None, limit: int = Query(default=30, le=200),
                    db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     q = db.query(models.Document).order_by(models.Document.id.desc())
     if kind:
         q = q.filter(models.Document.kind == kind)
     if number:
         q = q.filter(models.Document.number == _norm_number(number))
+    if prefix:
+        # conteos de una ubicacion: P-D1@...
+        q = q.filter(models.Document.number.startswith(prefix.upper(), autoescape=True))
     if base:
         # todas las entregas de una misma orden: OPR123, OPR123#2, OPR123#3...
         b = _norm_number(base).split("#")[0]
@@ -159,4 +164,48 @@ def apply_remision(payload: schemas.RemisionIn, db: Session = Depends(get_db),
         raise HTTPException(status.HTTP_409_CONFLICT, f"La remisión {number} ya entró.")
     db.refresh(doc)
     products = db.query(models.Product).filter(models.Product.sku.in_(set(touched))).all() if touched else []
+    return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))
+
+
+@router.post("/conteo", response_model=schemas.DocumentResult, status_code=status.HTTP_201_CREATED)
+def apply_count(payload: schemas.CountIn, db: Session = Depends(get_db),
+                user: models.User = Depends(get_current_user)):
+    """Conteo de una ubicacion: cada codigo contado queda con lo que se conto
+    EN ESA ubicacion (las demas no se tocan). Solo los que no cuadran generan
+    un ajuste en el historial; el conteo completo queda guardado."""
+    loc = payload.location_id
+    if loc not in inv.location_ids(db):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esa ubicación no existe.")
+    counted: dict[str, int] = {}
+    for line in payload.lines:
+        counted[line.sku.strip().upper()] = line.qty
+
+    note = f"Conteo {loc}"
+    out_lines: list[dict] = []
+    try:
+        for sku, qty in counted.items():
+            if db.get(models.Product, sku) is None:
+                raise inv.UnknownSku(f"El código {sku} no está registrado.")
+            row = (db.query(models.Stock).filter_by(sku=sku, location_id=loc)
+                   .with_for_update().first())
+            before = row.qty if row else 0
+            if qty != before:
+                inv.apply_movement(db, sku, "set", qty, user, location_id=loc, note=note, commit=False)
+            out_lines.append({"sku": sku, "before": before, "counted": qty})
+        stamp = datetime.now(ser.BOGOTA).strftime("%Y%m%d%H%M%S")
+        doc = models.Document(
+            kind="conteo", number=f"{loc[:24]}@{stamp}", lines=out_lines,
+            units=sum(abs(l["counted"] - l["before"]) for l in out_lines),
+            user_id=user.id, user_name=user.name,
+        )
+        db.add(doc)
+        db.commit()
+    except inv.InventoryError as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{e} No se guardó el conteo.")
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, "Ese conteo ya se guardó.")
+    db.refresh(doc)
+    products = db.query(models.Product).filter(models.Product.sku.in_(list(counted))).all()
     return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))

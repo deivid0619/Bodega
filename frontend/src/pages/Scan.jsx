@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { moveStock, refreshInventory, useLayout } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
@@ -10,6 +10,8 @@ import RemisionSheet from '../components/RemisionSheet'
 import Icon from '../components/Icon'
 import { PageHead, Stepper } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
+import Viewfinder from '../components/Viewfinder'
+import { beep } from '../lib/feedback'
 import { fmtTime } from '../utils'
 
 const MODES = [
@@ -18,21 +20,6 @@ const MODES = [
   { m: 'set', label: 'Conteo', icon: 'equals', hint: 'Cada código reemplaza el total por lo que contaste.' },
 ]
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
-
-function beep(ok) {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    const o = ctx.createOscillator()
-    const g = ctx.createGain()
-    o.frequency.value = ok ? 1400 : 220
-    g.gain.value = 0.07
-    o.connect(g)
-    g.connect(ctx.destination)
-    o.start()
-    o.stop(ctx.currentTime + (ok ? 0.08 : 0.25))
-  } catch { /* audio no disponible en este navegador */ }
-  if (navigator.vibrate) navigator.vibrate(ok ? 35 : [60, 40, 60])
-}
 
 const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
 
@@ -59,6 +46,7 @@ export default function Scan() {
   const [place, setPlace] = useState(null)
 
   const [params] = useSearchParams()
+  const navigate = useNavigate()
   const groups = useMemo(() => (layout ? locationGroups(layout.elements) : []), [layout])
   useEffect(() => {
     if (place !== null || !groups.length) return
@@ -94,7 +82,8 @@ export default function Scan() {
     }
   }
 
-  const { status, message, videoRef, containerRef, start, stop } = useBarcodeScanner(handleCode)
+  const scanner = useBarcodeScanner(handleCode)
+  const { status, start, stop } = scanner
   const camOn = status === 'native' || status === 'lib'
 
   useEffect(() => () => { stop() }, [stop])
@@ -143,31 +132,13 @@ export default function Scan() {
           ))}
         </div>
         <p className="mode-hint">{current.hint}</p>
+        {mode === 'set' && (
+          <button className="link-btn count-link" onClick={() => navigate(`/count${place ? `?loc=${encodeURIComponent(place)}` : ''}`)}>
+            ¿Vas a contar toda una ubicación? Usa el conteo por ubicación<Icon name="arrowRight" size={14} stroke={2.4} />
+          </button>
+        )}
 
-        <div className="viewfinder">
-          {status !== 'lib' && <video ref={videoRef} playsInline muted style={{ display: status === 'native' ? 'block' : 'none' }} />}
-          <div id="cam-reader" ref={containerRef} style={{ display: status === 'lib' ? 'block' : 'none' }} />
-          {status === 'off' && (
-            <button className="vf-idle" onClick={start}>
-              <Icon name="camera" size={34} stroke={1.7} />
-              Toca para abrir la cámara
-            </button>
-          )}
-          {status === 'fail' && (
-            <div className="vf-fail">
-              <Icon name="alert" size={28} />
-              {message}
-              <button className="btn btn-lime btn-sm" onClick={start}>Intentar de nuevo</button>
-            </div>
-          )}
-          {camOn && (
-            <>
-              <div className="vf-corners" aria-hidden="true"><i /><i /><i /><i /></div>
-              <div className="vf-laser" aria-hidden="true" />
-            </>
-          )}
-          {camOn && message && <p className="vf-msg">{message}</p>}
-        </div>
+        <Viewfinder scanner={scanner} />
         <button className={`btn btn-lg btn-block ${camOn ? 'btn-ink' : 'btn-lime'}`} style={{ marginTop: 12 }} onClick={() => (camOn ? stop() : start())}>
           <Icon name={camOn ? 'x' : 'camera'} size={20} />{camOn ? 'Cerrar cámara' : 'Escanear con la cámara'}
         </button>
