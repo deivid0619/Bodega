@@ -25,6 +25,7 @@ export default function Summary() {
   const { data: reserve } = useReserve()
   const { data: facturas } = usePolling('/api/documents?kind=factura&limit=5', { interval: 30000 })
   const { data: remisiones } = usePolling('/api/documents?kind=remision&limit=5', { interval: 30000 })
+  const { data: passing } = usePolling('/api/reports/dispatch', { interval: 20000 })
   const [filter, setFilter] = useState('all')
   const { data: moves } = useMovements(filter)
   const [resetting, setResetting] = useState(false)
@@ -33,12 +34,13 @@ export default function Summary() {
   const [demoOn, setDemoOn] = useState(null)
 
   const kpi = useMemo(() => ({
-    units: (products || []).reduce((s, p) => s + p.qty, 0),
+    // lo que esta de paso (Despacho) no es de la bodega
+    units: (products || []).reduce((s, p) => s + p.qty, 0) - (passing || []).reduce((s, d) => s + d.qty, 0),
     refs: new Set((products || []).map(baseOf)).size,
     reserve: (reserve || []).reduce((s, i) => s + i.qty, 0),
     needs: needs?.length || 0,
     toOrder: (needs || []).filter((n) => n.order_qty > 0).length,
-  }), [products, reserve, needs])
+  }), [products, reserve, needs, passing])
   const maxTop = Math.max(1, ...(top || []).map((t) => t.qty_out))
   const date = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -141,6 +143,29 @@ export default function Summary() {
           </>
         ) : (
           <Empty icon="check" title="Todo está sobre el mínimo">Cuando una talla llegue a su stock mínimo, aparece aquí lista para pedir.</Empty>
+        )}
+
+        {passing?.length > 0 && (
+          <>
+            <h2 className="h-sec">Por despachar <small>{plural(passing.reduce((s, d) => s + d.qty, 0), 'prenda de paso', 'prendas de paso')}</small></h2>
+            <div className="card panel">
+              {passing.map((d) => {
+                const days = d.since ? Math.floor((Date.now() - new Date(d.since).getTime()) / 86_400_000) : null
+                return (
+                  <div className="need" key={d.product.sku}>
+                    <div className="need-t">
+                      <b>{d.product.name}{d.product.size ? ` · ${d.product.size}` : ''}</b>
+                      <small>
+                        <span className="mono">{d.product.sku}</span>
+                        {days != null && ` · llegó ${days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days} días`}`}
+                      </small>
+                    </div>
+                    <div className="need-q idle"><b>{d.qty}</b><span>de paso</span></div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
         )}
 
         <h2 className="h-sec">Lo que más sale <small>últimos 30 días</small></h2>

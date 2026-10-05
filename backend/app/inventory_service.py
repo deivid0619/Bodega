@@ -10,7 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import models
-from .layout_logic import all_locations
+from .layout_logic import DISPATCH, all_locations
 
 
 class InventoryError(Exception):
@@ -131,6 +131,8 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
     movements: list[models.Movement] = []
 
     if type_ in ("in", "set"):
+        if not location_id and product.location_id == DISPATCH:
+            raise InventoryError(f"{label} solo está en Despacho (de paso): elige en qué ubicación de la bodega guardarla.")
         loc = location_id or product.location_id
         if loc not in valid:
             raise InventoryError("La ubicación principal de este código ya no existe. Elige dónde guardarlo.")
@@ -159,7 +161,7 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
             if qty > before:
                 raise InventoryError(f"Solo hay {before} de {label}. La salida no se registró.")
             order = sorted((r for r in rows.values() if r.qty > 0),
-                           key=lambda r: (r.location_id != product.location_id, -r.qty))
+                           key=lambda r: (r.location_id != DISPATCH, r.location_id != product.location_id, -r.qty))
             plan, left = [], qty
             for r in order:
                 take = min(left, r.qty)
@@ -259,17 +261,30 @@ def _reserve_for(p: models.Product, index) -> list[models.ReserveItem]:
     return by_sku.get(p.sku, []) + by_ref.get((p.name, p.size), [])
 
 
+def dispatch_qty(db: Session) -> dict[str, int]:
+    """Prendas de paso por codigo (en Despacho): no cuentan como bodega."""
+    return {sku: qty for sku, qty in db.query(models.Stock.sku, models.Stock.qty)
+            .filter(models.Stock.location_id == DISPATCH, models.Stock.qty > 0).all()}
+
+
+def stock_qty(p: models.Product, passing: dict[str, int]) -> int:
+    """Lo que hay de un codigo en la bodega, sin lo que esta de paso."""
+    return p.qty - passing.get(p.sku, 0)
+
+
 def needs(db: Session) -> list[tuple[models.Product, int, int]]:
     """Tallas en o bajo su minimo: (prenda, cuanto pedir, cuanto hay en reserva).
     Se pide para llegar al doble del minimo, descontando lo que ya esta en la
-    reserva (eso se trae, no se compra)."""
-    products = db.query(models.Product).filter(models.Product.min_qty > 0, models.Product.qty <= models.Product.min_qty).all()
+    reserva (eso se trae, no se compra). Lo que esta de paso no cuenta."""
+    passing = dispatch_qty(db)
+    products = [p for p in db.query(models.Product).filter(models.Product.min_qty > 0).all()
+                if stock_qty(p, passing) <= p.min_qty]
     index = _reserve_index(db)
     out = []
     for p in products:
         in_reserve = sum(it.qty for it in _reserve_for(p, index))
-        out.append((p, max(p.min_qty * 2 - p.qty - in_reserve, 0), in_reserve))
-    out.sort(key=lambda t: t[0].qty / t[0].min_qty if t[0].min_qty else 0)
+        out.append((p, max(p.min_qty * 2 - stock_qty(p, passing) - in_reserve, 0), in_reserve))
+    out.sort(key=lambda t: stock_qty(t[0], passing) / t[0].min_qty if t[0].min_qty else 0)
     return out
 
 
@@ -280,13 +295,17 @@ def restock(db: Session) -> list[tuple[models.ReserveItem, models.Product, int]]
     index = _reserve_index(db)
     if not index[0] and not index[1]:
         return []
+    passing = dispatch_qty(db)
     out = []
-    for p in db.query(models.Product).filter(models.Product.qty <= models.Product.min_qty).all():
+    for p in db.query(models.Product).all():
+        have = stock_qty(p, passing)
+        if have > p.min_qty:
+            continue
         items = _reserve_for(p, index)
         if not items:
             continue
         item = max(items, key=lambda it: (it.sku == p.sku, it.qty))
-        want = p.min_qty * 2 - p.qty if p.min_qty > 0 else 2
+        want = p.min_qty * 2 - have if p.min_qty > 0 else 2
         out.append((item, p, max(1, min(item.qty, want))))
     # primero lo agotado, despues lo que esta mas cerca de agotarse
     out.sort(key=lambda t: (t[1].qty > 0, t[1].qty / t[1].min_qty if t[1].min_qty else 1, t[1].name, t[1].size))
@@ -323,8 +342,11 @@ def dead_stock(db: Session, days: int = 60) -> list[tuple[models.Product, dateti
     since = datetime.now(timezone.utc) - timedelta(days=days)
     last_out = dict(db.query(models.Movement.sku, func.max(models.Movement.created_at))
                     .filter(models.Movement.type == "out").group_by(models.Movement.sku).all())
+    passing = dispatch_qty(db)
     out = []
     for p in db.query(models.Product).filter(models.Product.qty > 0).all():
+        if stock_qty(p, passing) <= 0:
+            continue  # solo esta de paso
         last = last_out.get(p.sku)
         if last is not None and _aware(last) >= since:
             continue
@@ -332,6 +354,20 @@ def dead_stock(db: Session, days: int = 60) -> list[tuple[models.Product, dateti
             continue  # recien registrada: todavia no ha tenido tiempo de salir
         out.append((p, _aware(last) if last else None))
     out.sort(key=lambda t: (-t[0].qty, t[0].name, t[0].size))
+    return out
+
+
+def dispatch_list(db: Session) -> list[tuple[models.Product, int, datetime | None]]:
+    """Lo que esta de paso en Despacho: (prenda, cuantas, cuando llego la ultima)."""
+    rows = db.query(models.Stock).filter(models.Stock.location_id == DISPATCH, models.Stock.qty > 0).all()
+    if not rows:
+        return []
+    arrived = dict(db.query(models.Movement.sku, func.max(models.Movement.created_at))
+                   .filter(models.Movement.type.in_(("in", "new")), models.Movement.location_id == DISPATCH)
+                   .group_by(models.Movement.sku).all())
+    products = {p.sku: p for p in db.query(models.Product).filter(models.Product.sku.in_([r.sku for r in rows])).all()}
+    out = [(products[r.sku], r.qty, _aware(arrived[r.sku]) if arrived.get(r.sku) else None) for r in rows if r.sku in products]
+    out.sort(key=lambda t: (t[2] is None, t[2] or datetime.now(timezone.utc)))  # lo que mas lleva, primero
     return out
 
 

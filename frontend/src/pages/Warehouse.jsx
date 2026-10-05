@@ -44,7 +44,8 @@ export default function Warehouse() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
 
-  const units = useMemo(() => (products || []).reduce((s, p) => s + p.qty, 0), [products])
+  // en el 3D solo cuenta lo que esta en la bodega, no lo de paso (Despacho)
+  const units = useMemo(() => (products || []).reduce((s, p) => s + (p.stock || []).reduce((t, r) => t + (r.location_id === 'DESPACHO' ? 0 : r.qty), 0), 0), [products])
   const withStock = useMemo(() => (products || []).filter((p) => p.qty > 0).length, [products])
   const needCount = useMemo(() => (products || []).filter((p) => p.min_qty > 0 && p.qty <= p.min_qty).length, [products])
   const groupsLoc = useMemo(() => locationGroups(layout?.elements), [layout])

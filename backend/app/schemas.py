@@ -197,7 +197,7 @@ class RemisionIn(BaseModel):
     number: str = Field(default="", max_length=40)  # algunas no lo traen: se le pone uno automatico
     supplier: str = Field(default="", max_length=120)
     date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-    destination: Literal["bodega", "reserva"] = "bodega"
+    destination: Literal["bodega", "reserva", "despacho"] = "bodega"  # despacho: de paso, sale en unos dias
     location_id: Optional[str] = None  # bodega: sin elegir, la ubicacion principal de cada talla
     notes: str = Field(default="", max_length=500)  # lo demas que diga el papel
     lines: list[RemisionLineIn] = Field(min_length=1)
@@ -324,6 +324,12 @@ class ValueOut(BaseModel):
     reserve_value: int
     reserve_units_priced: int
     reserve_units_total: int
+
+
+class DispatchOut(BaseModel):
+    product: ProductOut
+    qty: int  # cuantas hay de paso
+    since: Optional[UtcDatetime] = None  # cuando llego la ultima
 
 
 class TopOut(BaseModel):

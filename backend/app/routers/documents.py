@@ -11,6 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import catalog
+from ..layout_logic import DISPATCH
 from .. import inventory_service as inv
 from .. import models, push, schemas
 from .. import serializers as ser
@@ -138,6 +139,7 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
     out_lines: list[dict] = []
     touched: list[str] = []
     to_bodega = payload.destination == "bodega"
+    passing = payload.destination == "despacho"
     try:
         if to_bodega and payload.location_id and payload.location_id not in inv.location_ids(db):
             raise inv.InventoryError("Esa ubicación no existe.")
@@ -148,6 +150,18 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
             if qty == 0:
                 continue
             product = db.get(models.Product, sku) if sku else None
+            if passing:
+                # de paso: se cuenta en Despacho; sin codigo no se puede (no queda en la bodega)
+                if not sku:
+                    raise inv.InventoryError(f"{name} {size}: para dejarla de paso hace falta el código de la etiqueta.".replace("  ", " "))
+                if product:
+                    inv.apply_movement(db, sku, "in", qty, user, location_id=DISPATCH, note=note, commit=False)
+                else:
+                    image = (catalog.lookup(sku, fetch=False) or {}).get("image")
+                    inv.register_product(db, sku, name, size, DISPATCH, qty, 0, user, image_url=image, note=note, commit=False)
+                row["dest"], row["location_id"] = "despacho", DISPATCH
+                touched.append(sku)
+                continue
             if not to_bodega or not sku:
                 inv.add_to_reserve(db, product.name if product else name, product.size if product else size, sku, qty)
                 row["dest"] = "reserva"

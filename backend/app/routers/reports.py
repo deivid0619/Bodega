@@ -43,14 +43,18 @@ def value(db: Session = Depends(get_db), _: models.User = Depends(get_current_us
     """Cuanto vale lo que hay, a precio de la tienda (solo los codigos que
     estan en la tienda; el resto se cuenta aparte)."""
     cat = catalog.items()
+    passing = inv.dispatch_qty(db)
     out = {"available": bool(cat), "value": 0, "units_priced": 0, "units_total": 0,
            "reserve_value": 0, "reserve_units_priced": 0, "reserve_units_total": 0}
     for p in db.query(models.Product).filter(models.Product.qty > 0).all():
-        out["units_total"] += p.qty
+        have = inv.stock_qty(p, passing)  # lo de paso no es de la bodega
+        if have <= 0:
+            continue
+        out["units_total"] += have
         price = (cat.get(p.sku) or {}).get("price") or 0
         if price:
-            out["units_priced"] += p.qty
-            out["value"] += p.qty * price
+            out["units_priced"] += have
+            out["value"] += have * price
     for it in db.query(models.ReserveItem).filter(models.ReserveItem.qty > 0).all():
         out["reserve_units_total"] += it.qty
         price = (cat.get(it.sku) or {}).get("price") or 0 if it.sku else 0
@@ -58,6 +62,14 @@ def value(db: Session = Depends(get_db), _: models.User = Depends(get_current_us
             out["reserve_units_priced"] += it.qty
             out["reserve_value"] += it.qty * price
     return out
+
+
+@router.get("/dispatch", response_model=list[schemas.DispatchOut])
+def dispatch(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Lo que esta de paso, esperando salir."""
+    rows = inv.dispatch_list(db)
+    outs = ser.products_out(db, [p for p, _, _ in rows])
+    return [schemas.DispatchOut(product=o, qty=q, since=s) for o, (_, q, s) in zip(outs, rows)]
 
 
 @router.get("/top", response_model=list[schemas.TopOut])

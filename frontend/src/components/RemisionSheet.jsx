@@ -243,7 +243,8 @@ function Body() {
   const refs = useMemo(() => buildRefs(products || [], reserve || []), [products, reserve])
   const known = useMemo(() => new Map((products || []).map((p) => [p.sku, p])), [products])
   const inBodega = useMemo(() => new Set((products || []).map((p) => p.name)), [products])
-  const groups = useMemo(() => locationGroups(layout?.elements), [layout])
+  // la ubicacion de la bodega; Despacho es su propio destino (de paso)
+  const groups = useMemo(() => locationGroups(layout?.elements, { dispatch: false }), [layout])
   const suppliers = useMemo(() => [...new Set((recent || []).map((d) => d.supplier).filter(Boolean))], [recent])
 
   const [step, setStep] = useState('pick')
@@ -319,8 +320,11 @@ function Body() {
     .map((r) => ({ name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, qty: r.qty, pending: r.pending, isNew: b.isNew })))
   const units = lines.reduce((t, l) => t + l.qty, 0)
   const pend = lines.reduce((t, l) => t + l.pending, 0)
-  const toReserve = dest === 'reserva' ? units : lines.filter((l) => !l.sku).reduce((t, l) => t + l.qty, 0)
-  const toBodega = units - toReserve
+  const passing = dest === 'despacho'
+  const toReserve = passing ? 0 : dest === 'reserva' ? units : lines.filter((l) => !l.sku).reduce((t, l) => t + l.qty, 0)
+  const toBodega = passing ? 0 : units - toReserve
+  // de paso se cuenta por codigo: una talla sin codigo no puede quedar en Despacho
+  const noCode = passing && lines.find((l) => l.qty > 0 && !l.sku)
   const clash = lines.some((l) => l.sku && known.get(l.sku) && known.get(l.sku).name !== l.name)
   // un codigo nuevo se guarda junto a las otras tallas; si la referencia no tiene ninguna en la bodega, hay que elegir
   const withKnown = new Set(blocks.filter((b) => b.rows.some((r) => r.sku && known.has(r.sku))).map((b) => b.name))
@@ -331,7 +335,8 @@ function Body() {
         : !units && !pend ? 'Pon cuántas llegaron de cada talla.'
           : clash ? 'Un código escrito es de otra referencia.'
             : needsPlace ? 'Elige en qué ubicación guardar los códigos nuevos.'
-              : ''
+              : noCode ? `Las prendas de paso necesitan su código (talla ${noCode.size || 'única'}).`
+                : ''
 
   const confirm = async () => {
     setSaving(true)
@@ -462,15 +467,20 @@ function Body() {
       </label>
 
       <h3 className="h-sec">Dónde queda</h3>
-      <div className="seg two" role="toolbar" aria-label="Dónde queda la mercancía">
+      <div className="seg" role="toolbar" aria-label="Dónde queda la mercancía">
         <button type="button" data-m="in" aria-pressed={dest === 'bodega'} onClick={() => setDest('bodega')}>
           <Icon name="warehouse" size={18} stroke={2.1} />Bodega
         </button>
         <button type="button" data-m="out" aria-pressed={dest === 'reserva'} onClick={() => setDest('reserva')}>
           <Icon name="reserve" size={18} stroke={2.1} />Reserva
         </button>
+        <button type="button" data-m="set" aria-pressed={dest === 'despacho'} onClick={() => setDest('despacho')}>
+          <Icon name="boxOut" size={18} stroke={2.1} />De paso
+        </button>
       </div>
-      {dest === 'bodega' ? (
+      {passing ? (
+        <p className="mode-hint">Se cuentan, pero no entran a la bodega: quedan en Despacho hasta que salgan con la factura o una salida. No cuentan para lo que hay que pedir.</p>
+      ) : dest === 'bodega' ? (
         <label className="field" style={{ marginTop: 12 }}>
           <span className="field-label">Ubicación</span>
           <select className="input" value={place} onChange={(e) => setPlace(e.target.value)}>
@@ -489,7 +499,7 @@ function Body() {
 
       <div className="doc-footer">
         <p className="mode-hint">
-          {problem || [toBodega && `${toBodega} a la bodega`, toReserve && `${toReserve} a la reserva`, pend && plural(pend, 'pendiente', 'pendientes')].filter(Boolean).join(' · ')}
+          {problem || [toBodega && `${toBodega} a la bodega`, toReserve && `${toReserve} a la reserva`, passing && units && `${units} de paso`, pend && plural(pend, 'pendiente', 'pendientes')].filter(Boolean).join(' · ')}
         </p>
         <button className="btn btn-lime btn-lg btn-block" disabled={!!problem || saving} onClick={confirm}>
           {saving ? 'Guardando…' : units ? `Confirmar entrada de ${plural(units, 'prenda', 'prendas')}` : 'Guardar remisión'}

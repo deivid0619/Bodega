@@ -97,8 +97,14 @@ def locs_of_el(el: dict) -> list[dict]:
     return out
 
 
+# Mercancia de paso (llega solo para despacharse en unos dias): se cuenta,
+# pero no se mezcla con la bodega. No es un mueble: siempre existe.
+DISPATCH = "DESPACHO"
+DISPATCH_LOC = {"id": DISPATCH, "kind": "dispatch", "name": "Despacho (de paso)"}
+
+
 def all_locations(elements: list[dict]) -> dict[str, dict]:
-    locs: dict[str, dict] = {}
+    locs: dict[str, dict] = {DISPATCH: DISPATCH_LOC}
     for el in elements:
         for loc in locs_of_el(el):
             locs[loc["id"]] = loc

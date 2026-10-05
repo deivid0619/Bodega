@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from . import models
 from .layout_logic import (
-    DEFAULT_PARAMS, all_locations, clamp, el_name, locs_of_el, next_code,
+    DISPATCH, DEFAULT_PARAMS, all_locations, clamp, el_name, locs_of_el, next_code,
     validate_params,
 )
 
@@ -56,7 +56,7 @@ def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None
             if loc["id"] in seen:
                 raise LayoutError(f"El código {loc['id']} quedaría repetido. Usa otro código.")
             seen[loc["id"]] = ne["id"]
-    new_ids = set(seen.keys())
+    new_ids = set(seen.keys()) | {DISPATCH}  # Despacho no es un mueble: nunca se pierde
 
     rename: dict[str, str] = {}
     for ne in new_elements:
