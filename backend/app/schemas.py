@@ -194,7 +194,7 @@ class RemisionLineIn(BaseModel):
 
 
 class RemisionIn(BaseModel):
-    number: str = Field(min_length=1, max_length=40)
+    number: str = Field(default="", max_length=40)  # algunas no lo traen: se le pone uno automatico
     supplier: str = Field(default="", max_length=120)
     date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     destination: Literal["bodega", "reserva"] = "bodega"

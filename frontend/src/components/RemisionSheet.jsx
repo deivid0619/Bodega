@@ -325,8 +325,7 @@ function Body() {
   const withKnown = new Set(blocks.filter((b) => b.rows.some((r) => r.sku && known.has(r.sku))).map((b) => b.name))
   const needsPlace = dest === 'bodega' && !place && lines.some((l) => l.sku && l.qty > 0 && !known.get(l.sku) && !inBodega.has(l.name) && !withKnown.has(l.name))
 
-  const problem = !effective ? 'Escribe el número de la remisión u OPR.'
-    : dup ? 'Esta remisión ya entró.'
+  const problem = dup ? 'Esta remisión ya entró.'
       : !blocks.length ? 'Elige la referencia que llegó.'
         : !units && !pend ? 'Pon cuántas llegaron de cada talla.'
           : clash ? 'Un código escrito es de otra referencia.'
@@ -344,7 +343,7 @@ function Body() {
       refreshInventory()
       revalidate('/api/documents')
       const d = res.document
-      showToast(`Remisión ${d.number}: ${plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}`)
+      showToast(`Remisión ${d.number.startsWith('SN-') ? 'sin número' : d.number}: ${plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}`)
       close()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No hay conexión. No entró nada; intenta de nuevo.', 'err')
@@ -377,7 +376,7 @@ function Body() {
       )}
 
       <label className="field" style={{ marginTop: photo ? 14 : 0 }}>
-        <span className="field-label">Número de la remisión u OPR</span>
+        <span className="field-label">Número de la remisión u OPR <small className="opt">si lo tiene</small></span>
         <input className="input mono" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="Ej. OPR 1234" autoCapitalize="characters" spellCheck="false" />
       </label>
       {dup && !delivery && (
@@ -396,7 +395,7 @@ function Body() {
       )}
       <div className="grid-2">
         <label className="field">
-          <span className="field-label">Proveedor</span>
+          <span className="field-label">Proveedor <small className="opt">si lo tiene</small></span>
           <input className="input" value={supplier} onChange={(e) => setSupplier(e.target.value)} list="rem-suppliers" placeholder="Taller o persona" />
           <datalist id="rem-suppliers">{suppliers.map((s) => <option key={s} value={s} />)}</datalist>
         </label>

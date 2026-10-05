@@ -164,7 +164,7 @@ export default function Summary() {
                 return (
                   <div className="need" key={r.id}>
                     <div className="need-t">
-                      <b className="mono">{r.number}</b>
+                      <b className={r.number.startsWith('SN-') ? '' : 'mono'}>{r.number.startsWith('SN-') ? 'Sin número' : r.number}</b>
                       <small>{[r.supplier, r.user_name, fmtTime(r.created_at)].filter(Boolean).join(' · ')}</small>
                       {owed.length > 0 && (
                         <small className="owed">Quedaron debiendo {owed.map((l) => `${l.size || 'única'} ${l.pending}`).join(', ')}</small>

@@ -158,6 +158,16 @@ export class WarehouseScene {
     return this.cam.th.x
   }
 
+  // controles de pantalla (el dial de abajo): girar, inclinar y acercar
+  nudge({ dth = 0, dph = 0, zoom = 1 } = {}) {
+    const c = this.cam
+    if (dth) c.th.g += dth
+    if (dph) c.ph.g = clamp(c.ph.g + dph, PH_MIN, PH_MAX)
+    if (zoom !== 1) c.r.g = clamp(c.r.g * zoom, R_MIN, R_MAX)
+    this.camResp = 0.3
+    this.dirty = true
+  }
+
   applyPreset(name) {
     this.focusedEl = null
     this._refreshSelection()

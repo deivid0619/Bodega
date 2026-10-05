@@ -111,7 +111,11 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
     """Entrada de mercancia de un proveedor, ya contada. Cada talla con codigo
     entra a la bodega (a su ubicacion principal o a la elegida); sin codigo, o
     si se elige la reserva, queda en la reserva. Todo junto o nada."""
-    number = _norm_number(payload.number)
+    number = _norm_number(payload.number or "")
+    if not number:
+        # el papel no trae numero: uno automatico con la fecha y la hora (asi
+        # no se puede revisar si ya entro, pero queda guardada)
+        number = f"SN-{datetime.now(ser.BOGOTA):%m%d-%H%M%S}"
     prev = _already(db, "remision", number)
     if prev:
         when = ser.local_time(prev.created_at).strftime("%d/%m/%Y")
@@ -177,7 +181,8 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
     db.refresh(doc)
     products = db.query(models.Product).filter(models.Product.sku.in_(set(touched))).all() if touched else []
     owed = f" · quedaron debiendo {doc.pending}" if doc.pending else ""
-    background.add_task(push.notify, "docs", f"Remisión {number}" + (f" · {doc.supplier}" if doc.supplier else ""),
+    shown = "sin número" if number.startswith("SN-") else number
+    background.add_task(push.notify, "docs", f"Remisión {shown}" + (f" · {doc.supplier}" if doc.supplier else ""),
                         f"Entraron {doc.units} prendas{owed} · {user.name}", "/summary", f"doc-{number}", user.id)
     return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))
 
