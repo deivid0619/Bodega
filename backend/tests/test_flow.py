@@ -131,11 +131,17 @@ def _run_flow(client):
     r = client.delete("/api/products", headers=auth_headers(op_token))
     assert r.status_code == 403
     r = client.delete("/api/products", headers=auth_headers(admin_token))
+    assert r.status_code == 400  # sin la palabra de confirmacion no borra nada
+    assert client.get("/api/products", headers=auth_headers(op_token)).json() != []
+    client.post("/api/reserve", headers=auth_headers(op_token), json={"name": "RESERVA PRUEBA", "size": "M", "qty": 2})
+    r = client.delete("/api/products?confirm=BORRAR", headers=auth_headers(admin_token))
     assert r.status_code == 204
     r = client.get("/api/products", headers=auth_headers(op_token))
     assert r.json() == []
     r = client.get("/api/movements", headers=auth_headers(op_token))
     assert r.json() == []
+    assert client.get("/api/reserve", headers=auth_headers(op_token)).json() == []
+    assert client.get("/api/documents", headers=auth_headers(op_token)).json() == []
     r = client.get("/api/layout", headers=auth_headers(op_token))
     assert len(r.json()["elements"]) == 10  # la distribución no se borró
 

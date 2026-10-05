@@ -6,6 +6,7 @@ import { useToast } from '../components/ToastContext'
 import { api, ApiError } from '../api'
 import { downloadCsv, fmtTime } from '../utils'
 import Icon from '../components/Icon'
+import ResetSheet from '../components/ResetSheet'
 import { Count, Empty, PageHead, plural } from '../components/Bits'
 
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
@@ -25,7 +26,7 @@ export default function Summary() {
   const { data: remisiones } = usePolling('/api/documents?kind=remision&limit=5', { interval: 30000 })
   const [filter, setFilter] = useState('all')
   const { data: moves } = useMovements(filter)
-  const [resetArmed, setResetArmed] = useState(false)
+  const [resetting, setResetting] = useState(false)
   const [demoOn, setDemoOn] = useState(null)
 
   const kpi = useMemo(() => ({
@@ -73,20 +74,6 @@ export default function Summary() {
       showToast(res.demo ? 'Datos de prueba cargados' : 'Datos de prueba quitados')
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo cambiar los datos de prueba.', 'err')
-    }
-  }
-  const resetInventory = async () => {
-    if (!resetArmed) {
-      setResetArmed(true)
-      setTimeout(() => setResetArmed(false), 3000)
-      return
-    }
-    try {
-      await api.delete('/api/products')
-      showToast('Inventario borrado. La distribución se mantiene.')
-      setResetArmed(false)
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'No se pudo borrar.', 'err')
     }
   }
 
@@ -238,13 +225,14 @@ export default function Summary() {
               <button className="btn btn-quiet btn-block" onClick={toggleDemo}>
                 {demoOn === true ? 'Quitar datos de prueba' : 'Cargar datos de prueba'}
               </button>
-              <button className="btn btn-danger btn-block" onClick={resetInventory}>
-                {resetArmed ? 'Toca otra vez para borrar todo' : 'Borrar todo el inventario'}
+              <button className="btn btn-danger btn-block" onClick={() => setResetting(true)}>
+                Empezar de cero (borrar todo)
               </button>
             </>
           )}
         </div>
       </div>
+      {resetting && <ResetSheet onClose={() => setResetting(false)} />}
     </section>
   )
 }
