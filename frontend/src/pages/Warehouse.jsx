@@ -28,6 +28,21 @@ function insetsFor({ sheet, editMode }) {
 export default function Warehouse() {
   const { isAdmin } = useAuth()
   const { data: layout, reload: reloadLayout } = useLayout()
+  // lo que se cambia en el editor se ve en el acto (borrador) mientras el
+  // servidor lo guarda; despues manda lo que diga el servidor
+  const [draft, setDraft] = useState({})
+  const shown = useMemo(() => {
+    if (!layout || !Object.keys(draft).length) return layout
+    return {
+      ...layout,
+      elements: layout.elements.map((e) => {
+        const d = draft[e.id]
+        if (!d) return e
+        const { _v, params, ...rest } = d
+        return { ...e, ...rest, params: { ...e.params, ...params } }
+      }),
+    }
+  }, [layout, draft])
   const { data: products, reload: reloadProducts } = useProducts()
   const [editMode, setEditMode] = useState(false)
   const [selLoc, setSelLoc] = useState(null)
@@ -170,13 +185,29 @@ export default function Warehouse() {
     }
   }
 
-  const currentElement = layout?.elements.find((e) => e.id === selEl) || null
+  const currentElement = shown?.elements.find((e) => e.id === selEl) || null
+
+  const draftElement = (id, fields, v) => setDraft((d) => {
+    const cur = d[id] || {}
+    return { ...d, [id]: { ...cur, ...fields, params: { ...(cur.params || {}), ...(fields.params || {}) }, _v: v } }
+  })
+  // el servidor ya lo guardo: se trae la distribucion y, si no se toco
+  // nada mas desde entonces, se borra el borrador
+  const settleElement = async (id, v) => {
+    await reloadLayout()
+    reloadProducts()
+    setDraft((d) => {
+      if (!d[id] || d[id]._v !== v) return d
+      const { [id]: _, ...rest } = d
+      return rest
+    })
+  }
   const showResults = searchOpen && query.trim().length > 0
 
   return (
     <section className="page full wh" aria-label="Bodega en 3D">
       <WarehouseCanvas
-        layout={layout}
+        layout={shown}
         products={products}
         editMode={editMode}
         onTapLocation={tapLocation}
@@ -294,6 +325,8 @@ export default function Warehouse() {
           getTheta={() => sceneRef.current?.getTheta() || 0}
           onDone={() => { setSelEl(null); sceneRef.current?.selectElement(null) }}
           onChanged={onEditChanged}
+          onDraft={draftElement}
+          onSettled={settleElement}
           onExit={exitEdit}
         />
       )}

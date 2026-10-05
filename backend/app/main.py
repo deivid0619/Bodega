@@ -12,7 +12,7 @@ from sqlalchemy.exc import OperationalError
 from . import models
 from .config import settings
 from .database import Base, SessionLocal, engine
-from .migrations import backfill_stock, ensure_columns, table_bins
+from .migrations import backfill_stock, ensure_columns, remove_sample_product, table_bins
 from .routers import auth, catalog, documents, layout, movements, parcels, products, push, reports, reserve
 from .seed import seed
 
@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
         seed(db)
         backfill_stock(db)
         table_bins(db)
+        remove_sample_product(db)
     finally:
         db.close()
     yield

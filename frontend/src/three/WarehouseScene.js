@@ -106,8 +106,12 @@ export class WarehouseScene {
     const sig = JSON.stringify(layout)
     if (sig === this._layoutSig) return
     this._layoutSig = sig
+    const prev = this.layout
     this.layout = layout
-    this._buildWorld()
+    // al editar cambian uno o dos muebles: se rehacen solo esos, no la bodega entera
+    const changed = this.world ? this._changedElements(prev, layout) : null
+    if (changed) this._patchWorld(changed)
+    else this._buildWorld()
   }
 
   setProducts(products) {
@@ -748,20 +752,27 @@ export class WarehouseScene {
   }
 
   _buildBoxes(el, g) {
-    const n = clamp(el.params.count, 1, 8), base = Math.ceil(n / 2), pitch = 0.64, W = base * pitch, mat = this.mat
-    const bx = RB(0.6, 0.48, 0.45, 0.012)
+    // "count" cajas en pilas de "levels" una encima de otra: el mueble crece a
+    // lo ancho (mas pilas) y a lo alto (mas pisos), y va a su altura (y0)
+    const n = clamp(Math.round(el.params.count || 1), 1, 40)
+    const levels = clamp(Math.round(el.params.levels || 2), 1, 6)
+    const piles = Math.ceil(n / levels), pitch = 0.64, BOX = 0.48, W = piles * pitch, y0 = el.y0 || 0, mat = this.mat
+    const boxes = this._inst(RB(0.6, BOX, 0.45, 0.012), mat.kraft, n, g)
     for (let i = 0; i < n; i++) {
-      const top = i >= base, j = top ? i - base : i, x = -((base - 1) / 2) * pitch + j * pitch
-      this._mk(bx, mat.kraft, x + (top ? 0.02 : 0), top ? 0.73 : 0.24, top ? -0.01 : 0, g)
+      const pile = Math.floor(i / levels), lvl = i % levels
+      const x = -((piles - 1) / 2) * pitch + pile * pitch
+      // las de arriba un poco corridas, como se apilan a mano
+      const jx = lvl ? (hash(i) - 0.5) * 0.05 : 0, jz = lvl ? (hash(i + 7) - 0.5) * 0.03 : 0
+      this._setI(boxes, i, x + jx, y0 + BOX / 2 + lvl * (BOX + 0.005), jz)
     }
-    const H = n > base ? 0.97 : 0.48
-    const marker = this._mk(new THREE.SphereGeometry(0.04, 14, 10), mat.amber, 0, H + 0.06, 0, g)
+    const H = Math.min(levels, n) * (BOX + 0.005)
+    const marker = this._mk(new THREE.SphereGeometry(0.04, 14, 10), mat.amber, 0, y0 + H + 0.06, 0, g)
     marker.visible = false
     const loc = el.locations[0]
     const locs = []
     if (loc) {
-      this._locHit(g, loc.id, W, H, 0.5, 0, H / 2, 0)
-      locs.push({ id: loc.id, kind: 'boxes', c: new THREE.Vector3(0, H / 2, 0), s: new THREE.Vector3(W, H, 0.5), marker })
+      this._locHit(g, loc.id, W, H, 0.5, 0, y0 + H / 2, 0)
+      locs.push({ id: loc.id, kind: 'boxes', c: new THREE.Vector3(0, y0 + H / 2, 0), s: new THREE.Vector3(W, H, 0.5), marker })
     }
     return { w: W, h: H, d: 0.5, locs }
   }
@@ -871,7 +882,14 @@ export class WarehouseScene {
   _clearWorld() {
     if (!this.world) return
     this.scene.remove(this.world)
-    this.world.traverse((o) => {
+    this._disposeTree(this.world)
+    this.world = null
+  }
+
+  // libera lo que no se comparte (geometrias propias, texturas de etiquetas)
+  // y quita del DOM las etiquetas flotantes
+  _disposeTree(root) {
+    root.traverse((o) => {
       if (o.isCSS2DObject) o.element.remove()
       if (o.geometry && !Object.values(this.geo).includes(o.geometry)) o.geometry.dispose()
       const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : []
@@ -881,7 +899,110 @@ export class WarehouseScene {
         m.dispose()
       }
     })
-    this.world = null
+  }
+
+  // muebles apilados en el mismo sitio (G/H/I, o cajas encima de canastas)
+  // comparten una sola etiqueta: id -> la pila, el de mas arriba primero
+  _stacks(elements) {
+    const stacks = new Map()
+    for (const el of elements) {
+      if (!['bins', 'shelf', 'boxes'].includes(el.type) || !el.code) continue
+      const key = `${el.x.toFixed(2)}|${el.z.toFixed(2)}|${el.rot || 0}`
+      if (!stacks.has(key)) stacks.set(key, [])
+      stacks.get(key).push(el)
+    }
+    const out = {}
+    for (const list of stacks.values()) {
+      if (list.length < 2) continue
+      list.sort((a, b) => (b.y0 || 0) - (a.y0 || 0))
+      for (const el of list) out[el.id] = list
+    }
+    return out
+  }
+
+  _stackSig(elements) {
+    return [...new Set(Object.values(this._stacks(elements)).map((l) => l.map((e) => e.id).join(',')))].sort().join('|')
+  }
+
+  // los muebles que cambiaron, o null si hay que rehacer todo: cambio el
+  // cuarto, se agrego o se quito un mueble, o cambio cuales van apilados
+  _changedElements(prev, next) {
+    if (prev.room.width !== next.room.width || prev.room.depth !== next.room.depth) return null
+    if (prev.elements.length !== next.elements.length) return null
+    const before = new Map(prev.elements.map((e) => [e.id, JSON.stringify(e)]))
+    const ids = []
+    for (const el of next.elements) {
+      const old = before.get(el.id)
+      if (old === undefined) return null
+      if (old !== JSON.stringify(el)) ids.push(el.id)
+    }
+    if (ids.length && this._stackSig(prev.elements) !== this._stackSig(next.elements)) return null
+    return ids
+  }
+
+  _patchWorld(ids) {
+    this.stackOf = this._stacks(this.layout.elements)
+    // los de una misma pila comparten etiqueta: se rehacen juntos
+    const redo = new Set()
+    for (const id of ids) for (const m of this.stackOf[id] || [{ id }]) redo.add(m.id)
+    for (const id of redo) this._removeElement(id)
+    this.layout.elements.forEach((el, idx) => { if (redo.has(el.id)) this._addElement(el, idx, false) })
+    this._updateFill(true)
+    if (this.selectedLocation && !this.locObjs[this.selectedLocation]) this.selectedLocation = null
+    if (this.selectedElement && !this.elInfo[this.selectedElement]) this.selectedElement = null
+    this._refreshSelection()
+    this.renderer.shadowMap.needsUpdate = true
+    this.dirty = true
+  }
+
+  _removeElement(id) {
+    const g = this.elGroups[id]
+    if (!g) return
+    const mine = new Set()
+    g.traverse((o) => mine.add(o))
+    this.world.remove(g)
+    this._disposeTree(g)
+    this.elHits = this.elHits.filter((h) => !mine.has(h))
+    this.locHits = this.locHits.filter((h) => !mine.has(h))
+    for (const [loc, L] of Object.entries(this.locObjs)) if (L.elId === id) delete this.locObjs[loc]
+    for (const [k, t] of Object.entries(this.tags)) if (t.members.includes(id)) delete this.tags[k]
+    delete this.elGroups[id]
+    delete this.elInfo[id]
+  }
+
+  _addElement(el, idx, runIntro) {
+    const world = this.world
+    const g = new THREE.Group()
+    g.position.set(el.x, 0, el.z)
+    g.rotation.y = (el.rot || 0) * (PI / 2)
+    world.add(g)
+    this.elGroups[el.id] = g
+    const info = this._buildElement(el, g)
+    const y0 = el.y0 || 0
+    g.traverse((o) => {
+      if (o.isMesh && o.material !== this.hitMat && !o.userData.noShadow) {
+        o.castShadow = true
+        o.receiveShadow = true
+      }
+    })
+    if (y0 < 0.05 && el.type !== 'balloons') this._decal(g, info.w + 0.3, info.d + 0.3)
+    const hit = this._mk(new THREE.BoxGeometry(Math.max(info.w, 0.3), info.h, Math.max(info.d, 0.3)), this.hitMat, 0, y0 + info.h / 2, 0, g)
+    hit.userData.el = el.id
+    this.elHits.push(hit)
+    this.elInfo[el.id] = { w: info.w, h: info.h, d: info.d, y0 }
+    world.updateMatrixWorld(true)
+    const odd = (el.rot || 0) % 2 === 1
+    for (const L of info.locs) {
+      L.center = g.localToWorld(L.c.clone())
+      L.size = odd ? new THREE.Vector3(L.s.z, L.s.y, L.s.x) : L.s.clone()
+      L.elId = el.id
+      this.locObjs[L.id] = L
+    }
+    if (el.code && (['bins', 'shelf', 'rack', 'boxes'].includes(el.type) || info.locs.length)) this._addTag(el, g, info)
+    if (runIntro) {
+      g.scale.y = 0.001
+      g.userData.introDelay = idx * 70
+    }
   }
 
   _buildWorld() {
@@ -941,54 +1062,10 @@ export class WarehouseScene {
     this.grid = grid
 
     // muebles apilados en el mismo sitio (G/H/I) comparten una sola etiqueta
-    this.stackOf = {}
-    const stacks = new Map()
-    for (const el of this.layout.elements) {
-      if (!['bins', 'shelf'].includes(el.type) || !el.code) continue
-      const key = `${el.x.toFixed(2)}|${el.z.toFixed(2)}|${el.rot || 0}`
-      if (!stacks.has(key)) stacks.set(key, [])
-      stacks.get(key).push(el)
-    }
-    for (const list of stacks.values()) {
-      if (list.length < 2) continue
-      list.sort((a, b) => (b.y0 || 0) - (a.y0 || 0))
-      for (const el of list) this.stackOf[el.id] = list
-    }
+    this.stackOf = this._stacks(this.layout.elements)
 
     const runIntro = !introPlayed && !this.introDone && !this.reduceMotion && this.layout.elements.length > 0
-    this.layout.elements.forEach((el, idx) => {
-      const g = new THREE.Group()
-      g.position.set(el.x, 0, el.z)
-      g.rotation.y = (el.rot || 0) * (PI / 2)
-      world.add(g)
-      this.elGroups[el.id] = g
-      const info = this._buildElement(el, g)
-      const y0 = el.y0 || 0
-      g.traverse((o) => {
-        if (o.isMesh && o.material !== this.hitMat && !o.userData.noShadow) {
-          o.castShadow = true
-          o.receiveShadow = true
-        }
-      })
-      if (y0 < 0.05 && el.type !== 'balloons') this._decal(g, info.w + 0.3, info.d + 0.3)
-      const hit = this._mk(new THREE.BoxGeometry(Math.max(info.w, 0.3), info.h, Math.max(info.d, 0.3)), this.hitMat, 0, y0 + info.h / 2, 0, g)
-      hit.userData.el = el.id
-      this.elHits.push(hit)
-      this.elInfo[el.id] = { w: info.w, h: info.h, d: info.d, y0 }
-      world.updateMatrixWorld(true)
-      const odd = (el.rot || 0) % 2 === 1
-      for (const L of info.locs) {
-        L.center = g.localToWorld(L.c.clone())
-        L.size = odd ? new THREE.Vector3(L.s.z, L.s.y, L.s.x) : L.s.clone()
-        L.elId = el.id
-        this.locObjs[L.id] = L
-      }
-      if (el.code && (['bins', 'shelf', 'rack', 'boxes'].includes(el.type) || info.locs.length)) this._addTag(el, g, info)
-      if (runIntro) {
-        g.scale.y = 0.001
-        g.userData.introDelay = idx * 70
-      }
-    })
+    this.layout.elements.forEach((el, idx) => this._addElement(el, idx, runIntro))
     if (runIntro) this._startIntro()
     else if (!this._framed && this.layout.elements.length) {
       const g = this._presetGoal('all')

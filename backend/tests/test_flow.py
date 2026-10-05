@@ -47,9 +47,9 @@ def _run_flow(client):
     bins = [e for e in layout["elements"] if e["code"] == "C"][0]
     assert len(bins["locations"]) == 10 * 8
 
+    # el inventario arranca vacio: ya no se crea la prenda de ejemplo
     seeded = client.get("/api/products/P-WPM210200L", headers=auth_headers(op_token))
-    assert seeded.status_code == 200
-    assert seeded.json()["qty"] == 0
+    assert seeded.status_code == 404
 
     r = client.post("/api/products", headers=auth_headers(op_token), json={
         "sku": "TEST-CHAQ-L", "name": "CHAQUETA DE PRUEBA", "size": "L",

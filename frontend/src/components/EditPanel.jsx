@@ -8,11 +8,23 @@ const PARAMS = {
   bins: [['cols', 'Columnas'], ['rows', 'Filas']],
   shelf: [['w', 'Ancho'], ['levels', 'Niveles']],
   rack: [['w', 'Largo'], ['bars', 'Barras']],
-  boxes: [['count', 'Cajas']],
+  boxes: [['count', 'Cajas'], ['levels', 'Una encima de otra']],
   table: [['w', 'Largo'], ['bins', 'Canastas debajo']],
   ladder: [], balloons: [],
 }
 const STEP = { cols: 1, rows: 1, levels: 1, bars: 1, count: 1, bins: 1, w: 0.2 }
+// los mismos limites que valida el servidor (layout_logic.PARAM_RANGES): aqui
+// solo sirven para mostrar el cambio en el acto; el servidor manda
+const RANGES = {
+  bins: { cols: [1, 16], rows: [1, 10] },
+  shelf: { w: [0.8, 5], levels: [1, 6] },
+  rack: { w: [0.8, 6], bars: [1, 4] },
+  boxes: { count: [1, 40], levels: [1, 6] },
+  table: { w: [1, 4], bins: [0, 30] },
+}
+const PARAM_DEFAULT = { boxes: { levels: 2 } }
+const paramOf = (el, key) => el.params[key] ?? PARAM_DEFAULT[el.type]?.[key] ?? 0
+const round = (v, step = 0.1) => +(Math.round(v / step) * step).toFixed(2)
 const TYPE_LABEL = { bins: 'Pared de canastas', shelf: 'Estantería', rack: 'Perchero', boxes: 'Cajas', table: 'Mesa', ladder: 'Escalera', balloons: 'Bombas' }
 const fmtParam = (k, v) => (k === 'w' ? `${Number(v).toFixed(1)} m` : String(v))
 
@@ -45,7 +57,7 @@ function Mini({ value, onMinus, onPlus }) {
   )
 }
 
-export default function EditPanel({ room, element, getTheta, onDone, onChanged, onExit }) {
+export default function EditPanel({ room, element, getTheta, onDone, onChanged, onDraft, onSettled, onExit }) {
   const showToast = useToast()
   const [adding, setAdding] = useState(false)
   const [armedDelete, setArmedDelete] = useState(false)
@@ -58,6 +70,42 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
 
   const fail = (e, fallback) => showToast(e instanceof ApiError ? e.message : fallback, 'err')
 
+  // Lo que se cambia se ve en el acto (borrador) y va al servidor en un solo
+  // envio cuando se deja de tocar: cinco toques en + no son cinco viajes.
+  const pending = useRef(null) // { id, body }
+  const ver = useRef(0)
+  const flushTimer = useRef(null)
+  const chain = useRef(Promise.resolve())
+  const flush = () => {
+    clearTimeout(flushTimer.current)
+    const job = pending.current
+    pending.current = null
+    if (!job) return chain.current
+    const v = ver.current
+    chain.current = chain.current.then(async () => {
+      try {
+        await api.patch(`/api/layout/elements/${job.id}`, job.body)
+      } catch (e) {
+        fail(e, 'No se pudo guardar el cambio.')
+      }
+      await onSettled(job.id, v)
+    })
+    return chain.current
+  }
+  const queue = (fields) => {
+    if (pending.current && pending.current.id !== element.id) flush()
+    const body = pending.current?.body || {}
+    const params = fields.params ? { params: { ...(body.params || {}), ...fields.params } } : {}
+    pending.current = { id: element.id, body: { ...body, ...fields, ...params } }
+    ver.current += 1
+    onDraft(element.id, fields, ver.current)
+    clearTimeout(flushTimer.current)
+    flushTimer.current = setTimeout(flush, 450)
+  }
+  // antes de otra accion (o al cambiar de mueble / salir), lo pendiente se guarda primero
+  const saved = () => flush()
+  useEffect(() => () => { flush() }, [element?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const roomStep = async (field, dir) => {
     const next = { width: room.width, depth: room.depth }
     next[field] = Math.max(4, Math.min(24, Math.round((next[field] + dir * 0.2) * 10) / 10))
@@ -67,33 +115,34 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
     } catch (e) { fail(e, 'No se pudo cambiar el tamaño del cuarto.') }
   }
 
-  const paramStep = async (key, dir) => {
-    try {
-      await api.patch(`/api/layout/elements/${element.id}`, { params: { [key]: (element.params[key] ?? 0) + dir * STEP[key] } })
-      onChanged()
-    } catch (e) { fail(e, 'No se pudo cambiar el tamaño.') }
+  const paramStep = (key, dir) => {
+    const [lo, hi] = RANGES[element.type]?.[key] || [0, 99]
+    const cur = Number(paramOf(element, key))
+    const next = round(Math.min(hi, Math.max(lo, cur + dir * STEP[key])), key === 'w' ? 0.1 : 1)
+    if (next !== cur) queue({ params: { [key]: next } })
   }
 
-  const move = async (dir) => {
+  const move = (dir) => {
     const th = getTheta ? getTheta() : 0
     let v = { u: [-Math.sin(th), -Math.cos(th)], d: [Math.sin(th), Math.cos(th)], r: [Math.cos(th), -Math.sin(th)], l: [-Math.cos(th), Math.sin(th)] }[dir]
     v = Math.abs(v[0]) > Math.abs(v[1]) ? [Math.sign(v[0]), 0] : [0, Math.sign(v[1])]
-    try {
-      await api.patch(`/api/layout/elements/${element.id}`, { x: element.x + v[0] * 0.1, z: element.z + v[1] * 0.1 })
-      onChanged()
-    } catch (e) { fail(e, 'No se pudo mover.') }
+    const inRoom = (val, size) => round(Math.min(size / 2, Math.max(-size / 2, val)), 0.01)
+    queue({ x: inRoom(element.x + v[0] * 0.1, room.width), z: inRoom(element.z + v[1] * 0.1, room.depth) })
   }
 
-  const rotate = async () => {
-    try {
-      await api.patch(`/api/layout/elements/${element.id}`, { rot: (element.rot + 1) % 4 })
-      onChanged()
-    } catch (e) { fail(e, 'No se pudo girar.') }
+  const rotate = () => queue({ rot: (element.rot + 1) % 4 })
+
+  // subirlo para ponerlo encima de otro mueble (cajas sobre canastas...)
+  const heightStep = (dir) => {
+    const cur = element.y0 || 0
+    const next = round(Math.min(2.6, Math.max(0, cur + dir * 0.1)))
+    if (next !== cur) queue({ y0: next })
   }
 
   const renameCode = async () => {
     const code = codeInput.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6)
     if (!code || code === element.code) return
+    await saved()
     try {
       await api.patch(`/api/layout/elements/${element.id}`, { code })
       onChanged()
@@ -111,6 +160,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
       return
     }
     setArmedType(null)
+    await saved()
     try {
       const el = await api.patch(`/api/layout/elements/${element.id}`, { type })
       onChanged(el.id)
@@ -120,6 +170,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
   }
 
   const duplicate = async () => {
+    await saved()
     try {
       const el = await api.post(`/api/layout/elements/${element.id}/duplicate`)
       onChanged(el.id)
@@ -129,6 +180,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
 
   const del = async () => {
     if (!armedDelete) { setArmedDelete(true); setTimeout(() => setArmedDelete(false), 3000); return }
+    await saved()
     try {
       const name = element.name
       await api.delete(`/api/layout/elements/${element.id}`)
@@ -229,14 +281,22 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
         </div></div>
         {PARAMS[element.type].map(([key, label]) => (
           <div className="ctl" key={key}><span>{label}</span>
-            <Mini value={fmtParam(key, element.params[key] ?? 0)} onMinus={() => paramStep(key, -1)} onPlus={() => paramStep(key, 1)} />
+            <Mini value={fmtParam(key, paramOf(element, key))} onMinus={() => paramStep(key, -1)} onPlus={() => paramStep(key, 1)} />
           </div>
         ))}
+        {(element.type === 'bins' || element.type === 'boxes') && (
+          <div className="ctl"><span>Altura del piso</span>
+            <Mini value={`${(element.y0 || 0).toFixed(1)} m`} onMinus={() => heightStep(-1)} onPlus={() => heightStep(1)} />
+          </div>
+        )}
         <div className="btn-row">
           <button className="btn btn-ghost" onClick={duplicate}><Icon name="copy" size={18} />Duplicar</button>
           <button className="btn btn-danger" onClick={del}>{armedDelete ? 'Toca otra vez' : 'Eliminar'}</button>
         </div>
-        <p className="tip">También lo puedes arrastrar con un dedo. Las flechas lo mueven 10 cm.</p>
+        <p className="tip">
+          También lo puedes arrastrar con un dedo. Las flechas lo mueven 10 cm.
+          {(element.type === 'bins' || element.type === 'boxes') && ' Para ponerlo encima de otro mueble, ponlo en el mismo sitio y súbelo con “Altura del piso”.'}
+        </p>
       </>
     )
   }

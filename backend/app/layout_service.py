@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from . import models
@@ -54,7 +55,8 @@ def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None
     cambio de tamano o de codigo, y bloqueando el cambio si alguna prenda
     con existencias quedaria sin ubicacion. `moves` fuerza a donde pasa cada
     ubicacion vieja (al cambiar canastas por cajas, todas a la misma)."""
-    old_by_id = {e.id: _el_to_dict(e) for e in db.query(models.Element).all()}
+    rows = {e.id: e for e in db.query(models.Element).all()}
+    old_by_id = {i: _el_to_dict(e) for i, e in rows.items()}
 
     seen: dict[str, str] = {}
     for ne in new_elements:
@@ -76,8 +78,9 @@ def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None
                 rename[ol["id"]] = new_locs[i]["id"]
     rename.update({a: b for a, b in (moves or {}).items() if a != b})
 
-    stock = db.query(models.Stock).filter(models.Stock.qty > 0).all()
-    lost = {r.sku for r in stock if rename.get(r.location_id, r.location_id) not in new_ids}
+    # solo se miran las existencias que quedarian por fuera (no toda la tabla)
+    lost = {sku for (sku,) in db.query(models.Stock.sku).filter(
+        models.Stock.qty > 0, models.Stock.location_id.notin_(new_ids | set(rename))).distinct()}
     if lost:
         n = len(lost)
         noun = "código con prendas quedaría" if n == 1 else "códigos con prendas quedarían"
@@ -104,26 +107,41 @@ def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None
 
     # lo anotado de paso sigue a su ubicacion; si la ubicacion desaparece,
     # pasa a Despacho (no es inventario: nunca bloquea un cambio)
-    for parcel in db.query(models.Parcel).filter(models.Parcel.done_at.is_(None)).all():
+    for parcel in db.query(models.Parcel).filter(
+            models.Parcel.done_at.is_(None),
+            or_(models.Parcel.location_id.in_(list(rename)), models.Parcel.location_id.notin_(new_ids))).all():
         loc = rename.get(parcel.location_id, parcel.location_id)
         parcel.location_id = loc if loc in new_ids else DISPATCH
 
     # si la ubicacion principal de un codigo desaparece pero tiene prendas en
     # otra, la principal pasa a donde tenga mas
-    by_sku: dict[str, list[models.Stock]] = {}
-    for r in db.query(models.Stock).filter(models.Stock.qty > 0).all():
-        by_sku.setdefault(r.sku, []).append(r)
-    for p in db.query(models.Product).all():
-        if p.location_id not in new_ids and by_sku.get(p.sku):
-            p.location_id = max(by_sku[p.sku], key=lambda r: r.qty).location_id
+    orphans = db.query(models.Product).filter(models.Product.location_id.notin_(new_ids)).all()
+    if orphans:
+        by_sku: dict[str, list[models.Stock]] = {}
+        for r in db.query(models.Stock).filter(models.Stock.qty > 0,
+                                               models.Stock.sku.in_([p.sku for p in orphans])).all():
+            by_sku.setdefault(r.sku, []).append(r)
+        for p in orphans:
+            if by_sku.get(p.sku):
+                p.location_id = max(by_sku[p.sku], key=lambda r: r.qty).location_id
 
-    db.query(models.Element).delete()
-    db.flush()
+    # los muebles se actualizan en su sitio (antes se borraban y se volvian a
+    # crear todos): menos escrituras en cada cambio del editor
+    keep = set()
     for ne in new_elements:
-        db.add(models.Element(
-            id=ne["id"], type=ne["type"], code=ne.get("code"),
-            x=ne["x"], z=ne["z"], rot=ne.get("rot", 0), y0=ne.get("y0", 0), params=ne.get("params", {}),
-        ))
+        keep.add(ne["id"])
+        fields = {"type": ne["type"], "code": ne.get("code"), "x": ne["x"], "z": ne["z"],
+                  "rot": ne.get("rot", 0), "y0": ne.get("y0", 0), "params": ne.get("params", {})}
+        row = rows.get(ne["id"])
+        if row is None:
+            db.add(models.Element(id=ne["id"], **fields))
+            continue
+        for k, v in fields.items():
+            if getattr(row, k) != v:
+                setattr(row, k, v)
+    for i, row in rows.items():
+        if i not in keep:
+            db.delete(row)
     if room is not None:
         rc = get_room(db)
         rc.width, rc.depth = room["width"], room["depth"]
@@ -174,10 +192,17 @@ def update_element(db: Session, element_id: str, changes: dict) -> models.Elemen
         if new_type == "bins" and (code == "CAJAS" or (code[:1] == "K" and code[1:].isdigit())):
             # el codigo automatico de unas cajas no sirve para canastas (CAJAS-1-1)
             target["code"] = next_code([e for e in elements if e["id"] != element_id], "bins")
-        target["type"] = new_type
-        target["params"] = dict(DEFAULT_PARAMS[new_type])
+        # del mismo tamano: tantas cajas como canastas, de a tantas una encima
+        # de otra como filas tenia (y al reves). Se queda a su misma altura
+        p = target["params"]
         if new_type == "boxes":
-            target["y0"] = 0  # las cajas van en el piso
+            params = {"count": int(p.get("cols", 1)) * int(p.get("rows", 1)), "levels": int(p.get("rows", 1))}
+        else:
+            count, levels = int(p.get("count", 3)), int(p.get("levels", 2))
+            levels = max(1, min(levels, count))
+            params = {"cols": -(-count // levels), "rows": levels}
+        target["type"] = new_type
+        target["params"] = validate_params(new_type, params)
         new_locs = locs_of_el(target)
         # lo que tenia pasa al mueble nuevo: a la ubicacion en la misma posicion
         # o, si ya no hay tantas (canastas -> cajas), a la ultima que haya
@@ -202,6 +227,12 @@ def update_element(db: Session, element_id: str, changes: dict) -> models.Elemen
     if "y0" in changes and changes["y0"] is not None:
         target["y0"] = clamp(changes["y0"], 0, 2.6)
 
+    if set(changes) <= {"x", "z", "rot", "y0"}:
+        # moverlo, girarlo o subirlo no cambia sus ubicaciones: solo se guarda esa fila
+        row = db.get(models.Element, element_id)
+        row.x, row.z, row.rot, row.y0 = target["x"], target["z"], target["rot"], target.get("y0", 0)
+        db.commit()
+        return row
     _replace_all(db, elements, moves=moves)
     return db.get(models.Element, element_id)
 

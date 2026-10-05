@@ -43,6 +43,22 @@ def table_bins(db: Session) -> None:
     db.commit()
 
 
+def remove_sample_product(db: Session) -> None:
+    """2026-10-05: el arranque creaba una prenda de ejemplo (la de la etiqueta
+    del prototipo) cada vez que no existia: si se borraba, volvia a salir
+    cuando el servidor se reiniciaba. Ya no se crea; esta limpieza quita la
+    que quedo, una sola vez y solo si nunca se uso (sin prendas ni historial)."""
+    key = "prenda_ejemplo_quitada"
+    if db.get(models.AppSetting, key):
+        return
+    p = db.get(models.Product, "P-WPM210200L")
+    if p and p.qty == 0 and not db.query(models.Movement).filter_by(sku=p.sku).first() \
+            and not db.query(models.Stock).filter(models.Stock.sku == p.sku, models.Stock.qty > 0).first():
+        db.delete(p)
+    db.add(models.AppSetting(key=key, value="hecho"))
+    db.commit()
+
+
 def backfill_stock(db: Session) -> None:
     """Antes cada codigo tenia una sola ubicacion con su cantidad; ahora las
     existencias van por ubicacion. Los codigos que todavia no tienen filas

@@ -34,12 +34,16 @@ def test_bins_become_boxes_and_back_keeping_what_they_hold():
                                                                "location_id": loc, "qty": qty})
             assert r.status_code == 201, r.text
         parcel = client.post("/api/parcels", headers=h, json={"owner": "Prueba", "location_id": f"{code}-2-3"}).json()
+        # subida 1,4 m (encima de otro mueble): se queda a esa altura al cambiar de tipo
+        assert client.patch(f"/api/layout/elements/{wall['id']}", headers=h, json={"y0": 1.4}).status_code == 200
 
         # canastas -> cajas: todo queda en las cajas, con la misma letra
         r = client.patch(f"/api/layout/elements/{wall['id']}", headers=h, json={"type": "boxes"})
         assert r.status_code == 200, r.text
         boxes = r.json()
         assert boxes["type"] == "boxes" and boxes["code"] == code and boxes["name"] == f"Cajas {code}"
+        # del mismo tamano: 4 x 6 canastas -> 24 cajas de a 6 una encima de otra
+        assert boxes["params"] == {"count": 24, "levels": 6} and boxes["y0"] == 1.4
         assert [l["id"] for l in boxes["locations"]] == [code]
         assert _stock(client, h, a) == {code: 2} and _stock(client, h, b) == {code: 3}
         assert client.get(f"/api/products/{b}", headers=h).json()["location_id"] == code
@@ -50,6 +54,7 @@ def test_bins_become_boxes_and_back_keeping_what_they_hold():
         assert r.status_code == 200, r.text
         bins = r.json()
         assert bins["type"] == "bins" and bins["code"] == code and bins["locations"][0]["id"] == f"{code}-1-1"
+        assert bins["params"] == {"cols": 4, "rows": 6} and bins["y0"] == 1.4
         assert _stock(client, h, a) == {f"{code}-1-1": 2} and _stock(client, h, b) == {f"{code}-1-1": 3}
         assert _parcel_loc(client, h, parcel["id"]) == f"{code}-1-1"
 

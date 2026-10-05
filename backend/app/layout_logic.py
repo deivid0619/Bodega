@@ -22,7 +22,7 @@ PARAM_RANGES: dict[str, dict[str, tuple[float, float]]] = {
     "bins": {"cols": (1, 16), "rows": (1, 10)},
     "shelf": {"w": (0.8, 5), "levels": (1, 6)},
     "rack": {"w": (0.8, 6), "bars": (1, 4)},
-    "boxes": {"count": (1, 8)},
+    "boxes": {"count": (1, 40), "levels": (1, 6)},  # levels: una encima de otra
     "table": {"w": (1, 4), "bins": (0, 30)},
     "ladder": {},
     "balloons": {},
@@ -31,7 +31,7 @@ DEFAULT_PARAMS: dict[str, dict[str, Any]] = {
     "bins": {"cols": 4, "rows": 6},
     "shelf": {"w": 2.4, "levels": 3},
     "rack": {"w": 3, "bars": 3},
-    "boxes": {"count": 3},
+    "boxes": {"count": 3, "levels": 2},
     "table": {"w": 2.4, "bins": 0},
     "ladder": {},
     "balloons": {},
