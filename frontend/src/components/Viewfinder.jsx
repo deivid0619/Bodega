@@ -2,7 +2,7 @@ import Icon from './Icon'
 
 // El visor de la camara para escanear etiquetas (lo usa useBarcodeScanner).
 export default function Viewfinder({ scanner, className = '' }) {
-  const { status, message, videoRef, containerRef, start } = scanner
+  const { status, message, videoRef, containerRef, start, torch, toggleTorch } = scanner
   const camOn = status === 'native' || status === 'lib'
   return (
     <div className={`viewfinder ${className}`}>
@@ -28,6 +28,11 @@ export default function Viewfinder({ scanner, className = '' }) {
         </>
       )}
       {camOn && message && <p className="vf-msg">{message}</p>}
+      {camOn && torch !== 'none' && (
+        <button type="button" className="vf-torch" aria-pressed={torch === 'on'} onClick={toggleTorch} aria-label={torch === 'on' ? 'Apagar la linterna' : 'Prender la linterna'}>
+          <Icon name="flash" size={20} stroke={2} />
+        </button>
+      )}
     </div>
   )
 }
