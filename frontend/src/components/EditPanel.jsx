@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader } from './Sheet'
@@ -51,8 +51,10 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
   const [armedDelete, setArmedDelete] = useState(false)
   const [armedReset, setArmedReset] = useState(false)
   const [codeInput, setCodeInput] = useState(element?.code || '')
+  const [armedType, setArmedType] = useState(null)
+  const typeTimer = useRef(null)
 
-  useEffect(() => { setCodeInput(element?.code || ''); setArmedDelete(false) }, [element?.id, element?.code])
+  useEffect(() => { setCodeInput(element?.code || ''); setArmedDelete(false); setArmedType(null) }, [element?.id, element?.code, element?.type])
 
   const fail = (e, fallback) => showToast(e instanceof ApiError ? e.message : fallback, 'err')
 
@@ -97,6 +99,24 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
       onChanged()
       showToast(`Código cambiado a ${code}. Las prendas se movieron con él.`)
     } catch (e) { fail(e, 'No se pudo cambiar el código.'); setCodeInput(element.code) }
+  }
+
+  // canastas <-> cajas: el segundo toque confirma, porque mueve lo que tenga guardado
+  const changeType = async (type) => {
+    if (type === element.type) return
+    clearTimeout(typeTimer.current)
+    if (armedType !== type) {
+      setArmedType(type)
+      typeTimer.current = setTimeout(() => setArmedType(null), 4000)
+      return
+    }
+    setArmedType(null)
+    try {
+      const el = await api.patch(`/api/layout/elements/${element.id}`, { type })
+      onChanged(el.id)
+      const where = el.locations[0]?.id
+      showToast(`Ahora es ${el.name}.${where ? ` Si había algo guardado, quedó en ${where}.` : ''}`)
+    } catch (e) { fail(e, 'No se pudo cambiar el tipo.') }
   }
 
   const duplicate = async () => {
@@ -179,6 +199,26 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
             <input className="code-in" value={codeInput} maxLength={6} autoCapitalize="characters" autoComplete="off" spellCheck="false"
                    onChange={(e) => setCodeInput(e.target.value)} onBlur={renameCode} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
           </div>
+        )}
+        {(element.type === 'bins' || element.type === 'boxes') && (
+          <>
+            <div className="ctl"><span>Tipo</span>
+              <div className="type-seg" role="group" aria-label="Tipo de mueble">
+                {[['bins', 'Canastas'], ['boxes', 'Cajas']].map(([t, label]) => (
+                  <button key={t} type="button" aria-pressed={element.type === t} className={armedType === t ? 'armed' : ''} onClick={() => changeType(t)}>
+                    {armedType === t ? '¿Seguro?' : label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {armedType && (
+              <p className="tip type-tip">
+                Toca “¿Seguro?” otra vez para cambiarlo a {armedType === 'boxes'
+                  ? 'cajas: lo que haya en las canastas pasa a las cajas.'
+                  : 'canastas: lo que haya en las cajas pasa a la primera canasta.'}
+              </p>
+            )}
+          </>
         )}
         <div className="ctl"><span>Mover</span><div className="pad">
           <button onClick={() => move('l')} aria-label="Mover a la izquierda"><Icon name="arrowRight" size={18} stroke={2.3} style={{ transform: 'rotate(180deg)' }} /></button>

@@ -478,6 +478,12 @@ button.pill:active{transform:scale(.95)}
 .mini{display:flex;align-items:center;gap:4px}
 .code-in{width:96px;height:42px;border-radius:var(--r-sm);border:1.5px solid var(--line);text-align:center;font:500 17px var(--mono);text-transform:uppercase;letter-spacing:.06em}
 .code-in:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 4px rgba(192,255,0,.6)}
+/* canastas <-> cajas */
+.type-seg{display:inline-grid;grid-template-columns:1fr 1fr;gap:3px;padding:3px;border-radius:var(--r-sm);background:var(--fog-2)}
+.type-seg button{min-width:88px;height:36px;padding:0 12px;border-radius:var(--r-xs);font:700 13.5px/1 var(--font);color:var(--graphite);transition:background-color 160ms ease,color 160ms ease}
+.type-seg button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.type-seg button.armed{background:var(--amber);color:#fff}
+.type-tip{margin:-2px 0 8px;color:#A9480A;font-weight:600}
 .types{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
 .type{border-radius:var(--r-md);background:var(--fog);padding:14px;text-align:left;display:flex;flex-direction:column;gap:8px;transition:transform 160ms var(--ease-out),background-color 160ms ease}
 .type:active{transform:scale(.97);background:var(--fog-2)}

@@ -1,6 +1,6 @@
 """Aplica cambios a la distribucion (agregar, mover, redimensionar, borrar
-muebles) protegiendo el inventario: nunca deja una prenda con existencias
-sin una ubicacion valida."""
+muebles, cambiar canastas por cajas) protegiendo el inventario: nunca deja
+una prenda con existencias sin una ubicacion valida."""
 from __future__ import annotations
 
 import uuid
@@ -12,6 +12,10 @@ from .layout_logic import (
     DISPATCH, DEFAULT_PARAMS, all_locations, clamp, el_name, locs_of_el, next_code,
     validate_params,
 )
+
+
+# un mueble de canastas puede volverse cajas y al reves: es el mismo lugar
+SWAPPABLE = {"bins", "boxes"}
 
 
 class LayoutError(Exception):
@@ -43,11 +47,13 @@ def element_out(el: models.Element) -> dict:
     return {**d, "name": el_name(d), "locations": locs_of_el(d)}
 
 
-def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None) -> None:
+def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None,
+                 moves: dict[str, str] | None = None) -> None:
     """Nucleo del editor: recibe la lista completa de muebles ya validada
     (codigos, parametros) y la aplica, remapeando las prendas cuyo mueble
     cambio de tamano o de codigo, y bloqueando el cambio si alguna prenda
-    con existencias quedaria sin ubicacion."""
+    con existencias quedaria sin ubicacion. `moves` fuerza a donde pasa cada
+    ubicacion vieja (al cambiar canastas por cajas, todas a la misma)."""
     old_by_id = {e.id: _el_to_dict(e) for e in db.query(models.Element).all()}
 
     seen: dict[str, str] = {}
@@ -68,6 +74,7 @@ def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None
         for i, ol in enumerate(old_locs):
             if i < len(new_locs) and ol["id"] != new_locs[i]["id"]:
                 rename[ol["id"]] = new_locs[i]["id"]
+    rename.update({a: b for a, b in (moves or {}).items() if a != b})
 
     stock = db.query(models.Stock).filter(models.Stock.qty > 0).all()
     lost = {r.sku for r in stock if rename.get(r.location_id, r.location_id) not in new_ids}
@@ -94,6 +101,12 @@ def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None
         for p in db.query(models.Product).filter(models.Product.location_id.in_(rename.keys())).all():
             p.location_id = rename[p.location_id]
         db.flush()
+
+    # lo anotado de paso sigue a su ubicacion; si la ubicacion desaparece,
+    # pasa a Despacho (no es inventario: nunca bloquea un cambio)
+    for parcel in db.query(models.Parcel).filter(models.Parcel.done_at.is_(None)).all():
+        loc = rename.get(parcel.location_id, parcel.location_id)
+        parcel.location_id = loc if loc in new_ids else DISPATCH
 
     # si la ubicacion principal de un codigo desaparece pero tiene prendas en
     # otra, la principal pasa a donde tenga mas
@@ -151,6 +164,25 @@ def update_element(db: Session, element_id: str, changes: dict) -> models.Elemen
         raise LayoutError("Ese elemento ya no existe.")
     room = get_room(db)
 
+    moves: dict[str, str] = {}
+    new_type = changes.get("type")
+    if new_type and new_type != target["type"]:
+        if target["type"] not in SWAPPABLE or new_type not in SWAPPABLE:
+            raise LayoutError("Solo se puede cambiar entre canastas y cajas.")
+        old_locs = locs_of_el(target)
+        code = target.get("code") or ""
+        if new_type == "bins" and (code == "CAJAS" or (code[:1] == "K" and code[1:].isdigit())):
+            # el codigo automatico de unas cajas no sirve para canastas (CAJAS-1-1)
+            target["code"] = next_code([e for e in elements if e["id"] != element_id], "bins")
+        target["type"] = new_type
+        target["params"] = dict(DEFAULT_PARAMS[new_type])
+        if new_type == "boxes":
+            target["y0"] = 0  # las cajas van en el piso
+        new_locs = locs_of_el(target)
+        # lo que tenia pasa al mueble nuevo: a la ubicacion en la misma posicion
+        # o, si ya no hay tantas (canastas -> cajas), a la ultima que haya
+        moves = {ol["id"]: new_locs[min(i, len(new_locs) - 1)]["id"] for i, ol in enumerate(old_locs)} if new_locs else {}
+
     if "code" in changes and changes["code"] is not None:
         code = str(changes["code"]).upper().strip()
         code = "".join(ch for ch in code if ch.isalnum())[:6]
@@ -170,7 +202,7 @@ def update_element(db: Session, element_id: str, changes: dict) -> models.Elemen
     if "y0" in changes and changes["y0"] is not None:
         target["y0"] = clamp(changes["y0"], 0, 2.6)
 
-    _replace_all(db, elements)
+    _replace_all(db, elements, moves=moves)
     return db.get(models.Element, element_id)
 
 

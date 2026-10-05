@@ -83,6 +83,7 @@ class ElementCreateIn(BaseModel):
 
 
 class ElementUpdateIn(BaseModel):
+    type: Optional[Literal["bins", "boxes"]] = None  # canastas <-> cajas
     code: Optional[str] = None
     x: Optional[float] = None
     z: Optional[float] = None
