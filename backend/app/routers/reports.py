@@ -49,18 +49,25 @@ def inventory_csv(db: Session = Depends(get_db), _: models.User = Depends(get_cu
         where = ", ".join(f"{loc} ({q})" for loc, q in sorted(stock.get(p.sku, []), key=lambda r: -r[1]))
         rows.append([p.sku, p.name, p.size, names.get(p.location_id, p.location_id), where, p.qty, p.min_qty,
                      estado, outs.get(p.sku, 0)])
-    return _csv_response(rows, f"inventario-{datetime.now().date()}.csv")
+    return _csv_response(rows, f"inventario-{_today()}.csv")
 
 
 @router.get("/movements.csv")
 def movements_csv(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
-    rows = [["Fecha", "Tipo", "SKU", "Referencia", "Talla", "Cantidad", "Antes", "Después", "Ubicación", "Usuario"]]
-    labels = {"in": "Entrada", "out": "Salida", "set": "Conteo", "new": "Registro nuevo"}
+    rows = [["Fecha", "Tipo", "SKU", "Referencia", "Talla", "Cantidad", "Antes", "Después", "Ubicación", "Hacia",
+             "Nota", "Usuario"]]
+    labels = {"in": "Entrada", "out": "Salida", "set": "Conteo", "new": "Registro nuevo", "move": "Traslado"}
     names = ser.loc_names(db)
     for m in db.query(models.Movement).order_by(models.Movement.id.desc()).limit(5000).all():
-        rows.append([m.created_at.strftime("%Y-%m-%d %H:%M"), labels.get(m.type, m.type), m.sku, m.product_name,
-                     m.product_size, m.qty, m.before, m.after, names.get(m.location_id, m.location_id), m.user_name])
-    return _csv_response(rows, f"historial-{datetime.now().date()}.csv")
+        rows.append([ser.local_time(m.created_at).strftime("%Y-%m-%d %H:%M"), labels.get(m.type, m.type), m.sku,
+                     m.product_name, m.product_size, m.qty, m.before, m.after, names.get(m.location_id, m.location_id),
+                     names.get(m.to_location_id, m.to_location_id) if m.to_location_id else "", m.note or "",
+                     m.user_name])
+    return _csv_response(rows, f"historial-{_today()}.csv")
+
+
+def _today():
+    return datetime.now(ser.BOGOTA).date()
 
 
 @router.post("/demo")

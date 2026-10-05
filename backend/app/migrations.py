@@ -10,9 +10,11 @@ from . import models
 
 def ensure_columns(engine: Engine) -> None:
     cols = {c["name"] for c in inspect(engine).get_columns("movements")}
-    if "to_location_id" not in cols:
-        with engine.begin() as conn:
+    with engine.begin() as conn:
+        if "to_location_id" not in cols:
             conn.execute(text("ALTER TABLE movements ADD COLUMN to_location_id VARCHAR(32)"))
+        if "note" not in cols:
+            conn.execute(text("ALTER TABLE movements ADD COLUMN note VARCHAR(80)"))
 
 
 def backfill_stock(db: Session) -> None:

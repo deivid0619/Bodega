@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { useMovements, useNeeds, useProducts, useReserve, useTop } from '../hooks/useApi'
+import { useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { api, ApiError } from '../api'
 import { downloadCsv, fmtTime } from '../utils'
 import Icon from '../components/Icon'
-import { Count, Empty, PageHead } from '../components/Bits'
+import { Count, Empty, PageHead, plural } from '../components/Bits'
 
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
 const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
@@ -21,6 +21,7 @@ export default function Summary() {
   const { data: top } = useTop()
   const { data: products } = useProducts()
   const { data: reserve } = useReserve()
+  const { data: facturas } = usePolling('/api/documents?kind=factura&limit=5', { interval: 30000 })
   const [filter, setFilter] = useState('all')
   const { data: moves } = useMovements(filter)
   const [resetArmed, setResetArmed] = useState(false)
@@ -141,6 +142,23 @@ export default function Summary() {
           <Empty icon="summary" title="Sin salidas todavía">Cuando registres salidas, aquí verás las referencias que más rotan.</Empty>
         )}
 
+        {facturas?.length > 0 && (
+          <>
+            <h2 className="h-sec">Facturas descontadas</h2>
+            <div className="card panel">
+              {facturas.map((f) => (
+                <div className="need" key={f.id}>
+                  <div className="need-t">
+                    <b className="mono">{f.number}</b>
+                    <small>{plural(f.lines.length, 'referencia', 'referencias')} · {f.user_name} · {fmtTime(f.created_at)}</small>
+                  </div>
+                  <div className="need-q dark"><b>{f.units}</b><span>salieron</span></div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         <h2 className="h-sec">Movimientos</h2>
         <div className="chips" style={{ marginTop: 0 }} role="toolbar" aria-label="Filtrar movimientos">
           {[['all', 'Todo'], ['in', 'Entradas'], ['out', 'Salidas'], ['set', 'Conteos']].map(([f, label]) => (
@@ -156,7 +174,7 @@ export default function Summary() {
                 <div className="move-q">{qtyText(m)}</div>
                 <div className="move-t">
                   <b>{m.product_name}{m.product_size ? ` · ${m.product_size}` : ''}</b>
-                  <small>{LABEL[m.type] || m.type} · {m.type === 'move' ? `${m.location_id} → ${m.to_location_id}` : m.location_id} · {m.user_name}</small>
+                  <small>{m.note || LABEL[m.type] || m.type} · {m.type === 'move' ? `${m.location_id} → ${m.to_location_id}` : m.location_id} · {m.user_name}</small>
                 </div>
                 <time dateTime={m.created_at} title={new Date(m.created_at).toLocaleString('es-CO')}>{fmtTime(m.created_at)}</time>
               </li>

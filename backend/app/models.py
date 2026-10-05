@@ -91,6 +91,7 @@ class Movement(Base):
     after = Column(Integer, nullable=False)   # total del codigo despues
     location_id = Column(String(32), nullable=False)  # ubicacion afectada (en "move", el origen)
     to_location_id = Column(String(32), nullable=True)  # solo "move": el destino
+    note = Column(String(80), nullable=True)  # ej. "Factura FEV21830"
     product_name = Column(String(200), nullable=False)
     product_size = Column(String(20), nullable=False, default="")
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -99,6 +100,22 @@ class Movement(Base):
     created_at = Column(DateTime(timezone=True), default=now, index=True)
 
     product = relationship("Product", back_populates="movements")
+
+
+class Document(Base):
+    """Factura o remision ya aplicada al inventario. La llave unica
+    (tipo, numero) impide descontar dos veces la misma factura."""
+    __tablename__ = "documents"
+    __table_args__ = (UniqueConstraint("kind", "number", name="uq_document_kind_number"),)
+
+    id = Column(Integer, primary_key=True)
+    kind = Column(String(20), nullable=False)  # factura | remision
+    number = Column(String(40), nullable=False)
+    lines = Column(JSON, nullable=False, default=list)  # [{sku, qty, location_id}]
+    units = Column(Integer, nullable=False, default=0)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_name = Column(String(120), nullable=False, default="")
+    created_at = Column(DateTime(timezone=True), default=now, index=True)
 
 
 class ReserveItem(Base):

@@ -13,6 +13,16 @@ from sqlalchemy.orm import Session
 from . import models, schemas
 from .layout_logic import all_locations
 
+# Colombia no cambia de hora en el año: siempre UTC-5
+BOGOTA = timezone(timedelta(hours=-5), "COT")
+
+
+def local_time(dt: datetime) -> datetime:
+    """La hora como se vive en la bodega (en la base todo esta en UTC)."""
+    if dt.tzinfo is None:  # SQLite la devuelve sin zona
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(BOGOTA)
+
 
 def loc_names(db: Session) -> dict[str, str]:
     locs = all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}
@@ -65,6 +75,7 @@ def movement_out(m: models.Movement, names: dict[str, str]) -> schemas.MovementO
         location_id=m.location_id, location_name=_name(names, m.location_id),
         to_location_id=m.to_location_id,
         to_location_name=_name(names, m.to_location_id) if m.to_location_id else None,
+        note=m.note,
         product_name=m.product_name, product_size=m.product_size, user_name=m.user_name,
         demo=m.demo, created_at=m.created_at,
     )

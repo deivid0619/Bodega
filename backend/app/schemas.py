@@ -1,11 +1,15 @@
 """Esquemas Pydantic: forma de los datos que entran y salen de la API."""
-from datetime import datetime
-from typing import Any, Literal, Optional
+from datetime import datetime, timezone
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field
 
 ElementType = Literal["bins", "shelf", "rack", "boxes", "table", "ladder", "balloons"]
 MovementType = Literal["in", "out", "set"]
+
+# Las fechas se guardan en UTC. SQLite (local) las devuelve sin zona y el
+# navegador las tomaria como hora de Colombia: se marcan como UTC al salir.
+UtcDatetime = Annotated[datetime, AfterValidator(lambda d: d if d.tzinfo else d.replace(tzinfo=timezone.utc))]
 
 
 # ---------- auth ----------
@@ -107,8 +111,8 @@ class ProductOut(BaseModel):
     demo: bool
     out_30d: int = 0
     stock: list[StockOut] = []  # cuanto hay en cada ubicacion (la principal primero)
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
 
 
 class ProductCreateIn(BaseModel):
@@ -155,17 +159,46 @@ class MovementOut(BaseModel):
     location_name: str
     to_location_id: Optional[str] = None
     to_location_name: Optional[str] = None
+    note: Optional[str] = None
     product_name: str
     product_size: str
     user_name: str
     demo: bool
-    created_at: datetime
+    created_at: UtcDatetime
 
 
 class MovementResult(BaseModel):
     product: ProductOut
     movement: MovementOut  # el ultimo; una salida repartida entre ubicaciones trae varios en "movements"
     movements: list[MovementOut] = []
+
+
+# ---------- documentos (factura / remision) ----------
+class DocumentLineIn(BaseModel):
+    sku: str = Field(min_length=1, max_length=64)
+    qty: int = Field(gt=0)
+    location_id: Optional[str] = None  # sin elegir: la principal y luego donde haya
+
+
+class FacturaIn(BaseModel):
+    number: str = Field(min_length=1, max_length=40)
+    lines: list[DocumentLineIn] = Field(min_length=1)
+
+
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    kind: str
+    number: str
+    units: int
+    lines: list[dict[str, Any]]
+    user_name: str
+    created_at: UtcDatetime
+
+
+class DocumentResult(BaseModel):
+    document: DocumentOut
+    products: list[ProductOut]
 
 
 # ---------- bodega de reserva ----------
@@ -176,8 +209,8 @@ class ReserveItemOut(BaseModel):
     name: str
     size: str
     qty: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDatetime
+    updated_at: UtcDatetime
 
 
 class ReserveItemCreateIn(BaseModel):

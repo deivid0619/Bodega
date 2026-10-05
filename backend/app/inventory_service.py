@@ -54,10 +54,10 @@ def _total(rows: dict[str, models.Stock]) -> int:
 
 
 def _movement(product: models.Product, user: models.User, type_: str, qty: int, before: int, after: int,
-              location_id: str, to_location_id: str | None = None) -> models.Movement:
+              location_id: str, to_location_id: str | None = None, note: str | None = None) -> models.Movement:
     return models.Movement(
         sku=product.sku, type=type_, qty=qty, before=before, after=after,
-        location_id=location_id, to_location_id=to_location_id,
+        location_id=location_id, to_location_id=to_location_id, note=note,
         product_name=product.name, product_size=product.size, user_id=user.id, user_name=user.name,
     )
 
@@ -85,7 +85,8 @@ def register_product(db: Session, sku: str, name: str, size: str, location_id: s
 
 
 def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.User,
-                   location_id: str | None = None) -> tuple[models.Product, list[models.Movement]]:
+                   location_id: str | None = None, note: str | None = None,
+                   commit: bool = True) -> tuple[models.Product, list[models.Movement]]:
     """Entrada, salida o conteo de un codigo.
 
     Entrada y conteo van a location_id o, si no se elige, a la ubicacion
@@ -118,7 +119,7 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
         _add(db, sku, rows, loc, delta)
         product.qty = _total(rows)
         logged = abs(delta) if type_ == "set" else qty
-        movements.append(_movement(product, user, type_, logged, before, product.qty, loc))
+        movements.append(_movement(product, user, type_, logged, before, product.qty, loc, note=note))
     elif type_ == "out":
         if qty < 1:
             raise InventoryError("La cantidad debe ser 1 o más.")
@@ -142,13 +143,17 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
         running = before
         for loc, take in plan:
             _add(db, sku, rows, loc, -take)
-            movements.append(_movement(product, user, "out", take, running, running - take, loc))
+            movements.append(_movement(product, user, "out", take, running, running - take, loc, note=note))
             running -= take
         product.qty = _total(rows)
     else:
         raise InventoryError("Tipo de movimiento inválido.")
 
     db.add_all(movements)
+    if not commit:
+        # parte de un documento: el que llama confirma todo junto (o nada)
+        db.flush()
+        return product, movements
     db.commit()
     db.refresh(product)
     for m in movements:
