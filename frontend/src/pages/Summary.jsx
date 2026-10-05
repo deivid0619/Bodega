@@ -6,7 +6,7 @@ import { useToast } from '../components/ToastContext'
 import { api, ApiError } from '../api'
 import { downloadCsv, fmtTime } from '../utils'
 import Icon from '../components/Icon'
-import { Empty, PageHead } from '../components/Bits'
+import { Count, Empty, PageHead } from '../components/Bits'
 
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
 const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
@@ -93,11 +93,11 @@ export default function Summary() {
         <PageHead title="Resumen" lede={date.charAt(0).toUpperCase() + date.slice(1)} />
 
         <div className="kpis">
-          <div className="kpi dark"><b>{products ? kpi.units : '–'}</b><span>prendas en bodega</span></div>
-          <div className="kpi"><b>{products ? kpi.refs : '–'}</b><span>referencias</span></div>
-          <button className="kpi" onClick={() => navigate('/reserve')}><b>{reserve ? kpi.reserve : '–'}</b><span>en reserva</span></button>
+          <div className="kpi dark"><b>{products ? <Count value={kpi.units} /> : '–'}</b><span>prendas en bodega</span></div>
+          <div className="kpi"><b>{products ? <Count value={kpi.refs} /> : '–'}</b><span>referencias</span></div>
+          <button className="kpi" onClick={() => navigate('/reserve')}><b>{reserve ? <Count value={kpi.reserve} /> : '–'}</b><span>en reserva</span></button>
           <a className={`kpi ${kpi.needs ? 'warn' : ''}`} href="#reponer" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <b>{needs ? kpi.needs : '–'}</b><span>por reponer</span>
+            <b>{needs ? <Count value={kpi.needs} /> : '–'}</b><span>por reponer</span>
           </a>
         </div>
 

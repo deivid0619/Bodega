@@ -6,7 +6,7 @@ import { applyLocally, moveStock } from '../hooks/useApi'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import MoveSheet from './MoveSheet'
 import Icon from './Icon'
-import { ProductThumb, Stepper, StockMeter } from './Bits'
+import { Count, ProductThumb, Stepper, StockMeter } from './Bits'
 
 function LocationSelect({ value, onChange, locations, currentName }) {
   return (
@@ -107,7 +107,7 @@ function Body({ sku, locations, onChanged, onLocate }) {
       <div className="prod-stock">
         <ProductThumb src={product.image_url} alt={product.name} size="lg" />
         <div className="count">
-          <b>{product.qty}</b>
+          <b><Count value={product.qty} /></b>
           <span>en total{product.min_qty > 0 ? ` · mínimo ${product.min_qty}` : ''}</span>
         </div>
       </div>

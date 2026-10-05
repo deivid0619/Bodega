@@ -1,4 +1,27 @@
+import { useLayoutEffect, useRef } from 'react'
 import Icon from './Icon'
+
+// Numero que gira como contador al cambiar: sube si aumenta, baja si
+// disminuye. Confirma el toque en + / − sin distraer (160 ms).
+export function Count({ value, className }) {
+  const ref = useRef(null)
+  const prev = useRef(value)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || prev.current === value || typeof value !== 'number' || typeof prev.current !== 'number') {
+      prev.current = value
+      return
+    }
+    const up = value > prev.current
+    prev.current = value
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    el.animate(
+      [{ transform: `translateY(${up ? 38 : -38}%)`, opacity: 0.2 }, { transform: 'none', opacity: 1 }],
+      { duration: 160, easing: 'cubic-bezier(0.23, 1, 0.32, 1)' },
+    )
+  }, [value])
+  return <span ref={ref} className={className} style={{ display: 'inline-block' }}>{value}</span>
+}
 
 export function ProductThumb({ src, alt = '', size }) {
   return (
@@ -14,7 +37,7 @@ export function Stepper({ value, onMinus, onPlus, minusLabel = 'Restar 1', plusL
       <button type="button" onClick={onMinus} aria-label={minusLabel} disabled={disabledMinus}>
         <Icon name="minus" size={large ? 20 : 17} stroke={2.4} />
       </button>
-      {children || <output>{value}</output>}
+      {children || <output><Count value={value} /></output>}
       <button type="button" onClick={onPlus} aria-label={plusLabel}>
         <Icon name="plus" size={large ? 20 : 17} stroke={2.4} />
       </button>

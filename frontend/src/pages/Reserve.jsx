@@ -6,7 +6,7 @@ import { locationGroups } from '../locationGroups'
 import NewReserveModal from '../components/NewReserveModal'
 import ReserveTransferModal from '../components/ReserveTransferModal'
 import Icon from '../components/Icon'
-import { Empty, PageHead, ProductThumb, Stepper, plural } from '../components/Bits'
+import { Count, Empty, PageHead, ProductThumb, Stepper, plural } from '../components/Bits'
 
 export default function Reserve() {
   const { data: items } = useReserve()
@@ -33,7 +33,7 @@ export default function Reserve() {
         <PageHead title="Reserva" lede="Mercancía guardada aparte. De aquí se surte la bodega principal." />
 
         <div className="res-hero">
-          <b>{items ? total : '–'}</b>
+          <b>{items ? <Count value={total} /> : '–'}</b>
           <span>{total === 1 ? 'prenda' : 'prendas'} en reserva<br />{items ? plural(items.length, 'referencia', 'referencias') : ''}</span>
         </div>
         <button className="btn btn-lime btn-lg btn-block" style={{ marginTop: 12 }} onClick={() => setAdding(true)}>
@@ -46,7 +46,7 @@ export default function Reserve() {
             [0, 1].map((i) => <div key={i} className="skeleton" />)
           ) : items.length ? (
             items.map((item, i) => (
-              <article className="card res-card rise" key={item.id} style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
+              <article className="card res-card" key={item.id}>
                 <ProductThumb size="sm" />
                 <div style={{ minWidth: 0 }}>
                   <h3 className="res-name">{item.name}</h3>

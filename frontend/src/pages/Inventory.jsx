@@ -4,7 +4,7 @@ import { useLayout, useProducts } from '../hooks/useApi'
 import { locationGroups } from '../locationGroups'
 import ProductModal from '../components/ProductModal'
 import Icon from '../components/Icon'
-import { Empty, PageHead, ProductThumb, SearchField, plural } from '../components/Bits'
+import { Count, Empty, PageHead, ProductThumb, SearchField, plural } from '../components/Bits'
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', 'XXXL', '4XL']
 const sizeIdx = (s) => { const i = SIZE_ORDER.indexOf(s); return i < 0 ? 99 : i }
@@ -71,14 +71,14 @@ export default function Inventory() {
             [0, 1, 2].map((i) => <div key={i} className="skeleton" />)
           ) : groups.length ? (
             groups.map((g, i) => (
-              <article className="card ref rise" key={g.base} style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}>
+              <article className="card ref" key={g.base}>
                 <ProductThumb src={g.image} alt={g.name} />
                 <div style={{ minWidth: 0 }}>
                   <h3 className="ref-name">{g.name}</h3>
                   <div className="ref-code"><span className="code">{g.base}</span></div>
                 </div>
                 <div className="ref-total">
-                  <b>{g.total}</b>
+                  <b><Count value={g.total} /></b>
                   <span>{g.total === 1 ? 'prenda' : 'prendas'}</span>
                 </div>
                 <div className="ref-sizes">

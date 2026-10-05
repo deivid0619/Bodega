@@ -1,35 +1,52 @@
-import { NavLink } from 'react-router-dom'
+import { flushSync } from 'react-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { useNeeds } from '../hooks/useApi'
 import Icon from './Icon'
 
-const cls = ({ isActive }) => 'dock-item' + (isActive ? ' active' : '')
+const ORDER = ['/', '/inventory', '/scan', '/reserve', '/summary']
 
 export default function NavBar() {
   const { data: needs } = useNeeds()
+  const navigate = useNavigate()
   const needCount = needs?.length || 0
+
+  // Cambio de pestana con View Transitions: el contenido se desliza hacia el
+  // lado de la pestana elegida y el indicador lima viaja entre pestanas.
+  const go = (to) => (e) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return
+    e.preventDefault()
+    const here = window.location.pathname
+    if (here === to) return
+    document.documentElement.dataset.nav = ORDER.indexOf(to) >= ORDER.indexOf(here) ? 'fwd' : 'back'
+    if (!document.startViewTransition || document.visibilityState !== 'visible') return navigate(to)
+    const t = document.startViewTransition(() => flushSync(() => navigate(to)))
+    // si el navegador cancela la animacion, la navegacion igual ocurre
+    t.ready.catch(() => {})
+    t.finished.catch(() => {})
+  }
+
+  const item = (to, icon, label, extra) => (
+    <NavLink to={to} end={to === '/'} onClick={go(to)} className={({ isActive }) => 'dock-item' + (isActive ? ' active' : '')}>
+      {({ isActive }) => (
+        <>
+          {isActive && <i className="dock-ind" aria-hidden="true" />}
+          <Icon name={icon} />
+          {label}
+          {extra}
+        </>
+      )}
+    </NavLink>
+  )
 
   return (
     <nav className="dock" aria-label="Secciones">
-      <NavLink to="/" end className={cls}>
-        <Icon name="warehouse" />
-        Bodega
-      </NavLink>
-      <NavLink to="/inventory" className={cls}>
-        <Icon name="hanger" />
-        Inventario
-      </NavLink>
-      <NavLink to="/scan" className={({ isActive }) => 'dock-scan' + (isActive ? ' active' : '')} aria-label="Escanear">
+      {item('/', 'warehouse', 'Bodega')}
+      {item('/inventory', 'hanger', 'Inventario')}
+      <NavLink to="/scan" onClick={go('/scan')} className={({ isActive }) => 'dock-scan' + (isActive ? ' active' : '')} aria-label="Escanear">
         <Icon name="scan" size={27} stroke={2.1} />
       </NavLink>
-      <NavLink to="/reserve" className={cls}>
-        <Icon name="reserve" />
-        Reserva
-      </NavLink>
-      <NavLink to="/summary" className={cls}>
-        <Icon name="summary" />
-        Resumen
-        {needCount > 0 && <span className="dock-badge">{needCount}</span>}
-      </NavLink>
+      {item('/reserve', 'reserve', 'Reserva')}
+      {item('/summary', 'summary', 'Resumen', needCount > 0 && <span className="dock-badge">{needCount}</span>)}
     </nav>
   )
 }

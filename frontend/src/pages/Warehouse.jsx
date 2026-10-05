@@ -8,7 +8,7 @@ import LocationSheet from '../components/LocationSheet'
 import EditPanel from '../components/EditPanel'
 import ProductModal from '../components/ProductModal'
 import Icon from '../components/Icon'
-import { ProductThumb, SearchField } from '../components/Bits'
+import { Count, ProductThumb, SearchField } from '../components/Bits'
 import { locationGroups } from '../locationGroups'
 
 const STORAGE = ['bins', 'shelf', 'rack', 'boxes']
@@ -228,7 +228,7 @@ export default function Warehouse() {
           )}
           {!showResults && (
             <div className="wh-stats">
-              <span className="pill dark"><b>{units}</b>prendas</span>
+              <span className="pill dark"><b><Count value={units} /></b>prendas</span>
               <span className="pill"><b>{withStock}</b>{withStock === 1 ? 'código' : 'códigos'}</span>
               {needCount > 0 && (
                 <button className="pill warn" onClick={() => navigate('/summary')}><i /><b>{needCount}</b>por reponer</button>
