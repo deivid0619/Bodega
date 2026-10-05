@@ -21,13 +21,19 @@ cuentas por persona.
   mismo de pigmalionmoto.com.
 - **Una prenda en varias ubicaciones**, con traslados entre ellas.
 - **Recibir una remisión**: la foto de la orden queda a la vista y se cuenta
-  por talla lo que llegó. Va a la bodega o a la reserva, con los pendientes
-  del proveedor y las entregas parciales de una misma orden.
+  por talla lo que llegó. Va a la bodega, a la reserva o de paso, con notas,
+  los pendientes del proveedor y las entregas parciales de una misma orden.
 - **Descontar una factura**: foto de la factura impresa. La app lee los
   códigos y las cantidades en el mismo celular (Tesseract), se revisa y se
   descuenta todo junto. La misma factura no se aplica dos veces.
+- **De paso**: lo que entra solo para despacharse y no es inventario. Las
+  prendas con código quedan en Despacho y salen primero. Las cajas sueltas,
+  canastas o bolsas se anotan con de quién son y qué hacer, y salen de la
+  lista con «Ya salió».
 - **Reserva**: mercancía guardada aparte, con la lista «Para llevar a la
   bodega» (lo agotado o en su mínimo que hay guardado).
+- **Inventario**: cada referencia con lo que hay en la bodega, lo guardado en
+  la reserva y el total de las dos.
 - **Conteo por ubicación**: muestra lo que falta y lo que sobra, y corrige
   solo esa ubicación.
 - **Resumen y reportes**:

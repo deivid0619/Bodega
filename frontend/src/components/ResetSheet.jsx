@@ -53,7 +53,7 @@ function Body() {
         subtitle="Para empezar a meter los datos reales de la bodega."
       />
       <div className="reset-box">
-        <p><b>Se borra:</b> todas las prendas y sus ubicaciones, la reserva, el historial y las facturas, remisiones y conteos.</p>
+        <p><b>Se borra:</b> todas las prendas y sus ubicaciones, la reserva, lo anotado de paso, el historial y las facturas, remisiones y conteos.</p>
         <p><b>Se conserva:</b> las cuentas de usuario y la distribución de la bodega (percheros, canastas, estanterías).</p>
       </div>
       <button className="btn btn-ghost btn-block" style={{ marginTop: 14 }} onClick={backup}>

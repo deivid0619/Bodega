@@ -68,8 +68,10 @@ def value(db: Session = Depends(get_db), _: models.User = Depends(get_current_us
 def dispatch(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     """Lo que esta de paso, esperando salir."""
     rows = inv.dispatch_list(db)
-    outs = ser.products_out(db, [p for p, _, _ in rows])
-    return [schemas.DispatchOut(product=o, qty=q, since=s) for o, (_, q, s) in zip(outs, rows)]
+    outs = ser.products_out(db, [p for p, *_ in rows])
+    return [schemas.DispatchOut(product=o, qty=q, since=s, doc_number=d.number if d else None,
+                                doc_supplier=d.supplier if d else None, doc_notes=d.notes if d else None)
+            for o, (_, q, s, d) in zip(outs, rows)]
 
 
 @router.get("/top", response_model=list[schemas.TopOut])

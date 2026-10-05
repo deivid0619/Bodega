@@ -9,11 +9,12 @@ export function ToastProvider({ children }) {
   const [shown, setShown] = useState(false)
   const timer = useRef(null)
 
-  const showToast = useCallback((message, kind = 'ok') => {
+  // action = { label, onClick }: un boton en el aviso (ej. Deshacer)
+  const showToast = useCallback((message, kind = 'ok', action = null) => {
     clearTimeout(timer.current)
-    setToast({ message, kind })
+    setToast({ message, kind, action })
     setShown(true)
-    timer.current = setTimeout(() => setShown(false), kind === 'err' ? 4200 : 3000)
+    timer.current = setTimeout(() => setShown(false), action ? 6000 : kind === 'err' ? 4200 : 3000)
   }, [])
 
   return (
@@ -24,6 +25,19 @@ export function ToastProvider({ children }) {
           <>
             <span className="toast-icon"><Icon name={ICON[toast.kind] || 'check'} size={15} stroke={2.6} /></span>
             <span>{toast.message}</span>
+            {toast.action && (
+              <button
+                type="button"
+                className="toast-act"
+                onClick={() => {
+                  clearTimeout(timer.current)
+                  setShown(false)
+                  toast.action.onClick()
+                }}
+              >
+                {toast.action.label}
+              </button>
+            )}
           </>
         )}
       </div>

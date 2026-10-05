@@ -8,6 +8,7 @@ import { downloadCsv, fmtTime } from '../utils'
 import Icon from '../components/Icon'
 import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
+import PassingSection from '../components/Passing'
 import { Count, Empty, PageHead, plural } from '../components/Bits'
 
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
@@ -145,28 +146,7 @@ export default function Summary() {
           <Empty icon="check" title="Todo está sobre el mínimo">Cuando una talla llegue a su stock mínimo, aparece aquí lista para pedir.</Empty>
         )}
 
-        {passing?.length > 0 && (
-          <>
-            <h2 className="h-sec">Por despachar <small>{plural(passing.reduce((s, d) => s + d.qty, 0), 'prenda de paso', 'prendas de paso')}</small></h2>
-            <div className="card panel">
-              {passing.map((d) => {
-                const days = d.since ? Math.floor((Date.now() - new Date(d.since).getTime()) / 86_400_000) : null
-                return (
-                  <div className="need" key={d.product.sku}>
-                    <div className="need-t">
-                      <b>{d.product.name}{d.product.size ? ` · ${d.product.size}` : ''}</b>
-                      <small>
-                        <span className="mono">{d.product.sku}</span>
-                        {days != null && ` · llegó ${days === 0 ? 'hoy' : days === 1 ? 'ayer' : `hace ${days} días`}`}
-                      </small>
-                    </div>
-                    <div className="need-q idle"><b>{d.qty}</b><span>de paso</span></div>
-                  </div>
-                )
-              })}
-            </div>
-          </>
-        )}
+        <PassingSection />
 
         <h2 className="h-sec">Lo que más sale <small>últimos 30 días</small></h2>
         {top && top.length ? (

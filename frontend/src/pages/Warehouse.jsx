@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext'
 import { useLayout, useProducts } from '../hooks/useApi'
 import WarehouseCanvas from '../components/WarehouseCanvas'
 import LocationSheet from '../components/LocationSheet'
-import OrbitDial from '../components/OrbitDial'
 import EditPanel from '../components/EditPanel'
 import ProductModal from '../components/ProductModal'
 import Icon from '../components/Icon'
@@ -247,8 +246,6 @@ export default function Warehouse() {
           <button className="btn btn-lime btn-sm" onClick={exitEdit}>Listo</button>
         </div>
       )}
-
-      {!editMode && !selLoc && layout && <OrbitDial onNudge={(n) => sceneRef.current?.nudge(n)} />}
 
       {!editMode && !selLoc && (
         <div className="wh-bottom">

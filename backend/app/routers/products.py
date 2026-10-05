@@ -131,8 +131,8 @@ def delete_product(sku: str, db: Session = Depends(get_db), _: models.User = Dep
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 def reset_inventory(confirm: str = "", db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
-    """Empezar de cero: borra prendas, existencias, historial, reserva y los
-    documentos (facturas, remisiones, conteos). Conserva las cuentas y la
+    """Empezar de cero: borra prendas, existencias, historial, reserva, lo de
+    paso y los documentos (facturas, remisiones, conteos). Conserva las cuentas y la
     distribución de la bodega. Pide la palabra BORRAR para que no se
     dispare por accidente."""
     if confirm.strip().upper() != "BORRAR":
@@ -142,4 +142,5 @@ def reset_inventory(confirm: str = "", db: Session = Depends(get_db), _: models.
     db.query(models.Product).delete()
     db.query(models.ReserveItem).delete()
     db.query(models.Document).delete()
+    db.query(models.Parcel).delete()
     db.commit()

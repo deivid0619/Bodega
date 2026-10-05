@@ -1,9 +1,10 @@
 import { forwardRef, useState } from 'react'
 import { ApiError } from '../api'
-import { moveStock } from '../hooks/useApi'
+import { moveStock, usePolling } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader } from './Sheet'
 import MoveSheet from './MoveSheet'
+import ParcelSheet, { parcelIcon, parcelName, waited } from './ParcelSheet'
 import Icon from './Icon'
 import { ProductThumb, Stepper, plural } from './Bits'
 
@@ -23,6 +24,9 @@ const LocationSheet = forwardRef(function LocationSheet(
 ) {
   const showToast = useToast()
   const [moving, setMoving] = useState(null)
+  const [parcelOpen, setParcelOpen] = useState(null) // 'new' o lo anotado que se esta viendo
+  const { data: parcels } = usePolling('/api/parcels', { interval: 20000 })
+  const here = (parcels || []).filter((x) => x.location_id === locationId)
   const items = itemsAt(products, locationId)
     .sort((a, b) => (a.p.sku === highlightSku ? -1 : b.p.sku === highlightSku ? 1 : b.here - a.here))
   const units = items.reduce((t, i) => t + i.here, 0)
@@ -47,8 +51,28 @@ const LocationSheet = forwardRef(function LocationSheet(
           </div>
         }
         title={locationName}
-        subtitle={items.length ? `${plural(units, 'prenda', 'prendas')} aquí · ${plural(items.length, 'código', 'códigos')}` : 'Vacía en el sistema'}
+        subtitle={[
+          items.length && `${plural(units, 'prenda', 'prendas')} aquí · ${plural(items.length, 'código', 'códigos')}`,
+          here.length && plural(here.length, 'bulto de paso', 'bultos de paso'),
+        ].filter(Boolean).join(' · ') || 'Vacía en el sistema'}
       />
+      {here.length > 0 && (
+        <div className="loc-parcels">
+          {here.map((x) => {
+            const w = waited(x.created_at)
+            return (
+              <button type="button" className="loc-parcel" key={x.id} onClick={() => setParcelOpen(x)}>
+                <span className="parcel-ico"><Icon name={parcelIcon(x)} size={18} /></span>
+                <span className="need-t">
+                  <b>De paso · {parcelName(x)}{x.owner ? ` · ${x.owner}` : ''}</b>
+                  {x.notes && <small className="note wrap">{x.notes}</small>}
+                  <small><span className={w.late ? 'late' : ''}>{w.text}</span> · {x.user_name}</small>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
       {items.length ? (
         <div>
           {items.map(({ p, here }) => {
@@ -82,6 +106,9 @@ const LocationSheet = forwardRef(function LocationSheet(
       ) : (
         <p className="muted" style={{ padding: '6px 0 4px' }}>Escanea prendas con esta ubicación elegida y aparecen aquí.</p>
       )}
+      <button type="button" className="link-btn loc-note" onClick={() => setParcelOpen('new')}>
+        <Icon name="plus" size={14} stroke={2.4} />Anotar algo de paso aquí
+      </button>
       <div className="btn-row" style={{ marginTop: 16 }}>
         <button className="btn btn-ghost" onClick={onCount}>
           <Icon name="equals" size={19} />Contar
@@ -91,6 +118,14 @@ const LocationSheet = forwardRef(function LocationSheet(
         </button>
       </div>
       {moving && <MoveSheet product={moving} from={locationId} locations={locations} onClose={() => setMoving(null)} />}
+      {parcelOpen && (
+        <ParcelSheet
+          parcel={parcelOpen === 'new' ? null : parcelOpen}
+          defaultLocation={locationId}
+          showMap={false}
+          onClose={() => setParcelOpen(null)}
+        />
+      )}
     </Sheet>
   )
 })

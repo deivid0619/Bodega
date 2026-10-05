@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ToastContext'
-import { applyLocally, moveStock } from '../hooks/useApi'
+import { applyLocally, moveStock, useReserve } from '../hooks/useApi'
+import { reserveIndex, stockSplit } from '../utils'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import MoveSheet from './MoveSheet'
 import Icon from './Icon'
@@ -25,6 +27,8 @@ function Body({ sku, locations, onChanged, onLocate }) {
   const { isAdmin } = useAuth()
   const showToast = useToast()
   const { close } = useSheet()
+  const navigate = useNavigate()
+  const { data: reserve } = useReserve()
   const [product, setProduct] = useState(null)
   const [form, setForm] = useState(null)
   const [armed, setArmed] = useState(false)
@@ -94,7 +98,8 @@ function Body({ sku, locations, onChanged, onLocate }) {
     )
   }
 
-  const low = product.min_qty > 0 && product.qty <= product.min_qty
+  const split = stockSplit(product, reserveIndex(reserve))
+  const low = product.min_qty > 0 && split.bodega <= product.min_qty
   const places = product.stock?.some((s) => s.location_id === product.location_id)
     ? product.stock
     : [{ location_id: product.location_id, location_name: product.location_name, qty: 0 }, ...(product.stock || [])]
@@ -107,16 +112,25 @@ function Body({ sku, locations, onChanged, onLocate }) {
       <div className="prod-stock">
         <ProductThumb src={product.image_url} alt={product.name} size="lg" />
         <div className="count">
-          <b><Count value={product.qty} /></b>
-          <span>en total{product.min_qty > 0 ? ` · mínimo ${product.min_qty}` : ''}</span>
+          <b><Count value={split.total} /></b>
+          <span>{split.reserve > 0 ? 'entre bodega y reserva' : 'en total'}{product.min_qty > 0 ? ` · mínimo ${product.min_qty}` : ''}</span>
         </div>
+      </div>
+      <div className="prod-split">
+        <div><span>En la bodega</span><b><Count value={split.bodega} /></b></div>
+        {split.reserve > 0 ? (
+          <button type="button" onClick={() => { close(); navigate('/reserve') }}><span>En la reserva</span><b><Count value={split.reserve} /></b></button>
+        ) : (
+          <div><span>En la reserva</span><b>0</b></div>
+        )}
+        {split.passing > 0 && <div><span>De paso</span><b>{split.passing}</b></div>}
       </div>
       <div className="prod-note">
         <span>{product.out_30d} {product.out_30d === 1 ? 'salió' : 'salieron'} en los últimos 30 días</span>
         {product.min_qty > 0 && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             {low && <span className="tag tag-warn">Por reponer</span>}
-            <StockMeter qty={product.qty} min={product.min_qty} />
+            <StockMeter qty={split.bodega} min={product.min_qty} />
           </span>
         )}
       </div>

@@ -135,7 +135,7 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
     if not any(q or p for q, p in merged.values()):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "La remisión no tiene cantidades.")
 
-    note = f"Remisión {number}"
+    note = f"{inv.REMISION_NOTE}{number}"
     out_lines: list[dict] = []
     touched: list[str] = []
     to_bodega = payload.destination == "bodega"

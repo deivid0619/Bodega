@@ -7,6 +7,7 @@ import { locationGroups } from '../locationGroups'
 import NewProductModal from '../components/NewProductModal'
 import FacturaSheet from '../components/FacturaSheet'
 import RemisionSheet from '../components/RemisionSheet'
+import ParcelSheet from '../components/ParcelSheet'
 import Icon from '../components/Icon'
 import { PageHead, Stepper } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
@@ -41,6 +42,7 @@ export default function Scan() {
   const [lastMove, setLastMove] = useState(null)
   const [factura, setFactura] = useState(false)
   const [remision, setRemision] = useState(false)
+  const [parcel, setParcel] = useState(false)
   const [session, setSession] = useState([])
   // '' = automatica (la ubicacion principal de cada codigo); null = aun sin decidir
   const [place, setPlace] = useState(null)
@@ -86,10 +88,10 @@ export default function Scan() {
   const { status, start, stop } = scanner
   const camOn = status === 'on'
 
-  // con un formulario encima (prenda nueva, factura, remision) la camara y
+  // con un formulario encima (prenda nueva, factura, remision, algo de paso) la camara y
   // la linterna se apagan; al cerrar la prenda nueva, se vuelve a abrir
   const resumeRef = useRef(false)
-  const covered = !!pendingSku || factura || remision
+  const covered = !!pendingSku || factura || remision || parcel
   useEffect(() => {
     if (covered && camOn) {
       resumeRef.current = !!pendingSku
@@ -136,6 +138,11 @@ export default function Scan() {
           <button className="doc-card" onClick={() => setFactura(true)}>
             <span className="doc-ico"><Icon name="receipt" size={22} /></span>
             <span className="doc-card-t"><b>Descontar factura</b><small>Lo que salió en cajas</small></span>
+          </button>
+          <button className="doc-card light wide" onClick={() => setParcel(true)}>
+            <span className="doc-ico"><Icon name="box" size={22} /></span>
+            <span className="doc-card-t"><b>Anotar algo de paso</b><small>Caja suelta, canasta…: de quién es y qué hacer</small></span>
+            <Icon name="arrowRight" size={18} />
           </button>
         </div>
 
@@ -248,6 +255,7 @@ export default function Scan() {
 
       {factura && <FacturaSheet onClose={() => setFactura(false)} />}
       {remision && <RemisionSheet onClose={() => setRemision(false)} />}
+      {parcel && <ParcelSheet defaultLocation={place || undefined} onClose={() => setParcel(false)} />}
       {pendingSku && (
         <NewProductModal
           sku={pendingSku}

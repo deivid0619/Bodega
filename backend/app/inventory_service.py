@@ -13,6 +13,10 @@ from . import models
 from .layout_logic import DISPATCH, all_locations
 
 
+# nota de los movimientos de una remision: "Remisión OPR123"
+REMISION_NOTE = "Remisión "
+
+
 class InventoryError(Exception):
     """Un movimiento no se pudo aplicar (cantidad invalida, no hay
     suficiente existencia, ubicacion inexistente...)."""
@@ -357,16 +361,25 @@ def dead_stock(db: Session, days: int = 60) -> list[tuple[models.Product, dateti
     return out
 
 
-def dispatch_list(db: Session) -> list[tuple[models.Product, int, datetime | None]]:
-    """Lo que esta de paso en Despacho: (prenda, cuantas, cuando llego la ultima)."""
+def dispatch_list(db: Session) -> list[tuple[models.Product, int, datetime | None, models.Document | None]]:
+    """Lo que esta de paso en Despacho: (prenda, cuantas, cuando llego la
+    ultima, la remision con que llego, si fue con una)."""
     rows = db.query(models.Stock).filter(models.Stock.location_id == DISPATCH, models.Stock.qty > 0).all()
     if not rows:
         return []
-    arrived = dict(db.query(models.Movement.sku, func.max(models.Movement.created_at))
-                   .filter(models.Movement.type.in_(("in", "new")), models.Movement.location_id == DISPATCH)
-                   .group_by(models.Movement.sku).all())
-    products = {p.sku: p for p in db.query(models.Product).filter(models.Product.sku.in_([r.sku for r in rows])).all()}
-    out = [(products[r.sku], r.qty, _aware(arrived[r.sku]) if arrived.get(r.sku) else None) for r in rows if r.sku in products]
+    skus = [r.sku for r in rows]
+    last: dict[str, models.Movement] = {}
+    for m in (db.query(models.Movement)
+              .filter(models.Movement.sku.in_(skus), models.Movement.type.in_(("in", "new")),
+                      models.Movement.location_id == DISPATCH)
+              .order_by(models.Movement.created_at.desc(), models.Movement.id.desc())):
+        last.setdefault(m.sku, m)
+    number = {sku: m.note[len(REMISION_NOTE):] for sku, m in last.items() if (m.note or "").startswith(REMISION_NOTE)}
+    docs = {d.number: d for d in db.query(models.Document).filter(
+        models.Document.kind == "remision", models.Document.number.in_(set(number.values())))} if number else {}
+    products = {p.sku: p for p in db.query(models.Product).filter(models.Product.sku.in_(skus)).all()}
+    out = [(products[r.sku], r.qty, _aware(last[r.sku].created_at) if r.sku in last else None, docs.get(number.get(r.sku)))
+           for r in rows if r.sku in products]
     out.sort(key=lambda t: (t[2] is None, t[2] or datetime.now(timezone.utc)))  # lo que mas lleva, primero
     return out
 

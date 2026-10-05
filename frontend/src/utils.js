@@ -1,3 +1,5 @@
+import { DISPATCH } from './locationGroups'
+
 const SIZE_RE = /(XXXL|XXL|4XL|3XL|2XL|XL|XS|S|M|L)$/
 
 // orden natural de tallas: XS, S, M, L, XL, 2XL... y luego las numericas (06, 30, 32)
@@ -27,6 +29,32 @@ export function fmtTime(iso) {
   yesterday.setDate(today.getDate() - 1)
   if (dt.toDateString() === yesterday.toDateString()) return 'ayer'
   return dt.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '')
+}
+
+// Lo que hay de un codigo en la reserva: con su codigo o, si se guardo sin
+// codigo, con la misma referencia y talla (igual que en el servidor).
+export function reserveIndex(items) {
+  const bySku = new Map()
+  const byRef = new Map()
+  for (const it of items || []) {
+    if (!(it.qty > 0)) continue
+    const [map, key] = it.sku ? [bySku, it.sku] : [byRef, `${it.name}|${it.size || ''}`]
+    map.set(key, [...(map.get(key) || []), it])
+  }
+  return { bySku, byRef }
+}
+
+export function reserveFor(p, index) {
+  return [...(index.bySku.get(p.sku) || []), ...(index.byRef.get(`${p.name}|${p.size || ''}`) || [])]
+}
+
+// Cuanto hay de un codigo: en la bodega (sin lo de paso), de paso y en la
+// reserva. El total es bodega + reserva: lo de paso no es de la empresa.
+export function stockSplit(p, index) {
+  const passing = (p.stock || []).reduce((t, s) => t + (s.location_id === DISPATCH ? s.qty : 0), 0)
+  const reserve = index ? reserveFor(p, index).reduce((t, it) => t + it.qty, 0) : 0
+  const bodega = p.qty - passing
+  return { bodega, passing, reserve, total: bodega + reserve }
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
