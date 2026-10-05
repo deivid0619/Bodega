@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../hooks/useApi'
+import { refreshInventory, useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { api, ApiError } from '../api'
 import { downloadCsv, fmtTime } from '../utils'
@@ -65,6 +65,15 @@ export default function Summary() {
       showToast('Inventario copiado. Pégalo en Excel o Google Sheets.')
     } catch {
       showToast('Este dispositivo no dejó copiar. Usa “Descargar”.', 'err')
+    }
+  }
+  const syncPhotos = async () => {
+    try {
+      const r = await api.post('/api/catalog/sync-images')
+      refreshInventory()
+      showToast(r.updated ? `${plural(r.updated, 'foto agregada', 'fotos agregadas')} desde la tienda` : 'Las prendas de la tienda ya tienen su foto')
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No se pudo leer la tienda.', 'err')
     }
   }
   const toggleDemo = async () => {
@@ -222,6 +231,9 @@ export default function Summary() {
           <button className="btn btn-ghost btn-block" onClick={copyInventory}><Icon name="copy" size={18} />Copiar inventario</button>
           {isAdmin && (
             <>
+              <button className="btn btn-quiet btn-block" onClick={syncPhotos}>
+                <Icon name="download" size={18} />Traer fotos de la tienda
+              </button>
               <button className="btn btn-quiet btn-block" onClick={toggleDemo}>
                 {demoOn === true ? 'Quitar datos de prueba' : 'Cargar datos de prueba'}
               </button>

@@ -29,6 +29,9 @@ export function fmtTime(iso) {
   return dt.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '')
 }
 
+const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })
+export const money = (n) => COP.format(n || 0)
+
 export function downloadCsv(text, filename) {
   const blob = new Blob([text], { type: 'text/csv;charset=utf-8' })
   const a = document.createElement('a')

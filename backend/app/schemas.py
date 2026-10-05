@@ -294,6 +294,36 @@ class DeadOut(BaseModel):
     last_out: Optional[UtcDatetime] = None  # None: nunca ha salido
 
 
+class CatalogItemOut(BaseModel):
+    sku: str
+    name: str
+    size: str
+    price: int
+    image: Optional[str] = None
+
+
+class CatalogSizeOut(BaseModel):
+    size: str
+    sku: str
+    price: int
+
+
+class CatalogProductOut(BaseModel):
+    name: str
+    image: Optional[str] = None
+    sizes: list[CatalogSizeOut]
+
+
+class ValueOut(BaseModel):
+    available: bool  # se pudo leer la tienda
+    value: int  # bodega: prendas x precio de la tienda
+    units_priced: int
+    units_total: int
+    reserve_value: int
+    reserve_units_priced: int
+    reserve_units_total: int
+
+
 class TopOut(BaseModel):
     sku: str
     name: str

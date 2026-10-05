@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from .. import catalog
 from .. import inventory_service as inv
 from .. import models, schemas
 from .. import serializers as ser
@@ -35,6 +36,28 @@ def dead(days: int = Query(default=60, ge=7, le=365), db: Session = Depends(get_
     rows = inv.dead_stock(db, days=days)
     outs = ser.products_out(db, [p for p, _ in rows])
     return [schemas.DeadOut(product=o, last_out=last) for o, (_, last) in zip(outs, rows)]
+
+
+@router.get("/value", response_model=schemas.ValueOut)
+def value(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Cuanto vale lo que hay, a precio de la tienda (solo los codigos que
+    estan en la tienda; el resto se cuenta aparte)."""
+    cat = catalog.items()
+    out = {"available": bool(cat), "value": 0, "units_priced": 0, "units_total": 0,
+           "reserve_value": 0, "reserve_units_priced": 0, "reserve_units_total": 0}
+    for p in db.query(models.Product).filter(models.Product.qty > 0).all():
+        out["units_total"] += p.qty
+        price = (cat.get(p.sku) or {}).get("price") or 0
+        if price:
+            out["units_priced"] += p.qty
+            out["value"] += p.qty * price
+    for it in db.query(models.ReserveItem).filter(models.ReserveItem.qty > 0).all():
+        out["reserve_units_total"] += it.qty
+        price = (cat.get(it.sku) or {}).get("price") or 0 if it.sku else 0
+        if price:
+            out["reserve_units_priced"] += it.qty
+            out["reserve_value"] += it.qty * price
+    return out
 
 
 @router.get("/top", response_model=list[schemas.TopOut])

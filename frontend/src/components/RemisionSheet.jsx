@@ -96,9 +96,28 @@ function PhotoZoom({ src, onClose }) {
   )
 }
 
-function RefPicker({ refs, onPick, onCancel }) {
+function RefPicker({ refs, known, onPick, onCancel }) {
   const [q, setQ] = useState('')
+  const [shop, setShop] = useState([])
   const term = q.trim().toUpperCase()
+  // referencias de la tienda que aun no estan (todas) en la bodega
+  useEffect(() => {
+    if (term.length < 3) { setShop([]); return undefined }
+    const t = setTimeout(() => {
+      api.get(`/api/catalog/search?q=${encodeURIComponent(term)}&limit=6`)
+        .then((list) => setShop(list.filter((g) => !g.sizes.every((s) => known.has(s.sku)))))
+        .catch(() => setShop([]))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [term, known])
+  const fromShop = (g) => ({
+    name: g.name,
+    shop: true,
+    sizes: new Map(g.sizes.map((s) => {
+      const p = known.get(s.sku)
+      return [s.size, { size: s.size, sku: s.sku, have: p?.qty || 0, bodega: p?.qty || 0, reserva: 0 }]
+    })),
+  })
   const results = useMemo(() => {
     if (term.length < 2) return []
     const code = norm(term)
@@ -119,6 +138,16 @@ function RefPicker({ refs, onPick, onCancel }) {
                 <small>
                   {plural(r.sizes.size, 'talla', 'tallas')} · {r.bodega} en bodega{r.reserva ? ` · ${r.reserva} en reserva` : ''}
                 </small>
+              </span>
+              <Icon name="plus" size={18} stroke={2.2} />
+            </button>
+          ))}
+          {shop.map((g) => (
+            <button key={`tienda-${g.name}`} type="button" className="ref-result shop" onClick={() => onPick(fromShop(g))}>
+              {g.image ? <img src={g.image} alt="" /> : null}
+              <span className="ref-result-t">
+                <b>{g.name}</b>
+                <small>De la tienda · tallas {g.sizes.map((s) => s.size || 'única').join(', ')}</small>
               </span>
               <Icon name="plus" size={18} stroke={2.2} />
             </button>
@@ -262,7 +291,7 @@ function Body() {
     const rows = ref.isNew
       ? TEMPLATE.map((s) => newRow(s))
       : [...ref.sizes.values()].sort((a, b) => sizeRank(a.size) - sizeRank(b.size)).map((s) => newRow(s.size, s))
-    setBlocks((bs) => [...bs, { id: nextId++, name: ref.name, isNew: !!ref.isNew, rows }])
+    setBlocks((bs) => [...bs, { id: nextId++, name: ref.name, isNew: !!ref.isNew, shop: !!ref.shop, rows }])
     setPicking(false)
   }
   // dos toques seguidos suman dos: cada cambio parte del valor actual
@@ -293,7 +322,8 @@ function Body() {
   const toBodega = units - toReserve
   const clash = lines.some((l) => l.sku && known.get(l.sku) && known.get(l.sku).name !== l.name)
   // un codigo nuevo se guarda junto a las otras tallas; si la referencia no tiene ninguna en la bodega, hay que elegir
-  const needsPlace = dest === 'bodega' && !place && lines.some((l) => l.sku && l.qty > 0 && !known.get(l.sku) && !inBodega.has(l.name))
+  const withKnown = new Set(blocks.filter((b) => b.rows.some((r) => r.sku && known.has(r.sku))).map((b) => b.name))
+  const needsPlace = dest === 'bodega' && !place && lines.some((l) => l.sku && l.qty > 0 && !known.get(l.sku) && !inBodega.has(l.name) && !withKnown.has(l.name))
 
   const problem = !effective ? 'Escribe el número de la remisión u OPR.'
     : dup ? 'Esta remisión ya entró.'
@@ -380,7 +410,7 @@ function Body() {
       {blocks.map((b) => (
         <section className="rem-block" key={b.id} aria-label={b.name}>
           <div className="rem-block-head">
-            <b>{b.name}{b.isNew && <span className="tag tag-warn" style={{ marginLeft: 8 }}>Nueva</span>}</b>
+            <b>{b.name}{b.isNew && <span className="tag tag-warn" style={{ marginLeft: 8 }}>Nueva</span>}{b.shop && <span className="tag tag-set" style={{ marginLeft: 8 }}>Tienda</span>}</b>
             <button type="button" className="link-btn" onClick={() => removeBlock(b.id)}>Quitar</button>
           </div>
           {b.rows.map((r) => (
@@ -407,7 +437,7 @@ function Body() {
         </section>
       ))}
       {picking ? (
-        <RefPicker refs={refs} onPick={pickRef} onCancel={blocks.length ? () => setPicking(false) : null} />
+        <RefPicker refs={refs} known={known} onPick={pickRef} onCancel={blocks.length ? () => setPicking(false) : null} />
       ) : (
         <button type="button" className="btn btn-ghost btn-block" style={{ marginTop: 12 }} onClick={() => setPicking(true)}>
           <Icon name="plus" size={18} stroke={2.2} />Otra referencia en esta remisión

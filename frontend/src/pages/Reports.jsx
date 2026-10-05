@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePolling } from '../hooks/useApi'
 import Icon from '../components/Icon'
 import { Empty, PageHead, plural } from '../components/Bits'
+import { money } from '../utils'
 
 const weekLabel = (iso) => {
   const [y, m, d] = iso.split('-').map(Number)
@@ -99,6 +100,7 @@ export default function Reports() {
   const [days, setDays] = useState(60)
   const { data: weeks } = usePolling('/api/reports/weekly?weeks=8', { interval: 60000 })
   const { data: dead } = usePolling(`/api/reports/dead?days=${days}`, { interval: 60000 })
+  const { data: value } = usePolling('/api/reports/value', { interval: 120000 })
   const totals = useMemo(() => (weeks || []).reduce((t, w) => ({ in: t.in + w.in, out: t.out + w.out }), { in: 0, out: 0 }), [weeks])
   const stuck = (dead || []).reduce((t, d) => t + d.product.qty, 0)
 
@@ -108,6 +110,17 @@ export default function Reports() {
         <PageHead title="Reportes" lede="Cómo se mueve la bodega.">
           <button className="btn btn-ghost btn-sm" onClick={() => navigate('/summary')}>Resumen</button>
         </PageHead>
+
+        {value?.available && value.units_priced > 0 && (
+          <div className="value-tile">
+            <span>Lo que hay en bodega vale</span>
+            <b>{money(value.value)}</b>
+            <small>
+              A precio de la tienda · {value.units_priced} de {value.units_total} prendas tienen precio
+              {value.reserve_value > 0 ? ` · en reserva ${money(value.reserve_value)} más` : ''}
+            </small>
+          </div>
+        )}
 
         <h2 className="h-sec">Entradas y salidas <small>últimas 8 semanas</small></h2>
         {!weeks ? (

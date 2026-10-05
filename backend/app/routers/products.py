@@ -4,6 +4,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from .. import catalog
 from .. import inventory_service as inv
 from .. import layout_service as lsvc
 from .. import models, schemas
@@ -57,10 +58,11 @@ def get_product(sku: str, db: Session = Depends(get_db), _: models.User = Depend
 @router.post("", response_model=schemas.MovementResult, status_code=status.HTTP_201_CREATED)
 def create_product(payload: schemas.ProductCreateIn, db: Session = Depends(get_db),
                     user: models.User = Depends(get_current_user)):
+    image = payload.image_url or (catalog.lookup(payload.sku) or {}).get("image")
     try:
         product, movement = inv.register_product(
             db, payload.sku, payload.name, payload.size, payload.location_id,
-            payload.qty, payload.min_qty, user, image_url=payload.image_url,
+            payload.qty, payload.min_qty, user, image_url=image,
         )
     except inv.InventoryError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))

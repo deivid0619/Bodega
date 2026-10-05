@@ -673,6 +673,18 @@ button.recent-count svg{flex:none;color:var(--muted)}
 .need-q.idle{background:var(--fog-2)}
 .reset-box{display:grid;gap:10px;padding:14px;border-radius:var(--r-md);background:var(--red-soft);font-size:14px;line-height:1.4}
 .reset-box b{font-weight:800}
+/* catalogo de la tienda */
+.shop-hit{display:flex;align-items:center;gap:14px;padding:12px;border-radius:var(--r-md);background:var(--lime-soft)}
+.shop-hit img,.shop-noimg{flex:none;width:68px;height:68px;border-radius:var(--r-sm);background:#fff;object-fit:contain}
+.shop-hit b{display:block;margin-top:8px;font-weight:700;font-size:14.5px;line-height:1.25}
+.shop-hit small{display:block;margin-top:3px;font-size:12.5px;color:var(--graphite);font-weight:600}
+.ref-result img{flex:none;width:40px;height:40px;border-radius:var(--r-xs);background:#fff;object-fit:contain}
+.ref-result.shop{background:var(--paper);box-shadow:inset 0 0 0 1.5px var(--line)}
+.value-tile{position:relative;overflow:hidden;margin-top:4px;padding:18px;border-radius:var(--r-lg);background:var(--ink);color:#fff}
+.value-tile::after{content:'';position:absolute;right:-24px;top:-30px;width:150px;height:150px;background:repeating-linear-gradient(-64deg,rgba(192,255,0,.14) 0 10px,transparent 10px 22px);pointer-events:none}
+.value-tile span{display:block;font-size:13px;color:#C9CCC5;font-weight:600}
+.value-tile b{display:block;margin-top:8px;font:800 italic 38px/1 var(--font);letter-spacing:-.05em;color:var(--lime);padding-right:3px}
+.value-tile small{display:block;margin-top:10px;font-size:12.5px;color:#A9ADA6;line-height:1.4;position:relative}
 
 /* ---------- transiciones entre pestanas ---------- */
 .topbar{view-transition-name:topbar}

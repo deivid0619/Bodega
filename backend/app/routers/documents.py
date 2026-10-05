@@ -10,6 +10,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .. import catalog
 from .. import inventory_service as inv
 from .. import models, schemas
 from .. import serializers as ser
@@ -86,11 +87,12 @@ def apply_factura(payload: schemas.FacturaIn, db: Session = Depends(get_db),
     return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))
 
 
-def _sibling_location(db: Session, name: str) -> Optional[str]:
-    """Donde estan las otras tallas de la referencia: una talla nueva se
+def _sibling_location(db: Session, name: str, skus: set[str]) -> Optional[str]:
+    """Donde estan las otras tallas de la referencia (por nombre, o las tallas
+    de la misma referencia que ya estan registradas): una talla nueva se
     guarda con ellas si no se elige otra ubicacion."""
-    p = (db.query(models.Product).filter(models.Product.name == name)
-         .order_by(models.Product.qty.desc()).first())
+    q = db.query(models.Product).filter((models.Product.name == name) | (models.Product.sku.in_(skus or {""})))
+    p = q.order_by(models.Product.qty.desc()).first()
     return p.location_id if p else None
 
 
@@ -142,10 +144,11 @@ def apply_remision(payload: schemas.RemisionIn, db: Session = Depends(get_db),
                                              note=note, commit=False)
                 row["location_id"] = movs[-1].location_id
             else:
-                loc = payload.location_id or _sibling_location(db, name)
+                loc = payload.location_id or _sibling_location(db, name, {k[2] for k in merged if k[0] == name and k[2]})
                 if not loc:
                     raise inv.InventoryError(f"{sku} es un código nuevo: elige en qué ubicación guardarlo.")
-                inv.register_product(db, sku, name, size, loc, qty, 0, user, note=note, commit=False)
+                image = (catalog.lookup(sku, fetch=False) or {}).get("image")
+                inv.register_product(db, sku, name, size, loc, qty, 0, user, image_url=image, note=note, commit=False)
                 row["location_id"] = loc
             row["dest"] = "bodega"
             touched.append(sku)
