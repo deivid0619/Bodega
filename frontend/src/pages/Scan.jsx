@@ -10,7 +10,7 @@ import RemisionSheet from '../components/RemisionSheet'
 import Icon from '../components/Icon'
 import { PageHead, Stepper } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
-import Viewfinder from '../components/Viewfinder'
+import Viewfinder, { PhotoRead } from '../components/Viewfinder'
 import { beep } from '../lib/feedback'
 import { fmtTime } from '../utils'
 
@@ -84,7 +84,22 @@ export default function Scan() {
 
   const scanner = useBarcodeScanner(handleCode)
   const { status, start, stop } = scanner
-  const camOn = status === 'native' || status === 'lib'
+  const camOn = status === 'on'
+
+  // con un formulario encima (prenda nueva, factura, remision) la camara y
+  // la linterna se apagan; al cerrar la prenda nueva, se vuelve a abrir
+  const resumeRef = useRef(false)
+  const covered = !!pendingSku || factura || remision
+  useEffect(() => {
+    if (covered && camOn) {
+      resumeRef.current = !!pendingSku
+      stop()
+    } else if (!covered && resumeRef.current) {
+      resumeRef.current = false
+      start()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [covered])
 
   useEffect(() => () => { stop() }, [stop])
 
@@ -142,6 +157,7 @@ export default function Scan() {
         <button className={`btn btn-lg btn-block ${camOn ? 'btn-ink' : 'btn-lime'}`} style={{ marginTop: 12 }} onClick={() => (camOn ? stop() : start())}>
           <Icon name={camOn ? 'x' : 'camera'} size={20} />{camOn ? 'Cerrar cámara' : 'Escanear con la cámara'}
         </button>
+        <PhotoRead scanner={scanner} onMiss={() => showToast('No encontré un código en la foto. Tómala más de cerca, derecha y con luz.', 'err')} />
 
         <div className="card scan-qty">
           <div>

@@ -1,17 +1,17 @@
+import { useRef, useState } from 'react'
 import Icon from './Icon'
 
-// El visor de la camara para escanear etiquetas (lo usa useBarcodeScanner).
+// El visor de la camara para escanear etiquetas (lo maneja useBarcodeScanner).
 export default function Viewfinder({ scanner, className = '' }) {
-  const { status, message, videoRef, containerRef, start, torch, toggleTorch } = scanner
-  const camOn = status === 'native' || status === 'lib'
+  const { status, message, note, videoRef, start, torch, toggleTorch } = scanner
+  const camOn = status === 'on'
   return (
     <div className={`viewfinder ${className}`}>
-      {status !== 'lib' && <video ref={videoRef} playsInline muted style={{ display: status === 'native' ? 'block' : 'none' }} />}
-      <div id="cam-reader" ref={containerRef} style={{ display: status === 'lib' ? 'block' : 'none' }} />
+      <video ref={videoRef} playsInline muted style={{ display: camOn ? 'block' : 'none' }} />
       {status === 'off' && (
         <button className="vf-idle" onClick={start}>
           <Icon name="camera" size={34} stroke={1.7} />
-          Toca para abrir la cámara
+          {note ? <>{note}<br />Toca para abrirla otra vez</> : 'Toca para abrir la cámara'}
         </button>
       )}
       {status === 'fail' && (
@@ -34,5 +34,37 @@ export default function Viewfinder({ scanner, className = '' }) {
         </button>
       )}
     </div>
+  )
+}
+
+// Plan B: una foto con la camara normal del celular, que enfoca bien de
+// cerca. La camara en vivo se cierra antes para no pelear por ella.
+export function PhotoRead({ scanner, onMiss }) {
+  const input = useRef(null)
+  const [busy, setBusy] = useState(false)
+  const open = async () => {
+    await scanner.stop()
+    input.current.click()
+  }
+  const pick = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setBusy(true)
+    try {
+      if (!(await scanner.readFile(file))) onMiss?.()
+    } catch {
+      onMiss?.()
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      <input ref={input} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
+      <button type="button" className="btn btn-ghost btn-block" style={{ marginTop: 10 }} disabled={busy} onClick={open}>
+        <Icon name="camera" size={18} />{busy ? 'Leyendo la foto…' : '¿No lo coge? Léelo con una foto'}
+      </button>
+    </>
   )
 }

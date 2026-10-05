@@ -6,7 +6,7 @@ import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
 import { locationGroups } from '../locationGroups'
 import { itemsAt } from '../components/LocationSheet'
 import { useToast } from '../components/ToastContext'
-import Viewfinder from '../components/Viewfinder'
+import Viewfinder, { PhotoRead } from '../components/Viewfinder'
 import Icon from '../components/Icon'
 import { Empty, PageHead, Stepper, plural } from '../components/Bits'
 import { beep } from '../lib/feedback'
@@ -148,7 +148,7 @@ export default function Count() {
     if (!expected.some((e) => e.p.sku === sku)) setExtra((x) => (x.includes(sku) ? x : [...x, sku]))
   }
   const scanner = useBarcodeScanner(handleCode)
-  const camOn = scanner.status === 'native' || scanner.status === 'lib'
+  const camOn = scanner.status === 'on'
   useEffect(() => () => { scanner.stop() }, [scanner.stop])
 
   const done = rows.filter((r) => counted[r.p.sku] != null)
@@ -222,6 +222,7 @@ export default function Count() {
                 <Icon name="scan" size={20} />Contar escaneando
               </button>
             )}
+            <PhotoRead scanner={scanner} onMiss={() => showToast('No encontré un código en la foto. Tómala más de cerca, derecha y con luz.', 'err')} />
             <div className="manual">
               <input
                 className="input mono"

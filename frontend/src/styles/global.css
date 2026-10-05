@@ -299,11 +299,7 @@ button.code:active{transform:scale(.95)}
 .seg button[aria-pressed="true"][data-m="set"]{background:var(--paper);color:var(--ink);box-shadow:0 2px 8px -2px rgba(0,0,0,.2)}
 .mode-hint{margin:10px 4px 0;color:var(--muted);font-size:13.5px}
 .viewfinder{position:relative;margin-top:16px;border-radius:var(--r-lg);overflow:hidden;background:var(--ink);aspect-ratio:4/3;color:#8F938C}
-/* la libreria de escaneo (iPhone) le pone tamanos fijos y position:relative a
-   su contenedor; aqui se obliga a que el video llene siempre el visor */
-.viewfinder > video,.viewfinder #cam-reader{position:absolute!important;inset:0;width:100%!important;height:100%!important}
-.viewfinder video{width:100%!important;height:100%!important;object-fit:cover;display:block}
-.viewfinder #cam-reader > div{display:none!important}
+.viewfinder > video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .vf-corners{position:absolute;left:12%;right:12%;top:30%;bottom:30%;pointer-events:none}
 .vf-corners i{position:absolute;width:26px;height:26px;border:3.5px solid var(--lime)}
 .vf-corners i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-top-left-radius:10px}
