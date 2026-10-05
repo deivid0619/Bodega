@@ -241,10 +241,55 @@ def undo_last_movement(db: Session, movement_id: int, user: models.User) -> mode
     return product
 
 
-def needs(db: Session) -> list[tuple[models.Product, int]]:
+def _reserve_index(db: Session) -> tuple[dict[str, list[models.ReserveItem]], dict[tuple[str, str], list[models.ReserveItem]]]:
+    by_sku: dict[str, list[models.ReserveItem]] = {}
+    by_ref: dict[tuple[str, str], list[models.ReserveItem]] = {}
+    for it in db.query(models.ReserveItem).filter(models.ReserveItem.qty > 0).all():
+        if it.sku:
+            by_sku.setdefault(it.sku, []).append(it)
+        else:
+            by_ref.setdefault((it.name, it.size), []).append(it)
+    return by_sku, by_ref
+
+
+def _reserve_for(p: models.Product, index) -> list[models.ReserveItem]:
+    """Lo que hay en la reserva de este codigo: con su codigo o, si se guardo
+    sin codigo, con la misma referencia y talla."""
+    by_sku, by_ref = index
+    return by_sku.get(p.sku, []) + by_ref.get((p.name, p.size), [])
+
+
+def needs(db: Session) -> list[tuple[models.Product, int, int]]:
+    """Tallas en o bajo su minimo: (prenda, cuanto pedir, cuanto hay en reserva).
+    Se pide para llegar al doble del minimo, descontando lo que ya esta en la
+    reserva (eso se trae, no se compra)."""
     products = db.query(models.Product).filter(models.Product.min_qty > 0, models.Product.qty <= models.Product.min_qty).all()
-    out = [(p, max(p.min_qty * 2 - p.qty, 1)) for p in products]
-    out.sort(key=lambda pair: pair[0].qty / pair[0].min_qty if pair[0].min_qty else 0)
+    index = _reserve_index(db)
+    out = []
+    for p in products:
+        in_reserve = sum(it.qty for it in _reserve_for(p, index))
+        out.append((p, max(p.min_qty * 2 - p.qty - in_reserve, 0), in_reserve))
+    out.sort(key=lambda t: t[0].qty / t[0].min_qty if t[0].min_qty else 0)
+    return out
+
+
+def restock(db: Session) -> list[tuple[models.ReserveItem, models.Product, int]]:
+    """Que traer de la reserva: tallas agotadas o en su minimo en la bodega
+    que tienen prendas guardadas en la reserva, con cuantas llevar (hasta el
+    doble del minimo; si no tiene minimo, 2)."""
+    index = _reserve_index(db)
+    if not index[0] and not index[1]:
+        return []
+    out = []
+    for p in db.query(models.Product).filter(models.Product.qty <= models.Product.min_qty).all():
+        items = _reserve_for(p, index)
+        if not items:
+            continue
+        item = max(items, key=lambda it: (it.sku == p.sku, it.qty))
+        want = p.min_qty * 2 - p.qty if p.min_qty > 0 else 2
+        out.append((item, p, max(1, min(item.qty, want))))
+    # primero lo agotado, despues lo que esta mas cerca de agotarse
+    out.sort(key=lambda t: (t[1].qty > 0, t[1].qty / t[1].min_qty if t[1].min_qty else 1, t[1].name, t[1].size))
     return out
 
 

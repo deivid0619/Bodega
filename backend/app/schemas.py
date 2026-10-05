@@ -261,7 +261,14 @@ class ReserveTransferResult(BaseModel):
 # ---------- reportes ----------
 class NeedOut(BaseModel):
     product: ProductOut
-    order_qty: int
+    order_qty: int  # cuanto pedir al proveedor (0: lo cubre la reserva)
+    in_reserve: int = 0  # cuanto hay guardado en la reserva
+
+
+class RestockOut(BaseModel):
+    reserve: ReserveItemOut
+    product: ProductOut
+    suggest: int  # cuantas llevar a la bodega
 
 
 class TopOut(BaseModel):

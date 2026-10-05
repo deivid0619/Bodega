@@ -18,9 +18,9 @@ router = APIRouter(prefix="/api/reports", tags=["reportes"])
 
 @router.get("/needs", response_model=list[schemas.NeedOut])
 def needs(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
-    pairs = inv.needs(db)
-    outs = ser.products_out(db, [p for p, _ in pairs])
-    return [schemas.NeedOut(product=o, order_qty=q) for o, (_, q) in zip(outs, pairs)]
+    rows = inv.needs(db)
+    outs = ser.products_out(db, [p for p, _, _ in rows])
+    return [schemas.NeedOut(product=o, order_qty=q, in_reserve=r) for o, (_, q, r) in zip(outs, rows)]
 
 
 @router.get("/top", response_model=list[schemas.TopOut])

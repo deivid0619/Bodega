@@ -1,14 +1,17 @@
 import { flushSync } from 'react-dom'
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useNeeds } from '../hooks/useApi'
+import { useNeeds, useRestock } from '../hooks/useApi'
 import Icon from './Icon'
 
 const ORDER = ['/', '/inventory', '/scan', '/reserve', '/summary']
 
 export default function NavBar() {
   const { data: needs } = useNeeds()
+  const { data: restock } = useRestock()
   const navigate = useNavigate()
-  const needCount = needs?.length || 0
+  // por pedir al proveedor (lo que cubre la reserva se trae, no se pide)
+  const needCount = (needs || []).filter((n) => n.order_qty > 0).length
+  const restockCount = restock?.length || 0
 
   // Cambio de pestana con View Transitions: el contenido se desliza hacia el
   // lado de la pestana elegida y el indicador lima viaja entre pestanas.
@@ -45,7 +48,7 @@ export default function NavBar() {
       <NavLink to="/scan" onClick={go('/scan')} className={({ isActive }) => 'dock-scan' + (isActive ? ' active' : '')} aria-label="Escanear">
         <Icon name="scan" size={27} stroke={2.1} />
       </NavLink>
-      {item('/reserve', 'reserve', 'Reserva')}
+      {item('/reserve', 'reserve', 'Reserva', restockCount > 0 && <span className="dock-badge lime">{restockCount}</span>)}
       {item('/summary', 'summary', 'Resumen', needCount > 0 && <span className="dock-badge">{needCount}</span>)}
     </nav>
   )

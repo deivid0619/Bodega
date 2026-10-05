@@ -124,6 +124,11 @@ export function useReserve() {
   return usePolling('/api/reserve', { interval: 8000 })
 }
 
+// lo que conviene traer de la reserva a la bodega
+export function useRestock() {
+  return usePolling('/api/reserve/restock', { interval: 20000 })
+}
+
 // ---------- acciones con respuesta inmediata ----------
 const pendingBySku = new Map()
 const queues = new Map()

@@ -33,13 +33,14 @@ export default function Summary() {
     refs: new Set((products || []).map(baseOf)).size,
     reserve: (reserve || []).reduce((s, i) => s + i.qty, 0),
     needs: needs?.length || 0,
+    toOrder: (needs || []).filter((n) => n.order_qty > 0).length,
   }), [products, reserve, needs])
   const maxTop = Math.max(1, ...(top || []).map((t) => t.qty_out))
   const date = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
 
   const orderText = () => {
     const d = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
-    const lines = (needs || []).map((n) => `${n.product.name}${n.product.size ? ' talla ' + n.product.size : ''} (${n.product.sku}): pedir ${n.order_qty}, hay ${n.product.qty}`)
+    const lines = (needs || []).filter((n) => n.order_qty > 0).map((n) => `${n.product.name}${n.product.size ? ' talla ' + n.product.size : ''} (${n.product.sku}): pedir ${n.order_qty}, hay ${n.product.qty}`)
     return `Pedido bodega ${d}\n\n${lines.join('\n')}`
   }
   const copyOrder = async () => {
@@ -114,13 +115,22 @@ export default function Summary() {
                   <div className="need-t">
                     <b>{n.product.name}{n.product.size ? ` · ${n.product.size}` : ''}</b>
                     <small>Hay {n.product.qty} · mínimo {n.product.min_qty}{n.product.stock?.length ? ` · ${n.product.stock.map((s) => s.location_id).join(', ')}` : ''}</small>
+                    {n.in_reserve > 0 && (
+                      <button className="link-btn need-link" onClick={() => navigate('/reserve')}>
+                        <Icon name="reserve" size={14} stroke={2.2} />{n.in_reserve} en la reserva: traerlas
+                      </button>
+                    )}
                   </div>
-                  <div className="need-q"><b>{n.order_qty}</b><span>pedir</span></div>
+                  {n.order_qty > 0 ? (
+                    <div className="need-q"><b>{n.order_qty}</b><span>pedir</span></div>
+                  ) : (
+                    <div className="need-q dark"><b>{Math.min(n.in_reserve, Math.max(1, n.product.min_qty * 2 - n.product.qty))}</b><span>traer</span></div>
+                  )}
                 </div>
               ))}
             </div>
             <div className="btn-row">
-              <button className="btn btn-lime" onClick={copyOrder}><Icon name="copy" size={18} />Copiar pedido</button>
+              <button className="btn btn-lime" onClick={copyOrder} disabled={!kpi.toOrder}><Icon name="copy" size={18} />Copiar pedido</button>
               <button className="btn btn-ghost" onClick={() => exportCsv('/api/reports/inventory.csv', `pedido-${today()}.csv`)}><Icon name="download" size={18} />Descargar</button>
             </div>
           </>

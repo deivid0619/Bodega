@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import inventory_service as inv
 from .. import models, schemas
+from .. import serializers as ser
 from ..database import get_db
 from ..deps import get_current_user, require_admin
 from .products import _out as _product_out
@@ -18,6 +19,14 @@ router = APIRouter(prefix="/api/reserve", tags=["bodega de reserva"])
 def list_reserve(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     items = db.query(models.ReserveItem).order_by(models.ReserveItem.name, models.ReserveItem.size).all()
     return items
+
+
+@router.get("/restock", response_model=list[schemas.RestockOut])
+def restock(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Que traer de la reserva a la bodega ahora mismo."""
+    rows = inv.restock(db)
+    outs = ser.products_out(db, [p for _, p, _ in rows])
+    return [schemas.RestockOut(reserve=it, product=o, suggest=n) for o, (it, _, n) in zip(outs, rows)]
 
 
 @router.post("", response_model=schemas.ReserveItemOut, status_code=status.HTTP_201_CREATED)

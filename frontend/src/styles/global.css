@@ -91,6 +91,7 @@ main{flex:1;position:relative;min-height:0;overflow:hidden}
 .dock-item.active{color:#fff}
 .dock-ind{position:absolute;top:8px;left:50%;width:15px;height:3px;margin-left:-7.5px;border-radius:1px;background:var(--lime);transform:skewX(-26deg);view-transition-name:dock-ind}
 .dock-badge{position:absolute;top:9px;left:calc(50% + 6px);min-width:17px;height:17px;padding:0 5px;border-radius:var(--r-xs);background:var(--amber);color:#fff;font:700 10.5px/17px var(--font);text-align:center;box-shadow:0 0 0 2px var(--ink)}
+.dock-badge.lime{background:var(--lime);color:var(--ink)}
 .dock-scan{justify-self:center;width:60px;height:60px;border-radius:var(--r-lg);background:var(--lime);color:var(--ink);display:grid;place-items:center;transform:translateY(-15px);box-shadow:0 0 0 5px var(--ink),0 14px 26px -8px rgba(160,214,0,.6);transition:transform 160ms var(--ease-out)}
 .dock-scan:active{transform:translateY(-15px) scale(.93)}
 .dock-scan.active{box-shadow:0 0 0 5px var(--ink),0 0 0 7px rgba(192,255,0,.35),0 14px 26px -8px rgba(160,214,0,.6)}
@@ -349,6 +350,13 @@ button.code:active{transform:scale(.95)}
 .res-card .res-actions{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--line)}
 .res-name{font:700 15px/1.25 var(--font);letter-spacing:-.01em}
 .res-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:7px}
+.task-card{padding:14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center}
+.task-t h3{font:700 15px/1.25 var(--font);letter-spacing:-.01em}
+.task-t p{margin-top:4px;font-size:12.5px;color:var(--muted)}
+.task-t b{color:var(--ink);font-weight:800}
+.task-t b.warn{color:#A9480A;font-weight:700}
+.task-actions{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--line)}
+.task-actions .mono{font-size:12.5px}
 
 /* ---------- resumen ---------- */
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px}
@@ -549,6 +557,7 @@ button.pill:active{transform:scale(.95)}
 .doc-footer{position:sticky;bottom:calc(-22px - var(--safe-b));margin:16px -18px calc(-22px - var(--safe-b));padding:12px 18px calc(16px + var(--safe-b));background:linear-gradient(to bottom,rgba(255,255,255,0),#fff 22%)}
 .need-q.dark{background:var(--ink);color:#fff}
 .need-t small.owed{color:#A9480A;font-weight:600}
+.need-link{margin-top:6px;padding:4px 0;color:var(--lime-deep)}
 @media (prefers-reduced-motion:reduce){.doc-scanline{animation:none}}
 
 /* ---------- remision (entrada de mercancia) ---------- */
