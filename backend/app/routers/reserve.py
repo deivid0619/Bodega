@@ -2,11 +2,11 @@
 física, que se va enviando a la bodega principal (con SELECT ... FOR
 UPDATE en el envío, igual que un escaneo normal, para que dos personas
 enviando la misma referencia al tiempo no se pisen)."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from .. import inventory_service as inv
-from .. import models, schemas
+from .. import models, push, schemas
 from .. import serializers as ser
 from ..database import get_db
 from ..deps import get_current_user, require_admin
@@ -71,8 +71,8 @@ def delete_reserve(item_id: int, db: Session = Depends(get_db), _: models.User =
 
 
 @router.post("/{item_id}/transfer", response_model=schemas.ReserveTransferResult)
-def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, db: Session = Depends(get_db),
-                           user: models.User = Depends(get_current_user)):
+def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, background: BackgroundTasks,
+                           db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     item = (
         db.query(models.ReserveItem)
         .filter(models.ReserveItem.id == item_id)
@@ -92,17 +92,20 @@ def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, db: 
     try:
         if existing:
             # entra a la ubicacion elegida, aunque el codigo ya tenga otra principal
-            product, _movements = inv.apply_movement(db, sku, "in", payload.qty, user, location_id=payload.location_id)
+            product, movs = inv.apply_movement(db, sku, "in", payload.qty, user, location_id=payload.location_id)
         else:
-            product, _movement = inv.register_product(
+            product, movement = inv.register_product(
                 db, sku, item.name, item.size, payload.location_id, payload.qty, 0, user,
             )
+            movs = [movement]
     except inv.InventoryError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
     item.sku = sku
     item.qty -= payload.qty
     db.commit()
+    for kind, title, body, *rest in push.movement_events(product, "in", movs, user):
+        background.add_task(push.notify, kind, title, f"{body} · desde la reserva", *rest)
     db.refresh(item)
     db.refresh(product)
     return schemas.ReserveTransferResult(reserve=item, product=_product_out(db, product))

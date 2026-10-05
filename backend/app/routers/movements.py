@@ -2,11 +2,11 @@
 deshacer el último movimiento."""
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from .. import inventory_service as inv
-from .. import models, schemas
+from .. import models, push, schemas
 from .. import serializers as ser
 from ..database import get_db
 from ..deps import get_current_user
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/movements", tags=["movimientos"])
 
 
 @router.post("", response_model=schemas.MovementResult)
-def apply_movement(payload: schemas.MovementIn, db: Session = Depends(get_db),
+def apply_movement(payload: schemas.MovementIn, background: BackgroundTasks, db: Session = Depends(get_db),
                     user: models.User = Depends(get_current_user)):
     try:
         product, movs = inv.apply_movement(db, payload.sku.strip().upper(), payload.type, payload.qty, user,
@@ -24,6 +24,8 @@ def apply_movement(payload: schemas.MovementIn, db: Session = Depends(get_db),
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
     except inv.InventoryError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    for event in push.movement_events(product, payload.type, movs, user):
+        background.add_task(push.notify, *event)
     names = ser.loc_names(db)
     return schemas.MovementResult(
         product=ser.one_product_out(db, product, names),

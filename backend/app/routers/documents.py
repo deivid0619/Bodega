@@ -5,14 +5,14 @@ se puede aplicar dos veces."""
 from datetime import datetime
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .. import catalog
 from .. import inventory_service as inv
-from .. import models, schemas
+from .. import models, push, schemas
 from .. import serializers as ser
 from ..database import get_db
 from ..deps import get_current_user
@@ -49,7 +49,7 @@ def list_documents(kind: Optional[Literal["factura", "remision", "conteo"]] = No
 
 
 @router.post("/factura", response_model=schemas.DocumentResult, status_code=status.HTTP_201_CREATED)
-def apply_factura(payload: schemas.FacturaIn, db: Session = Depends(get_db),
+def apply_factura(payload: schemas.FacturaIn, background: BackgroundTasks, db: Session = Depends(get_db),
                   user: models.User = Depends(get_current_user)):
     number = _norm_number(payload.number)
     prev = _already(db, "factura", number)
@@ -65,9 +65,11 @@ def apply_factura(payload: schemas.FacturaIn, db: Session = Depends(get_db),
 
     note = f"Factura {number}"
     touched: list[str] = []
+    first_before: dict[str, int] = {}
     try:
         for (sku, loc), qty in merged.items():
-            inv.apply_movement(db, sku, "out", qty, user, location_id=loc, note=note, commit=False)
+            _, movs = inv.apply_movement(db, sku, "out", qty, user, location_id=loc, note=note, commit=False)
+            first_before.setdefault(sku, movs[0].before)
             touched.append(sku)
         doc = models.Document(
             kind="factura", number=number, units=sum(merged.values()),
@@ -84,6 +86,13 @@ def apply_factura(payload: schemas.FacturaIn, db: Session = Depends(get_db),
         raise HTTPException(status.HTTP_409_CONFLICT, f"La factura {number} ya se descontó.")
     db.refresh(doc)
     products = db.query(models.Product).filter(models.Product.sku.in_(set(touched))).all()
+    background.add_task(push.notify, "docs", f"Factura {number}",
+                        f"Salieron {doc.units} prendas · {user.name}", "/summary", f"doc-{number}", user.id)
+    for p in products:
+        if p.min_qty > 0 and first_before.get(p.sku, 0) > p.min_qty >= p.qty:
+            background.add_task(push.notify, "low", f"Bajo mínimo · {push.label(p.name, p.size)}",
+                                f"Quedan {p.qty} (mínimo {p.min_qty}). Revisa la reserva o haz el pedido.",
+                                "/summary", f"low-{p.sku}", None)
     return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))
 
 
@@ -97,7 +106,7 @@ def _sibling_location(db: Session, name: str, skus: set[str]) -> Optional[str]:
 
 
 @router.post("/remision", response_model=schemas.DocumentResult, status_code=status.HTTP_201_CREATED)
-def apply_remision(payload: schemas.RemisionIn, db: Session = Depends(get_db),
+def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db: Session = Depends(get_db),
                    user: models.User = Depends(get_current_user)):
     """Entrada de mercancia de un proveedor, ya contada. Cada talla con codigo
     entra a la bodega (a su ubicacion principal o a la elegida); sin codigo, o
@@ -167,11 +176,14 @@ def apply_remision(payload: schemas.RemisionIn, db: Session = Depends(get_db),
         raise HTTPException(status.HTTP_409_CONFLICT, f"La remisión {number} ya entró.")
     db.refresh(doc)
     products = db.query(models.Product).filter(models.Product.sku.in_(set(touched))).all() if touched else []
+    owed = f" · quedaron debiendo {doc.pending}" if doc.pending else ""
+    background.add_task(push.notify, "docs", f"Remisión {number}" + (f" · {doc.supplier}" if doc.supplier else ""),
+                        f"Entraron {doc.units} prendas{owed} · {user.name}", "/summary", f"doc-{number}", user.id)
     return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))
 
 
 @router.post("/conteo", response_model=schemas.DocumentResult, status_code=status.HTTP_201_CREATED)
-def apply_count(payload: schemas.CountIn, db: Session = Depends(get_db),
+def apply_count(payload: schemas.CountIn, background: BackgroundTasks, db: Session = Depends(get_db),
                 user: models.User = Depends(get_current_user)):
     """Conteo de una ubicacion: cada codigo contado queda con lo que se conto
     EN ESA ubicacion (las demas no se tocan). Solo los que no cuadran generan
@@ -211,4 +223,8 @@ def apply_count(payload: schemas.CountIn, db: Session = Depends(get_db),
         raise HTTPException(status.HTTP_409_CONFLICT, "Ese conteo ya se guardó.")
     db.refresh(doc)
     products = db.query(models.Product).filter(models.Product.sku.in_(list(counted))).all()
+    fixed = sum(1 for l in out_lines if l["counted"] != l["before"])
+    if fixed:
+        background.add_task(push.notify, "set", f"Conteo de {loc}",
+                            f"{fixed} {'ajuste' if fixed == 1 else 'ajustes'} · {user.name}", "/summary", f"count-{loc}", user.id)
     return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))

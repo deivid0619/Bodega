@@ -1,13 +1,13 @@
 """Inventario: buscar, ver, editar y eliminar códigos de producto."""
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from .. import catalog
 from .. import inventory_service as inv
 from .. import layout_service as lsvc
-from .. import models, schemas
+from .. import models, push, schemas
 from .. import serializers as ser
 from ..database import get_db
 from ..deps import get_current_user, require_admin
@@ -56,7 +56,7 @@ def get_product(sku: str, db: Session = Depends(get_db), _: models.User = Depend
 
 
 @router.post("", response_model=schemas.MovementResult, status_code=status.HTTP_201_CREATED)
-def create_product(payload: schemas.ProductCreateIn, db: Session = Depends(get_db),
+def create_product(payload: schemas.ProductCreateIn, background: BackgroundTasks, db: Session = Depends(get_db),
                     user: models.User = Depends(get_current_user)):
     image = payload.image_url or (catalog.lookup(payload.sku) or {}).get("image")
     try:
@@ -66,6 +66,9 @@ def create_product(payload: schemas.ProductCreateIn, db: Session = Depends(get_d
         )
     except inv.InventoryError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    if movement.qty > 0:
+        for event in push.movement_events(product, "new", [movement], user):
+            background.add_task(push.notify, *event)
     names = ser.loc_names(db)
     return schemas.MovementResult(
         product=ser.one_product_out(db, product, names),

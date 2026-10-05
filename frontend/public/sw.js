@@ -44,3 +44,36 @@ self.addEventListener('fetch', (event) => {
     )
   }
 })
+
+// ---------- avisos al celular (llegan aunque la app este cerrada) ----------
+self.addEventListener('push', (event) => {
+  let d = {}
+  try {
+    d = event.data ? event.data.json() : {}
+  } catch {
+    d = { body: event.data ? event.data.text() : '' }
+  }
+  event.waitUntil(self.registration.showNotification(d.title || 'Bodega', {
+    body: d.body || '',
+    icon: '/icon-192.png',
+    // el mismo tag reemplaza al aviso anterior en vez de apilarlos
+    tag: d.tag || undefined,
+    data: { url: d.url || '/' },
+  }))
+})
+
+// tocar el aviso abre la app (o la trae al frente) en la pantalla que corresponde
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const url = new URL(event.notification.data?.url || '/', self.location.origin).href
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const win = wins.find((w) => w.url.startsWith(self.location.origin))
+    if (win) {
+      await win.focus()
+      if ('navigate' in win) await win.navigate(url).catch(() => {})
+      return
+    }
+    await self.clients.openWindow(url)
+  })())
+})

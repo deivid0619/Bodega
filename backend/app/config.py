@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     # listado publico de la tienda (Shopify) para llenar nombre, talla, foto y
     # precio de un codigo nuevo. Vacio: sin catalogo.
     catalog_url: str = "https://pigmalionmoto.com/products.json"
+    # quien manda los avisos al celular (lo piden Google y Apple)
+    vapid_subject: str = "https://pigmalionmoto.com"
     # SOLO DESARROLLO: si es true, todas las rutas se tratan como si hubiera
     # iniciado sesion el primer usuario admin, sin pedir login. Nunca poner
     # en true en produccion.

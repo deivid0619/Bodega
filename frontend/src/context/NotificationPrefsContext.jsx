@@ -5,7 +5,9 @@
 import { createContext, useCallback, useContext, useState } from 'react'
 
 const KEY = 'bodega_notif_prefs'
-const DEFAULTS = { in: true, out: true, set: false }
+// in/out/set tambien salen dentro de la app; low (bajo minimo) y docs
+// (facturas y remisiones) solo como aviso al celular
+const DEFAULTS = { in: true, out: true, set: false, low: true, docs: true }
 
 function load() {
   try {

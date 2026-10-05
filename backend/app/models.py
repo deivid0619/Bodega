@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, UniqueConstraint
+    Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 
@@ -135,3 +135,25 @@ class ReserveItem(Base):
     qty = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class PushSubscription(Base):
+    """Un celular (o navegador) que recibe avisos, de quien es y cuales
+    quiere: in, out, set, low (bajo minimo), docs (facturas y remisiones)."""
+    __tablename__ = "push_subscriptions"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    endpoint = Column(String(1000), unique=True, nullable=False)
+    p256dh = Column(String(200), nullable=False)
+    auth = Column(String(100), nullable=False)
+    prefs = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
+class AppSetting(Base):
+    """Valores internos de la app (ej. las llaves con que se firman los avisos)."""
+    __tablename__ = "app_settings"
+
+    key = Column(String(64), primary_key=True)
+    value = Column(Text, nullable=False)

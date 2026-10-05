@@ -13,7 +13,7 @@ from . import models
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .migrations import backfill_stock, ensure_columns
-from .routers import auth, catalog, documents, layout, movements, products, reports, reserve
+from .routers import auth, catalog, documents, layout, movements, products, push, reports, reserve
 from .seed import seed
 
 logger = logging.getLogger("uvicorn.error")
@@ -71,6 +71,7 @@ app.include_router(reports.router)
 app.include_router(reserve.router)
 app.include_router(documents.router)
 app.include_router(catalog.router)
+app.include_router(push.router)
 
 
 @app.get("/api/health")
