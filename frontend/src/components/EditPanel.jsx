@@ -9,10 +9,10 @@ const PARAMS = {
   shelf: [['w', 'Ancho'], ['levels', 'Niveles']],
   rack: [['w', 'Largo'], ['bars', 'Barras']],
   boxes: [['count', 'Cajas']],
-  table: [['w', 'Largo']],
+  table: [['w', 'Largo'], ['bins', 'Canastas debajo']],
   ladder: [], balloons: [],
 }
-const STEP = { cols: 1, rows: 1, levels: 1, bars: 1, count: 1, w: 0.2 }
+const STEP = { cols: 1, rows: 1, levels: 1, bars: 1, count: 1, bins: 1, w: 0.2 }
 const TYPE_LABEL = { bins: 'Pared de canastas', shelf: 'Estantería', rack: 'Perchero', boxes: 'Cajas', table: 'Mesa', ladder: 'Escalera', balloons: 'Bombas' }
 const fmtParam = (k, v) => (k === 'w' ? `${Number(v).toFixed(1)} m` : String(v))
 
@@ -30,7 +30,7 @@ const HINTS = {
   rack: 'Barras amarillas para colgar chaquetas.',
   bins: 'Gavetas negras por filas y columnas, como la pared C.',
   boxes: 'Cajas de cartón en el piso.',
-  table: 'Mesa de despacho. Solo de referencia.',
+  table: 'Mesa de despacho, apoyada sobre pilas de canastas que también guardan prendas.',
   ladder: 'Solo de referencia.',
   balloons: 'Solo de referencia.',
 }
@@ -67,7 +67,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
 
   const paramStep = async (key, dir) => {
     try {
-      await api.patch(`/api/layout/elements/${element.id}`, { params: { [key]: element.params[key] + dir * STEP[key] } })
+      await api.patch(`/api/layout/elements/${element.id}`, { params: { [key]: (element.params[key] ?? 0) + dir * STEP[key] } })
       onChanged()
     } catch (e) { fail(e, 'No se pudo cambiar el tamaño.') }
   }
@@ -166,7 +166,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
       </>
     )
   } else {
-    const storage = ['bins', 'shelf', 'rack', 'boxes'].includes(element.type)
+    const storage = ['bins', 'shelf', 'rack', 'boxes', 'table'].includes(element.type)
     body = (
       <>
         <SheetHeader
@@ -189,7 +189,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
         </div></div>
         {PARAMS[element.type].map(([key, label]) => (
           <div className="ctl" key={key}><span>{label}</span>
-            <Mini value={fmtParam(key, element.params[key])} onMinus={() => paramStep(key, -1)} onPlus={() => paramStep(key, 1)} />
+            <Mini value={fmtParam(key, element.params[key] ?? 0)} onMinus={() => paramStep(key, -1)} onPlus={() => paramStep(key, 1)} />
           </div>
         ))}
         <div className="btn-row">

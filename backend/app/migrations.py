@@ -24,6 +24,24 @@ def ensure_columns(engine: Engine) -> None:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
+def table_bins(db: Session) -> None:
+    """2026-10-05: las canastas debajo de la mesa blanca tambien guardan
+    prendas (18: 6 pilas de 3). Se aplica una sola vez a la distribucion que
+    ya existe; si despues se cambia en el editor, no se vuelve a tocar."""
+    key = "layout_mesa_18_canastas"
+    if db.get(models.AppSetting, key):
+        return
+    tables = db.query(models.Element).filter(models.Element.type == "table").all()
+    if len(tables) == 1 and not (tables[0].params or {}).get("bins"):
+        table = tables[0]
+        table.params = {**(table.params or {}), "bins": 18}
+        if not table.code:
+            used = {e.code for e in db.query(models.Element).all() if e.code}
+            table.code = next((c for c in "MNOPQRSTUVWXYZ" if c not in used), "M2")
+    db.add(models.AppSetting(key=key, value="hecho"))
+    db.commit()
+
+
 def backfill_stock(db: Session) -> None:
     """Antes cada codigo tenia una sola ubicacion con su cantidad; ahora las
     existencias van por ubicacion. Los codigos que todavia no tienen filas

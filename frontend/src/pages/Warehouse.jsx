@@ -11,7 +11,7 @@ import Icon from '../components/Icon'
 import { Count, ProductThumb, SearchField } from '../components/Bits'
 import { locationGroups } from '../locationGroups'
 
-const STORAGE = ['bins', 'shelf', 'rack', 'boxes']
+const STORAGE = ['bins', 'shelf', 'rack', 'boxes', 'table']
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
 const isWide = () => window.matchMedia('(min-width: 900px)').matches
 

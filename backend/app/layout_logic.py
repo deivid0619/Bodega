@@ -14,14 +14,16 @@ TYPE_LABELS = {
     "ladder": "Escalera",
     "balloons": "Bombas",
 }
-STORAGE_TYPES = {"bins", "shelf", "rack", "boxes"}
+STORAGE_TYPES = {"bins", "shelf", "rack", "boxes", "table"}
+# la mesa de despacho esta apoyada sobre pilas de canastas de 3 de alto
+TABLE_LEVELS = 3
 
 PARAM_RANGES: dict[str, dict[str, tuple[float, float]]] = {
     "bins": {"cols": (1, 16), "rows": (1, 10)},
     "shelf": {"w": (0.8, 5), "levels": (1, 6)},
     "rack": {"w": (0.8, 6), "bars": (1, 4)},
     "boxes": {"count": (1, 8)},
-    "table": {"w": (1, 4)},
+    "table": {"w": (1, 4), "bins": (0, 30)},
     "ladder": {},
     "balloons": {},
 }
@@ -30,7 +32,7 @@ DEFAULT_PARAMS: dict[str, dict[str, Any]] = {
     "shelf": {"w": 2.4, "levels": 3},
     "rack": {"w": 3, "bars": 3},
     "boxes": {"count": 3},
-    "table": {"w": 2.4},
+    "table": {"w": 2.4, "bins": 0},
     "ladder": {},
     "balloons": {},
 }
@@ -40,6 +42,7 @@ CODE_HINTS = {
     "bins": "CGJLMQRSTUVWXYZ",
     "shelf": "HEFIKNOTUVWXYZ",
     "rack": "ABDFIKMNORSTUVWXYZ",
+    "table": "MNOPQRSTUVWXYZ",
 }
 
 
@@ -53,7 +56,21 @@ def el_name(el: dict) -> str:
         return f"Perchero {code}"
     if t == "boxes":
         return "Cajas en el piso" if code == "CAJAS" else f"Cajas {code}"
+    if t == "table" and code:
+        return f"Mesa {code}"
     return TYPE_LABELS.get(t, t)
+
+
+def table_slots(n: int) -> list[tuple[int, int]]:
+    """Las canastas debajo de la mesa: (nivel, pila). Pilas de 3, nivel 1 =
+    arriba (pegada a la mesa). Si no da exacto, a las ultimas pilas les falta
+    la de arriba. El visor 3D usa este mismo orden."""
+    if n <= 0:
+        return []
+    piles = -(-n // TABLE_LEVELS)
+    short = piles * TABLE_LEVELS - n
+    return [(level, pile) for level in range(1, TABLE_LEVELS + 1) for pile in range(1, piles + 1)
+            if not (level == 1 and pile > piles - short)]
 
 
 def locs_of_el(el: dict) -> list[dict]:
@@ -74,6 +91,9 @@ def locs_of_el(el: dict) -> list[dict]:
             out.append({"id": f"P-{code}{i}", "kind": "rod", "name": f"Perchero {code}, barra {i}{suf}"})
     elif t == "boxes":
         out.append({"id": code, "kind": "boxes", "name": el_name(el)})
+    elif t == "table" and code:
+        for level, pile in table_slots(int(p.get("bins", 0) or 0)):
+            out.append({"id": f"{code}-{level}-{pile}", "kind": "bin", "name": f"Canasta {code}-{level}-{pile}"})
     return out
 
 

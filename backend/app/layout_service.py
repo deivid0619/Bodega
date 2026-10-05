@@ -138,7 +138,7 @@ def add_element(db: Session, type_: str, x: float, z: float, rot: int, y0: float
         "y0": y0,
         "params": dict(DEFAULT_PARAMS.get(type_, {})),
     }
-    if type_ in ("bins", "shelf", "rack", "boxes"):
+    if type_ in ("bins", "shelf", "rack", "boxes", "table"):
         new_el["code"] = next_code(elements, type_)
     _replace_all(db, elements + [new_el])
     return db.get(models.Element, new_el["id"])
@@ -202,7 +202,8 @@ DEFAULT_LAYOUT = [
     {"id": "e7", "type": "bins", "code": "G", "x": -1.2, "z": -3.24, "rot": 0, "y0": 1.4, "params": {"cols": 5, "rows": 1}},
     {"id": "e8", "type": "bins", "code": "H", "x": -1.2, "z": -3.24, "rot": 0, "y0": 0.7, "params": {"cols": 10, "rows": 1}},
     {"id": "e9", "type": "bins", "code": "I", "x": -1.2, "z": -3.24, "rot": 0, "y0": 0, "params": {"cols": 5, "rows": 1}},
-    {"id": "e10", "type": "table", "code": None, "x": 0, "z": 0, "rot": 0, "y0": 0, "params": {"w": 1.3}},
+    # debajo de la mesa blanca: 18 canastas (6 pilas de 3)
+    {"id": "e10", "type": "table", "code": "M", "x": 0, "z": 0, "rot": 0, "y0": 0, "params": {"w": 1.3, "bins": 18}},
 ]
 DEFAULT_ROOM = {"width": 8.4, "depth": 7.0}
 

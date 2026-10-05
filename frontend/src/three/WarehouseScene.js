@@ -21,6 +21,17 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 
 const BW = 0.42, BH = 0.3, BD = 0.42, PI = Math.PI
+// canastas debajo de la mesa: pilas de 3, nivel 1 = arriba. Mismo orden que
+// table_slots() del backend (las ultimas pilas sin la de arriba si no da exacto)
+const TABLE_LEVELS = 3
+function tableSlots(n) {
+  if (n <= 0) return []
+  const piles = Math.ceil(n / TABLE_LEVELS), short = piles * TABLE_LEVELS - n, out = []
+  for (let level = 1; level <= TABLE_LEVELS; level++) {
+    for (let pile = 1; pile <= piles; pile++) if (!(level === 1 && pile > piles - short)) out.push([level, pile])
+  }
+  return out
+}
 const SLAB = 0.16, WALL_H = 3.0, WALL_T = 0.12, WALL_STUB = 0.34
 const LIME = 0xc0ff00, INK = 0x0b0b0b, AMBER = 0xe5690f
 const PH_MIN = 0.02, PH_MAX = 1.42, R_MIN = 1.6, R_MAX = 40
@@ -590,8 +601,8 @@ export class WarehouseScene {
   }
 
   // etiquetas impresas de cada canasta (C-1-3...), en una sola textura
-  _labelMesh(el, cells, w, h) {
-    const { cols, rows } = el.params
+  _labelMesh(el, cells, w, h, grid = el.params) {
+    const { cols, rows } = grid
     const cw = 128, chh = 44
     const tex = this._canvasTex(cols * cw, rows * chh, (x) => {
       x.font = '600 25px ui-monospace, "SF Mono", Menlo, Consolas, monospace'
@@ -610,10 +621,10 @@ export class WarehouseScene {
     const n = cells.length
     const pos = new Float32Array(n * 12), uv = new Float32Array(n * 8), col = new Float32Array(n * 12), idx = []
     cells.forEach((cell, i) => {
-      const { x, y, z, r, c } = cell
+      const { x, y, z, r, c, back } = cell
       const corners = [[-w / 2, -h / 2], [w / 2, -h / 2], [w / 2, h / 2], [-w / 2, h / 2]]
       corners.forEach(([dx, dy], k) => {
-        pos.set([x + dx, y + dy, z], i * 12 + k * 3)
+        pos.set([x + (back ? -dx : dx), y + dy, z], i * 12 + k * 3)
         col.set([1, 1, 1], i * 12 + k * 3)
       })
       const u0 = (c - 1) / cols, u1 = c / cols, v1 = 1 - (r - 1) / rows, v0 = 1 - r / rows
@@ -767,9 +778,12 @@ export class WarehouseScene {
   }
 
   _buildTable(el, g) {
-    // mesa de despacho real: sin patas, apoyada sobre canastas apiladas
+    // mesa de despacho real: sin patas, apoyada sobre pilas de canastas. Si
+    // esas canastas guardan prendas, cada una es una ubicacion (M-1-1...)
     const W = el.params.w, D = 1.2, mat = this.mat
     this._mk(RB(W, 0.045, D, 0.014), mat.table, 0, 0.955, 0, g)
+    const n = el.code ? Math.max(0, Math.round(el.params.bins || 0)) : 0
+    if (n) return this._buildTableBins(el, g, n, W, D)
     const cw = BW, cd = BD, ch = BH * 0.98, stack = 3
     const cols = Math.max(1, Math.floor((W - 0.06) / cw))
     const rows = Math.max(1, Math.floor((D - 0.06) / cd))
@@ -787,6 +801,47 @@ export class WarehouseScene {
       }
     }
     return { w: W, h: 0.98, d: D, locs: [] }
+  }
+
+  _buildTableBins(el, g, n, W, D) {
+    const mat = this.mat, ch = BH * 0.98
+    const slots = tableSlots(n)
+    const piles = Math.ceil(n / TABLE_LEVELS)
+    // la mitad de las pilas al frente y la otra mitad atras
+    const front = piles > 1 ? Math.ceil(piles / 2) : 1
+    const back = piles - front
+    const spot = (pile) => {
+      const isBack = pile > front
+      const row = isBack ? back : front
+      const j = isBack ? pile - front - 1 : pile - 1
+      return { x: -((row - 1) / 2) * BW + j * BW, z: back ? (isBack ? -BD / 2 : BD / 2) : 0, isBack }
+    }
+    const crates = this._inst(this.geo.crate, mat.crate, slots.length, g)
+    const rims = this._inst(this.geo.crateRim, mat.crateRim, slots.length, g)
+    const folds = this._inst(this.geo.fold, mat.garment, slots.length * 4, g)
+    const cells = []
+    const locs = []
+    slots.forEach(([level, pile], i) => {
+      const { x, z, isBack } = spot(pile)
+      const y = 0.004 + (TABLE_LEVELS - level) * ch
+      this._setI(crates, i, x, y, z)
+      this._setI(rims, i, x, y, z)
+      for (let l = 0; l < 4; l++) {
+        this._hide(folds, i * 4 + l)
+        folds.setColorAt(i * 4 + l, this._col.setHex(0x222326))
+      }
+      // la etiqueta va en la cara que se ve: adelante o atras
+      cells.push({ x, y: y + BH * 0.5, z: isBack ? z - BD * 0.44 - 0.004 : z + BD * 0.44 + 0.004, r: level, c: pile, back: isBack })
+      const loc = el.locations[i]
+      if (loc) {
+        this._locHit(g, loc.id, BW, BH, BD, x, y + BH / 2, z)
+        locs.push({ id: loc.id, kind: 'bin', c: new THREE.Vector3(x, y + BH / 2, z), s: new THREE.Vector3(BW, BH, BD), i, x, y, z, crate: true, folds })
+      }
+    })
+    const labels = this._labelMesh(el, cells, 0.15, 0.05, { cols: piles, rows: TABLE_LEVELS })
+    g.add(labels)
+    for (const L of locs) L.labels = labels
+    return { w: Math.max(W, front * BW), h: 0.98, d: D, locs }
   }
 
   _buildLadder(el, g) {
@@ -940,7 +995,7 @@ export class WarehouseScene {
         L.elId = el.id
         this.locObjs[L.id] = L
       }
-      if (el.code && ['bins', 'shelf', 'rack', 'boxes'].includes(el.type)) this._addTag(el, g, info)
+      if (el.code && (['bins', 'shelf', 'rack', 'boxes'].includes(el.type) || info.locs.length)) this._addTag(el, g, info)
       if (runIntro) {
         g.scale.y = 0.001
         g.userData.introDelay = idx * 70
@@ -1016,7 +1071,7 @@ export class WarehouseScene {
           if (l < layers) {
             const p = items[l % items.length]
             const jx = (hash(k) - 0.5) * 0.03, jz = (hash(k + 7) - 0.5) * 0.03, ry = (hash(k + 3) - 0.5) * 0.16
-            this._setI(o.folds, k, o.x + jx, o.y + (o.crate ? 0.032 : 0.046) + l * 0.051, (o.crate ? 0 : -0.035) + jz, 1, 1, 1, ry)
+            this._setI(o.folds, k, o.x + jx, o.y + (o.crate ? 0.032 : 0.046) + l * 0.051, (o.z || 0) + (o.crate ? 0 : -0.035) + jz, 1, 1, 1, ry)
             o.folds.setColorAt(k, this._col.setHex(garmentColor(p.name)).multiplyScalar(0.9 + hash(k + 11) * 0.2))
           } else this._hide(o.folds, k)
         }
