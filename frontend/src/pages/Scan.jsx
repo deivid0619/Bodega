@@ -5,7 +5,6 @@ import { moveStock, refreshInventory, useLayout } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { locationGroups } from '../locationGroups'
 import NewProductModal from '../components/NewProductModal'
-import { LocationSelect } from '../components/ProductModal'
 import Icon from '../components/Icon'
 import { PageHead, Stepper } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
@@ -16,7 +15,7 @@ const MODES = [
   { m: 'out', label: 'Salida', icon: 'boxOut', hint: 'Cada código descuenta prendas: ventas y despachos.' },
   { m: 'set', label: 'Conteo', icon: 'equals', hint: 'Cada código reemplaza el total por lo que contaste.' },
 ]
-const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo' }
+const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
 
 function beep(ok) {
   try {
@@ -33,7 +32,15 @@ function beep(ok) {
   if (navigator.vibrate) navigator.vibrate(ok ? 35 : [60, 40, 60])
 }
 
-const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : `+${m.qty}`)
+const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
+
+// "Salió de P-A1 (3) y C-1-2 (1)", "Entró a C-1-3"...
+function placesText(res) {
+  const parts = res.movements?.length ? res.movements : [res.movement]
+  const where = parts.map((m) => (parts.length > 1 ? `${m.location_id} (${m.qty})` : m.location_id)).join(' y ')
+  const verb = { in: 'Entró a', out: 'Salió de', set: 'Contado en', new: 'Registrada en', move: 'Movida desde' }[res.movement.type] || 'En'
+  return `${verb} ${where}`
+}
 
 export default function Scan() {
   const { data: layout } = useLayout()
@@ -44,16 +51,18 @@ export default function Scan() {
   const [pendingSku, setPendingSku] = useState(null)
   const [lastMove, setLastMove] = useState(null)
   const [session, setSession] = useState([])
-  const [newLoc, setNewLoc] = useState('')
+  // '' = automatica (la ubicacion principal de cada codigo); null = aun sin decidir
+  const [place, setPlace] = useState(null)
 
   const [params] = useSearchParams()
   const groups = useMemo(() => (layout ? locationGroups(layout.elements) : []), [layout])
   useEffect(() => {
-    if (newLoc || !groups.length) return
+    if (place !== null || !groups.length) return
     const wanted = params.get('loc')
     const exists = wanted && groups.some((g) => g.options.some((l) => l.id === wanted))
-    setNewLoc(exists ? wanted : groups[0].options[0]?.id || '')
-  }, [groups, newLoc, params])
+    setPlace(exists ? wanted : '')
+  }, [groups, place, params])
+  const firstLoc = groups[0]?.options[0]?.id || ''
 
   const pendingRef = useRef(null)
   pendingRef.current = pendingSku
@@ -64,10 +73,11 @@ export default function Scan() {
     const sku = String(raw || '').trim().toUpperCase().replace(/\s+/g, '')
     if (!sku || pendingRef.current) return
     try {
-      const res = await moveStock(sku, mode, qty)
+      const res = await moveStock(sku, mode, qty, place || undefined)
       beep(true)
       setLastMove(res)
-      setSession((s) => [res.movement, ...s].slice(0, 25))
+      const parts = res.movements?.length ? [...res.movements].reverse() : [res.movement]
+      setSession((s) => [...parts, ...s].slice(0, 25))
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         beep(true)
@@ -163,6 +173,23 @@ export default function Scan() {
           </Stepper>
         </div>
 
+        <label className="field">
+          <span className="field-label">¿Dónde?</span>
+          <select className="input" value={place || ''} onChange={(e) => setPlace(e.target.value)}>
+            <option value="">Automática: la ubicación principal de cada código</option>
+            {groups.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </optgroup>
+            ))}
+          </select>
+          <span className="field-hint">
+            {mode === 'out'
+              ? place ? `Las salidas se descuentan solo de ${place}.` : 'Sale primero de la ubicación principal y, si no alcanza, de donde haya.'
+              : place ? `Lo que escanees ${mode === 'set' ? 'se cuenta' : 'entra'} en ${place}.` : `Cada código ${mode === 'set' ? 'se cuenta' : 'entra'} en su ubicación principal.`}
+          </span>
+        </label>
+
         <div className="manual">
           <input
             className="input mono"
@@ -179,10 +206,6 @@ export default function Scan() {
         </div>
         <p className="mode-hint">Con un lector USB o Bluetooth: toca el campo y escanea.</p>
 
-        <label className="field">
-          <span className="field-label">Ubicación para códigos nuevos</span>
-          <LocationSelect value={newLoc} onChange={setNewLoc} locations={groups} currentName={newLoc} />
-        </label>
 
         {lastMove && mv && (
           <article className="result rise" key={mv.id} aria-live="polite">
@@ -194,7 +217,9 @@ export default function Scan() {
             </div>
             <h3 className="result-name">{lastMove.product.name}</h3>
             <div className="result-code mono">{lastMove.product.sku}</div>
-            <p className="result-left">Quedan <b>{lastMove.product.qty}</b> en {lastMove.product.location_name}</p>
+            <p className="result-left">
+              {placesText(lastMove)} · quedan <b>{lastMove.product.qty}</b> en total
+            </p>
             <button className="undo" onClick={() => undo(mv.id)}><Icon name="undo" size={16} />Deshacer</button>
             <div className="result-size">{lastMove.product.size || 'U'}</div>
           </article>
@@ -222,7 +247,7 @@ export default function Scan() {
       {pendingSku && (
         <NewProductModal
           sku={pendingSku}
-          defaultLocation={newLoc}
+          defaultLocation={place || firstLoc}
           locations={groups}
           onClose={() => setPendingSku(null)}
           onCreated={(res) => {

@@ -42,11 +42,13 @@ def _csv_response(rows: list[list], filename: str) -> StreamingResponse:
 
 @router.get("/inventory.csv")
 def inventory_csv(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
-    rows = [["SKU", "Referencia", "Talla", "Ubicación", "Cantidad", "Mínimo", "Estado", "Salidas 30 días"]]
-    names, outs = ser.loc_names(db), ser.out_30d_map(db)
+    rows = [["SKU", "Referencia", "Talla", "Ubicación principal", "Dónde está", "Cantidad", "Mínimo", "Estado", "Salidas 30 días"]]
+    names, outs, stock = ser.loc_names(db), ser.out_30d_map(db), ser.stock_map(db)
     for p in db.query(models.Product).order_by(models.Product.name, models.Product.size).all():
         estado = "Agotado" if p.qty == 0 else ("Bajo mínimo" if p.min_qty and p.qty <= p.min_qty else "OK")
-        rows.append([p.sku, p.name, p.size, names.get(p.location_id, p.location_id), p.qty, p.min_qty, estado, outs.get(p.sku, 0)])
+        where = ", ".join(f"{loc} ({q})" for loc, q in sorted(stock.get(p.sku, []), key=lambda r: -r[1]))
+        rows.append([p.sku, p.name, p.size, names.get(p.location_id, p.location_id), where, p.qty, p.min_qty,
+                     estado, outs.get(p.sku, 0)])
     return _csv_response(rows, f"inventario-{datetime.now().date()}.csv")
 
 

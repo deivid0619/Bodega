@@ -62,12 +62,16 @@ export default function Warehouse() {
     if (loc) out.push({ type: 'loc', id: loc.id, label: loc.name })
     const el = storageEls.find((e) => norm(e.code) === q)
     if (el) out.push({ type: 'el', id: el.id, label: el.name })
-    const prods = (products || [])
-      .filter((p) => norm(`${p.name} ${p.sku} ${p.size} ${p.location_id} ${p.location_name}`).includes(q))
-      .sort((a, b) => (b.qty > 0) - (a.qty > 0) || a.name.localeCompare(b.name))
-      .slice(0, 7)
-    for (const p of prods) out.push({ type: 'prod', p })
-    return out
+    // una fila por cada lugar donde esta el codigo (puede estar en varios)
+    const hits = []
+    for (const p of products || []) {
+      const places = p.stock?.length ? p.stock : [{ location_id: p.location_id, qty: 0 }]
+      const text = norm(`${p.name} ${p.sku} ${p.size} ${places.map((s) => s.location_id).join(' ')}`)
+      if (!text.includes(q)) continue
+      for (const s of places) hits.push({ type: 'prod', p, loc: s.location_id, here: s.qty })
+    }
+    hits.sort((a, b) => (b.here > 0) - (a.here > 0) || a.p.name.localeCompare(b.p.name) || b.here - a.here)
+    return [...out, ...hits.slice(0, 8)]
   }, [query, products, locIndex, storageEls])
 
   const prevEdit = useRef(editMode)
@@ -192,7 +196,7 @@ export default function Warehouse() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && results[0]) {
                 const r = results[0]
-                if (r.type === 'prod') locate(r.p.location_id, r.p.sku)
+                if (r.type === 'prod') locate(r.loc, r.p.sku)
                 else if (r.type === 'loc') locate(r.id)
                 else { setQuery(''); focusEl(r.id) }
               }
@@ -205,13 +209,13 @@ export default function Warehouse() {
             <div className="wh-results" role="listbox">
               {results.length ? results.map((r) => (
                 r.type === 'prod' ? (
-                  <button key={r.p.sku} className="wh-result" role="option" onClick={() => locate(r.p.location_id, r.p.sku)}>
+                  <button key={`${r.p.sku}-${r.loc}`} className="wh-result" role="option" onClick={() => locate(r.loc, r.p.sku)}>
                     <ProductThumb src={r.p.image_url} alt="" size="sm" />
                     <span className="wh-result-t">
                       <b>{r.p.name}{r.p.size ? ` · ${r.p.size}` : ''}</b>
-                      <small><span className="code dark"><Icon name="pin" size={12} stroke={2.2} />{r.p.location_id}</span>{r.p.sku}</small>
+                      <small><span className="code dark"><Icon name="pin" size={12} stroke={2.2} />{r.loc}</span>{r.p.sku}</small>
                     </span>
-                    <span className="qty">{r.p.qty}</span>
+                    <span className="qty">{r.here}</span>
                   </button>
                 ) : (
                   <button key={`${r.type}-${r.id}`} className="wh-result" role="option" onClick={() => (r.type === 'loc' ? locate(r.id) : (setQuery(''), setSearchOpen(false), focusEl(r.id)))}>
@@ -274,6 +278,7 @@ export default function Warehouse() {
           locationName={locIndex.get(selLoc)?.name || selLoc}
           products={products || []}
           highlightSku={highlightSku}
+          locations={groupsLoc}
           onClose={closeLocation}
           onScanHere={() => navigate(`/scan?loc=${encodeURIComponent(selLoc)}`)}
           onOpenProduct={setOpenSku}

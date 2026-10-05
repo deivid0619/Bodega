@@ -20,7 +20,7 @@ function groupProducts(list) {
     g.items.push(p)
     g.total += p.qty
     if (!g.image && p.image_url) g.image = p.image_url
-    if (p.location_id) g.locs.set(p.location_id, p.location_name)
+    for (const st of p.stock || []) g.locs.set(st.location_id, (g.locs.get(st.location_id) || 0) + st.qty)
   }
   return [...map.values()]
 }
@@ -95,9 +95,9 @@ export default function Inventory() {
                 </div>
                 {g.locs.size > 0 && (
                   <div className="ref-locs">
-                    {[...g.locs].map(([id, label]) => (
-                      <button key={id} className="code dark" onClick={() => navigate(`/?loc=${encodeURIComponent(id)}`)} title={label}>
-                        <Icon name="pin" size={13} stroke={2.2} />{id}
+                    {[...g.locs].sort((a, b) => b[1] - a[1]).map(([id, n]) => (
+                      <button key={id} className="code dark" onClick={() => navigate(`/?loc=${encodeURIComponent(id)}`)} aria-label={`Ver ${id} en 3D, ${n} prendas`}>
+                        <Icon name="pin" size={13} stroke={2.2} />{id}<span className="code-n">{n}</span>
                       </button>
                     ))}
                   </div>

@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError
 from . import models
 from .config import settings
 from .database import Base, SessionLocal, engine
+from .migrations import backfill_stock, ensure_columns
 from .routers import auth, layout, movements, products, reports, reserve
 from .seed import seed
 
@@ -42,9 +43,11 @@ def wait_for_db(max_seconds: int = 60, interval: float = 2.0) -> None:
 async def lifespan(app: FastAPI):
     wait_for_db()
     Base.metadata.create_all(bind=engine)
+    ensure_columns(engine)
     db = SessionLocal()
     try:
         seed(db)
+        backfill_stock(db)
     finally:
         db.close()
     yield

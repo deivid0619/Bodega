@@ -82,12 +82,8 @@ def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, db: 
     existing = db.get(models.Product, sku)
     try:
         if existing:
-            product, _movement = inv.apply_movement(db, sku, "in", payload.qty, user)
-            if existing.location_id != payload.location_id:
-                # ya existe con ese sku pero en otra ubicacion: no la movemos
-                # sola (podria tener otras prendas ahi), solo avisamos por la
-                # ubicacion que ya tiene
-                pass
+            # entra a la ubicacion elegida, aunque el codigo ya tenga otra principal
+            product, _movements = inv.apply_movement(db, sku, "in", payload.qty, user, location_id=payload.location_id)
         else:
             product, _movement = inv.register_product(
                 db, sku, item.name, item.size, payload.location_id, payload.qty, 0, user,

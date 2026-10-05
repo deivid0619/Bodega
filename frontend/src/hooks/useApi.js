@@ -136,18 +136,44 @@ function enqueue(key, task) {
   return run
 }
 
-const nextQty = (qty, type, n) => (type === 'in' ? qty + n : type === 'out' ? Math.max(0, qty - n) : n)
+// Lo que el servidor va a hacer, calculado aqui para mostrarlo al instante.
+// Mismas reglas que el backend: entrada y conteo van a la ubicacion elegida
+// o a la principal; una salida sin ubicacion sale primero de la principal.
+export function applyLocally(p, type, n, loc) {
+  const stock = (p.stock || []).map((s) => ({ ...s }))
+  const row = (id) => {
+    let r = stock.find((s) => s.location_id === id)
+    if (!r) {
+      r = { location_id: id, location_name: id, qty: 0 }
+      stock.push(r)
+    }
+    return r
+  }
+  if (type === 'in' || type === 'set') {
+    const r = row(loc || p.location_id)
+    r.qty = type === 'in' ? r.qty + n : n
+  } else if (type === 'out') {
+    const order = loc ? [row(loc)] : [...stock].sort((a, b) => (a.location_id !== p.location_id) - (b.location_id !== p.location_id) || b.qty - a.qty)
+    let left = n
+    for (const r of order) {
+      const take = Math.min(left, r.qty)
+      r.qty -= take
+      left -= take
+      if (!left) break
+    }
+  }
+  const kept = stock.filter((s) => s.qty > 0)
+  return { ...p, stock: kept, qty: kept.reduce((t, s) => t + s.qty, 0) }
+}
 
-// Entrada / salida / conteo de un codigo ya registrado. La pantalla cambia
-// en el acto; si el servidor lo rechaza, se vuelve a lo que diga el servidor.
-export async function moveStock(sku, type, qty = 1) {
-  mutate('/api/products', (list) => list.map((p) => (p.sku === sku ? { ...p, qty: nextQty(p.qty, type, qty) } : p)))
+async function optimistic(sku, local, request) {
+  mutate('/api/products', (list) => list.map((p) => (p.sku === sku ? local(p) : p)))
   pendingBySku.set(sku, (pendingBySku.get(sku) || 0) + 1)
   try {
-    const res = await enqueue(sku, () => api.post('/api/movements', { sku, type, qty }))
+    const res = await enqueue(sku, request)
     const left = pendingBySku.get(sku) - 1
     pendingBySku.set(sku, left)
-    // con varios toques seguidos, solo la ultima respuesta trae el total final
+    // con varios toques seguidos, solo la ultima respuesta trae el estado final
     if (left === 0) mutate('/api/products', (list) => list.map((p) => (p.sku === sku ? res.product : p)))
     revalidate('/api/reports/needs')
     revalidate('/api/movements')
@@ -157,6 +183,26 @@ export async function moveStock(sku, type, qty = 1) {
     revalidate('/api/products')
     throw err
   }
+}
+
+// Entrada / salida / conteo de un codigo ya registrado, opcionalmente en una
+// ubicacion. La pantalla cambia en el acto; si el servidor lo rechaza, se
+// vuelve a lo que diga el servidor.
+export function moveStock(sku, type, qty = 1, locationId) {
+  return optimistic(
+    sku,
+    (p) => applyLocally(p, type, qty, locationId),
+    () => api.post('/api/movements', { sku, type, qty, ...(locationId ? { location_id: locationId } : {}) }),
+  )
+}
+
+// Traslado entre ubicaciones (el total no cambia).
+export function moveBetween(sku, from, to, qty) {
+  return optimistic(
+    sku,
+    (p) => applyLocally(applyLocally(p, 'out', qty, from), 'in', qty, to),
+    () => api.post(`/api/products/${encodeURIComponent(sku)}/move`, { from_location: from, to_location: to, qty }),
+  )
 }
 
 export async function setReserveQty(item, qty) {

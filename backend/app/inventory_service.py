@@ -22,25 +22,61 @@ class UnknownSku(InventoryError):
     """El codigo escaneado no esta registrado (la app ofrece registrarlo)."""
 
 
+def location_ids(db: Session) -> set[str]:
+    return set(all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}
+                              for e in db.query(models.Element).all()]).keys())
+
+
+def _lock(db: Session, sku: str) -> tuple[models.Product, dict[str, models.Stock]]:
+    # SELECT ... FOR UPDATE sobre el codigo y sus existencias: si dos personas
+    # mueven el mismo codigo al tiempo, la segunda espera a la primera en vez
+    # de pisarla.
+    product = db.query(models.Product).filter(models.Product.sku == sku).with_for_update().first()
+    if not product:
+        raise UnknownSku("Ese código no está registrado todavía.")
+    rows = db.query(models.Stock).filter(models.Stock.sku == sku).with_for_update().all()
+    return product, {r.location_id: r for r in rows}
+
+
+def _add(db: Session, sku: str, rows: dict[str, models.Stock], location_id: str, delta: int) -> None:
+    # las filas en cero no se borran aqui (borrar y volver a crear la misma
+    # fila en una transaccion choca con la llave unica); se limpian al arrancar
+    row = rows.get(location_id)
+    if row is None:
+        row = models.Stock(sku=sku, location_id=location_id, qty=0)
+        db.add(row)
+        rows[location_id] = row
+    row.qty += delta
+
+
+def _total(rows: dict[str, models.Stock]) -> int:
+    return sum(r.qty for r in rows.values())
+
+
+def _movement(product: models.Product, user: models.User, type_: str, qty: int, before: int, after: int,
+              location_id: str, to_location_id: str | None = None) -> models.Movement:
+    return models.Movement(
+        sku=product.sku, type=type_, qty=qty, before=before, after=after,
+        location_id=location_id, to_location_id=to_location_id,
+        product_name=product.name, product_size=product.size, user_id=user.id, user_name=user.name,
+    )
+
+
 def register_product(db: Session, sku: str, name: str, size: str, location_id: str,
                       qty: int, min_qty: int, user: models.User,
                       image_url: str | None = None) -> tuple[models.Product, models.Movement]:
     sku = sku.strip().upper()
     if db.get(models.Product, sku):
         raise InventoryError(f"El código {sku} ya está registrado.")
-    locs = all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}
-                           for e in db.query(models.Element).all()])
-    if location_id not in locs:
+    if location_id not in location_ids(db):
         raise InventoryError("Esa ubicación no existe.")
     product = models.Product(sku=sku, name=name.strip().upper(), size=size.strip().upper(),
                               location_id=location_id, qty=qty, min_qty=min_qty,
                               image_url=(image_url or None))
     db.add(product)
-    movement = models.Movement(
-        sku=sku, type="new", qty=qty, before=0, after=qty, location_id=location_id,
-        product_name=product.name, product_size=product.size,
-        user_id=user.id, user_name=user.name,
-    )
+    if qty > 0:
+        db.add(models.Stock(sku=sku, location_id=location_id, qty=qty))
+    movement = _movement(product, user, "new", qty, 0, qty, location_id)
     db.add(movement)
     db.commit()
     db.refresh(product)
@@ -48,42 +84,95 @@ def register_product(db: Session, sku: str, name: str, size: str, location_id: s
     return product, movement
 
 
-def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.User) -> tuple[models.Product, models.Movement]:
-    # SELECT ... FOR UPDATE: si dos personas escanean el mismo codigo al
-    # mismo tiempo, la segunda espera a que la primera termine, en vez de
-    # que una sobreescriba silenciosamente a la otra.
-    product = (
-        db.query(models.Product)
-        .filter(models.Product.sku == sku)
-        .with_for_update()
-        .first()
-    )
-    if not product:
-        raise UnknownSku("Ese código no está registrado todavía.")
+def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.User,
+                   location_id: str | None = None) -> tuple[models.Product, list[models.Movement]]:
+    """Entrada, salida o conteo de un codigo.
 
+    Entrada y conteo van a location_id o, si no se elige, a la ubicacion
+    principal del codigo; el conteo fija lo que hay EN ESA ubicacion.
+    Salida: de location_id si se elige; si no, primero de la ubicacion
+    principal y luego de donde haya mas (puede tocar varias ubicaciones, una
+    fila de historial por cada una).
+    """
+    product, rows = _lock(db, sku)
     before = product.qty
-    if type_ == "in":
-        if qty < 1:
-            raise InventoryError("La cantidad debe ser 1 o más.")
-        after = before + qty
+    valid = location_ids(db)
+    if location_id and location_id not in valid:
+        raise InventoryError("Esa ubicación no existe.")
+    label = f"{product.name} {product.size}".strip()
+    movements: list[models.Movement] = []
+
+    if type_ in ("in", "set"):
+        loc = location_id or product.location_id
+        if loc not in valid:
+            raise InventoryError("La ubicación principal de este código ya no existe. Elige dónde guardarlo.")
+        current = rows[loc].qty if loc in rows else 0
+        if type_ == "in":
+            if qty < 1:
+                raise InventoryError("La cantidad debe ser 1 o más.")
+            delta = qty
+        else:
+            if qty < 0:
+                raise InventoryError("La cantidad no puede ser negativa.")
+            delta = qty - current
+        _add(db, sku, rows, loc, delta)
+        product.qty = _total(rows)
+        logged = abs(delta) if type_ == "set" else qty
+        movements.append(_movement(product, user, type_, logged, before, product.qty, loc))
     elif type_ == "out":
         if qty < 1:
             raise InventoryError("La cantidad debe ser 1 o más.")
-        if qty > before:
-            raise InventoryError(f"Solo hay {before} de {product.name} {product.size}. La salida no se registró.")
-        after = before - qty
-    elif type_ == "set":
-        after = qty
+        if location_id:
+            have = rows[location_id].qty if location_id in rows else 0
+            if qty > have:
+                raise InventoryError(f"En {location_id} solo hay {have} de {label}. La salida no se registró.")
+            plan = [(location_id, qty)]
+        else:
+            if qty > before:
+                raise InventoryError(f"Solo hay {before} de {label}. La salida no se registró.")
+            order = sorted((r for r in rows.values() if r.qty > 0),
+                           key=lambda r: (r.location_id != product.location_id, -r.qty))
+            plan, left = [], qty
+            for r in order:
+                take = min(left, r.qty)
+                plan.append((r.location_id, take))
+                left -= take
+                if left == 0:
+                    break
+        running = before
+        for loc, take in plan:
+            _add(db, sku, rows, loc, -take)
+            movements.append(_movement(product, user, "out", take, running, running - take, loc))
+            running -= take
+        product.qty = _total(rows)
     else:
         raise InventoryError("Tipo de movimiento inválido.")
 
-    product.qty = after
-    logged_qty = abs(after - before) if type_ == "set" else qty
-    movement = models.Movement(
-        sku=sku, type=type_, qty=logged_qty, before=before, after=after,
-        location_id=product.location_id, product_name=product.name, product_size=product.size,
-        user_id=user.id, user_name=user.name,
-    )
+    db.add_all(movements)
+    db.commit()
+    db.refresh(product)
+    for m in movements:
+        db.refresh(m)
+    return product, movements
+
+
+def move_stock(db: Session, sku: str, from_location: str, to_location: str, qty: int,
+               user: models.User) -> tuple[models.Product, models.Movement]:
+    """Traslada prendas de una ubicacion a otra (el total no cambia)."""
+    if from_location == to_location:
+        raise InventoryError("Elige una ubicación distinta a la de origen.")
+    product, rows = _lock(db, sku)
+    if to_location not in location_ids(db):
+        raise InventoryError("Esa ubicación no existe.")
+    have = rows[from_location].qty if from_location in rows else 0
+    if qty < 1 or qty > have:
+        raise InventoryError(f"En {from_location} solo hay {have}.")
+    _add(db, sku, rows, from_location, -qty)
+    _add(db, sku, rows, to_location, qty)
+    # si se llevo todo lo de la ubicacion principal, la principal pasa a ser el destino
+    if product.location_id == from_location and rows[from_location].qty == 0:
+        product.location_id = to_location
+    movement = _movement(product, user, "move", qty, product.qty, product.qty, from_location, to_location)
     db.add(movement)
     db.commit()
     db.refresh(product)
@@ -95,13 +184,26 @@ def undo_last_movement(db: Session, movement_id: int, user: models.User) -> mode
     last = db.query(models.Movement).order_by(models.Movement.id.desc()).first()
     if not last or last.id != movement_id:
         raise InventoryError("Solo se puede deshacer el último movimiento registrado.")
-    product = db.query(models.Product).filter(models.Product.sku == last.sku).with_for_update().first()
-    if not product:
+    try:
+        product, rows = _lock(db, last.sku)
+    except UnknownSku:
         raise InventoryError("La prenda de ese movimiento ya no existe.")
     if last.type == "new":
         db.delete(product)
+    elif last.type == "move":
+        back = rows[last.to_location_id].qty if last.to_location_id in rows else 0
+        if back < last.qty:
+            raise InventoryError("Esas prendas ya no están en el destino; no se puede deshacer.")
+        _add(db, last.sku, rows, last.to_location_id, -last.qty)
+        _add(db, last.sku, rows, last.location_id, last.qty)
     else:
-        product.qty = last.before
+        # el cambio del total es justo el cambio en esa ubicacion
+        delta = last.after - last.before
+        current = rows[last.location_id].qty if last.location_id in rows else 0
+        if current - delta < 0:
+            raise InventoryError("Las existencias ya cambiaron; no se puede deshacer.")
+        _add(db, last.sku, rows, last.location_id, -delta)
+        product.qty = _total(rows)
     db.delete(last)
     db.commit()
     return product
@@ -153,8 +255,10 @@ def has_demo_data(db: Session) -> bool:
 
 
 def remove_demo_data(db: Session) -> None:
-    db.query(models.Product).filter(models.Product.demo.is_(True)).delete()
-    db.query(models.Movement).filter(models.Movement.demo.is_(True)).delete()
+    demo_skus = [sku for (sku,) in db.query(models.Product.sku).filter(models.Product.demo.is_(True))]
+    db.query(models.Stock).filter(models.Stock.sku.in_(demo_skus)).delete(synchronize_session=False)
+    db.query(models.Movement).filter(models.Movement.demo.is_(True)).delete(synchronize_session=False)
+    db.query(models.Product).filter(models.Product.demo.is_(True)).delete(synchronize_session=False)
     db.commit()
 
 
@@ -182,6 +286,8 @@ def load_demo_data(db: Session, user: models.User) -> None:
             qty = rnd.randint(1, 7) if bar else rnd.randint(0, 10)
             p = models.Product(sku=sku, name=name, size=size, location_id=loc, qty=qty, min_qty=2 if bar else 3, demo=True)
             db.add(p)
+            if qty > 0:
+                db.add(models.Stock(sku=sku, location_id=loc, qty=qty))
             made.append(p)
     db.flush()
     now = datetime.now(timezone.utc)

@@ -8,8 +8,8 @@ import { downloadCsv, fmtTime } from '../utils'
 import Icon from '../components/Icon'
 import { Empty, PageHead } from '../components/Bits'
 
-const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo' }
-const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : `+${m.qty}`)
+const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
+const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
 const today = () => new Date().toISOString().slice(0, 10)
 const baseOf = (p) => (p.size && p.sku.endsWith(p.size) ? p.sku.slice(0, -p.size.length) : p.sku)
 
@@ -111,7 +111,7 @@ export default function Summary() {
                 <div className="need" key={n.product.sku}>
                   <div className="need-t">
                     <b>{n.product.name}{n.product.size ? ` · ${n.product.size}` : ''}</b>
-                    <small>Hay {n.product.qty} · mínimo {n.product.min_qty} · {n.product.location_id}</small>
+                    <small>Hay {n.product.qty} · mínimo {n.product.min_qty}{n.product.stock?.length ? ` · ${n.product.stock.map((s) => s.location_id).join(', ')}` : ''}</small>
                   </div>
                   <div className="need-q"><b>{n.order_qty}</b><span>pedir</span></div>
                 </div>
@@ -156,7 +156,7 @@ export default function Summary() {
                 <div className="move-q">{qtyText(m)}</div>
                 <div className="move-t">
                   <b>{m.product_name}{m.product_size ? ` · ${m.product_size}` : ''}</b>
-                  <small>{LABEL[m.type] || m.type} · {m.location_id} · {m.user_name}</small>
+                  <small>{LABEL[m.type] || m.type} · {m.type === 'move' ? `${m.location_id} → ${m.to_location_id}` : m.location_id} · {m.user_name}</small>
                 </div>
                 <time dateTime={m.created_at} title={new Date(m.created_at).toLocaleString('es-CO')}>{fmtTime(m.created_at)}</time>
               </li>

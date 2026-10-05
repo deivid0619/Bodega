@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { createContext, forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react'
 import { prefersReducedMotion, project, rubberband, springTo } from '../motion'
 
@@ -93,7 +94,9 @@ const Sheet = forwardRef(function Sheet({ onClose, modal = false, size = 'auto',
   }
   const handle = { onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp }
 
-  return (
+  // al nivel de la pagina: una hoja dentro de otra (que se mueve con
+  // transform) quedaria atrapada dentro de la primera
+  return createPortal(
     <SheetContext.Provider value={{ close, handle }}>
       {modal && <div ref={scrim} className={`scrim ${springy ? '' : 'css-motion'}`} onClick={() => close()} />}
       <section
@@ -106,7 +109,8 @@ const Sheet = forwardRef(function Sheet({ onClose, modal = false, size = 'auto',
         <div className="sheet-grab" {...handle} />
         <div className="sheet-scroll">{children}</div>
       </section>
-    </SheetContext.Provider>
+    </SheetContext.Provider>,
+    document.body,
   )
 })
 

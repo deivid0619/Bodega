@@ -1,0 +1,33 @@
+{
+  // Terminal > Run Task... > "Iniciar Bodega" arranca el servidor y la pagina.
+  // Despues abre http://localhost:5173 en Chrome.
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Bodega: servidor (backend)",
+      "type": "process",
+      "command": "${workspaceFolder}\\backend\\venv\\Scripts\\python.exe",
+      "args": ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8001", "--reload"],
+      "options": { "cwd": "${workspaceFolder}\\backend" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "group": "bodega" }
+    },
+    {
+      "label": "Bodega: pagina (frontend)",
+      "type": "shell",
+      "command": "npm run dev",
+      "options": { "cwd": "${workspaceFolder}\\frontend" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "panel": "dedicated", "group": "bodega" }
+    },
+    {
+      "label": "Iniciar Bodega",
+      "dependsOn": ["Bodega: servidor (backend)", "Bodega: pagina (frontend)"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "group": { "kind": "build", "isDefault": true }
+    }
+  ]
+}

@@ -18,21 +18,23 @@ router = APIRouter(prefix="/api/movements", tags=["movimientos"])
 def apply_movement(payload: schemas.MovementIn, db: Session = Depends(get_db),
                     user: models.User = Depends(get_current_user)):
     try:
-        product, movement = inv.apply_movement(db, payload.sku.strip().upper(), payload.type, payload.qty, user)
+        product, movs = inv.apply_movement(db, payload.sku.strip().upper(), payload.type, payload.qty, user,
+                                           location_id=payload.location_id)
     except inv.UnknownSku as e:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
     except inv.InventoryError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     names = ser.loc_names(db)
     return schemas.MovementResult(
-        product=ser.product_out(product, names, ser.out_30d_map(db, [product.sku])),
-        movement=ser.movement_out(movement, names),
+        product=ser.one_product_out(db, product, names),
+        movement=ser.movement_out(movs[-1], names),
+        movements=[ser.movement_out(m, names) for m in movs],
     )
 
 
 @router.get("", response_model=list[schemas.MovementOut])
 def list_movements(
-    type: Optional[Literal["in", "out", "set", "new"]] = None,
+    type: Optional[Literal["in", "out", "set", "new", "move"]] = None,
     sku: Optional[str] = None,
     limit: int = Query(default=150, le=500),
     db: Session = Depends(get_db),

@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react'
 import { api, ApiError } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ToastContext'
-import { moveStock } from '../hooks/useApi'
+import { applyLocally, moveStock } from '../hooks/useApi'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
+import MoveSheet from './MoveSheet'
 import Icon from './Icon'
 import { ProductThumb, Stepper, StockMeter } from './Bits'
 
@@ -28,6 +29,7 @@ function Body({ sku, locations, onChanged, onLocate }) {
   const [form, setForm] = useState(null)
   const [armed, setArmed] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [moving, setMoving] = useState(null)
 
   useEffect(() => {
     api.get(`/api/products/${encodeURIComponent(sku)}`)
@@ -39,11 +41,11 @@ function Body({ sku, locations, onChanged, onLocate }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sku])
 
-  const bump = async (type) => {
-    setProduct((p) => ({ ...p, qty: type === 'in' ? p.qty + 1 : Math.max(0, p.qty - 1) }))
+  const bump = async (type, locationId) => {
+    setProduct((p) => applyLocally(p, type, 1, locationId))
     try {
-      const res = await moveStock(sku, type, 1)
-      setProduct((p) => ({ ...p, qty: res.product.qty, out_30d: res.product.out_30d }))
+      const res = await moveStock(sku, type, 1, locationId)
+      setProduct(res.product)
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo registrar.', 'err')
       api.get(`/api/products/${encodeURIComponent(sku)}`).then(setProduct).catch(() => {})
@@ -93,30 +95,21 @@ function Body({ sku, locations, onChanged, onLocate }) {
   }
 
   const low = product.min_qty > 0 && product.qty <= product.min_qty
+  const places = product.stock?.some((s) => s.location_id === product.location_id)
+    ? product.stock
+    : [{ location_id: product.location_id, location_name: product.location_name, qty: 0 }, ...(product.stock || [])]
   return (
     <>
       <SheetHeader
         eyebrow={<div className="sheet-eyebrow"><span className="code">{product.sku}</span>{product.size && <span className="tag tag-out">Talla {product.size}</span>}</div>}
         title={product.name}
       />
-      <div className="prod-hero">
-        <ProductThumb src={product.image_url} alt={product.name} size="lg" />
-        <div style={{ minWidth: 0 }}>
-          <button className="code dark" onClick={() => onLocate(product.location_id)}>
-            <Icon name="pin" size={13} stroke={2.2} />{product.location_id}
-          </button>
-          <p className="muted" style={{ marginTop: 8, fontSize: 13.5 }}>{product.location_name}</p>
-        </div>
-      </div>
-
       <div className="prod-stock">
+        <ProductThumb src={product.image_url} alt={product.name} size="lg" />
         <div className="count">
           <b>{product.qty}</b>
-          <span>en bodega{product.min_qty > 0 ? ` · mínimo ${product.min_qty}` : ''}</span>
+          <span>en total{product.min_qty > 0 ? ` · mínimo ${product.min_qty}` : ''}</span>
         </div>
-        <Stepper onMinus={() => bump('out')} onPlus={() => bump('in')} minusLabel="Registrar salida de 1" plusLabel="Registrar entrada de 1" disabledMinus={product.qty === 0} large>
-          <span style={{ width: 8 }} />
-        </Stepper>
       </div>
       <div className="prod-note">
         <span>{product.out_30d} {product.out_30d === 1 ? 'salió' : 'salieron'} en los últimos 30 días</span>
@@ -126,6 +119,25 @@ function Body({ sku, locations, onChanged, onLocate }) {
             <StockMeter qty={product.qty} min={product.min_qty} />
           </span>
         )}
+      </div>
+
+      <h3 className="h-sec">Dónde está <small>{places.filter((s) => s.qty > 0).length || 'ninguna'} {places.filter((s) => s.qty > 0).length === 1 ? 'ubicación' : 'ubicaciones'}</small></h3>
+      <div className="card panel">
+        {places.map((s) => (
+          <div className="loc-row" key={s.location_id}>
+            <button className="code dark" onClick={() => onLocate(s.location_id)} aria-label={`Ver ${s.location_id} en 3D`}>
+              <Icon name="pin" size={13} stroke={2.2} />{s.location_id}
+            </button>
+            <div className="loc-row-t">
+              <b>{s.location_name}</b>
+              {s.location_id === product.location_id && <small>Principal</small>}
+            </div>
+            <div className="prow-actions">
+              <Stepper value={s.qty} onMinus={() => bump('out', s.location_id)} onPlus={() => bump('in', s.location_id)} minusLabel="Registrar salida de 1" plusLabel="Registrar entrada de 1" disabledMinus={s.qty === 0} />
+              {s.qty > 0 && <button className="link-btn" onClick={() => setMoving(s.location_id)}><Icon name="arrowRight" size={14} stroke={2.2} />Mover</button>}
+            </div>
+          </div>
+        ))}
       </div>
 
       <h3 className="h-sec">Datos de la prenda</h3>
@@ -144,8 +156,9 @@ function Body({ sku, locations, onChanged, onLocate }) {
         </label>
       </div>
       <label className="field">
-        <span className="field-label">Ubicación</span>
+        <span className="field-label">Ubicación principal</span>
         <LocationSelect value={form.location_id} onChange={(v) => setForm({ ...form, location_id: v })} locations={locations} currentName={product.location_name} />
+        <span className="field-hint">Lo que escanees de este código entra aquí si no eliges otra ubicación.</span>
       </label>
       <div className="btn-row">
         <button className="btn btn-ghost" onClick={() => onLocate(product.location_id)}><Icon name="warehouse" size={19} />Ver en 3D</button>
@@ -156,6 +169,7 @@ function Body({ sku, locations, onChanged, onLocate }) {
           {armed ? 'Toca otra vez para eliminar' : 'Eliminar este código'}
         </button>
       )}
+      {moving && <MoveSheet product={product} from={moving} locations={locations} onMoved={(res) => setProduct(res.product)} onClose={() => setMoving(null)} />}
     </>
   )
 }

@@ -88,6 +88,12 @@ class LayoutOut(BaseModel):
 
 
 # ---------- products ----------
+class StockOut(BaseModel):
+    location_id: str
+    location_name: str
+    qty: int
+
+
 class ProductOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     sku: str
@@ -100,6 +106,7 @@ class ProductOut(BaseModel):
     image_url: Optional[str] = None
     demo: bool
     out_30d: int = 0
+    stock: list[StockOut] = []  # cuanto hay en cada ubicacion (la principal primero)
     created_at: datetime
     updated_at: datetime
 
@@ -127,6 +134,13 @@ class MovementIn(BaseModel):
     sku: str
     type: MovementType
     qty: int = Field(ge=0)
+    location_id: Optional[str] = None  # sin elegir: la ubicacion principal (o donde haya, en salidas)
+
+
+class MoveIn(BaseModel):
+    from_location: str
+    to_location: str
+    qty: int = Field(gt=0)
 
 
 class MovementOut(BaseModel):
@@ -139,6 +153,8 @@ class MovementOut(BaseModel):
     after: int
     location_id: str
     location_name: str
+    to_location_id: Optional[str] = None
+    to_location_name: Optional[str] = None
     product_name: str
     product_size: str
     user_name: str
@@ -148,7 +164,8 @@ class MovementOut(BaseModel):
 
 class MovementResult(BaseModel):
     product: ProductOut
-    movement: MovementOut
+    movement: MovementOut  # el ultimo; una salida repartida entre ubicaciones trae varios en "movements"
+    movements: list[MovementOut] = []
 
 
 # ---------- bodega de reserva ----------

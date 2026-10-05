@@ -69,15 +69,40 @@ def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None
             if i < len(new_locs) and ol["id"] != new_locs[i]["id"]:
                 rename[ol["id"]] = new_locs[i]["id"]
 
-    products = db.query(models.Product).filter(models.Product.qty > 0).all()
-    lost = [p for p in products if rename.get(p.location_id, p.location_id) not in new_ids]
+    stock = db.query(models.Stock).filter(models.Stock.qty > 0).all()
+    lost = {r.sku for r in stock if rename.get(r.location_id, r.location_id) not in new_ids}
     if lost:
         n = len(lost)
         noun = "código con prendas quedaría" if n == 1 else "códigos con prendas quedarían"
         raise LayoutError(f"{n} {noun} sin ubicación. Muévelos a otro lugar primero.")
 
-    for p in db.query(models.Product).filter(models.Product.location_id.in_(rename.keys())).all():
-        p.location_id = rename[p.location_id]
+    if rename:
+        # se reescriben las filas (borrar y volver a crear) para que un
+        # corrimiento C-2-1 -> C-2-2 -> C-2-3 no choque con la llave unica
+        moved: dict[tuple[str, str], int] = {}
+        for r in db.query(models.Stock).filter(models.Stock.location_id.in_(rename.keys())).all():
+            key = (r.sku, rename[r.location_id])
+            moved[key] = moved.get(key, 0) + r.qty
+            db.delete(r)
+        db.flush()
+        for (sku, loc), qty in moved.items():
+            row = db.query(models.Stock).filter_by(sku=sku, location_id=loc).first()
+            if row:
+                row.qty += qty
+            else:
+                db.add(models.Stock(sku=sku, location_id=loc, qty=qty))
+        for p in db.query(models.Product).filter(models.Product.location_id.in_(rename.keys())).all():
+            p.location_id = rename[p.location_id]
+        db.flush()
+
+    # si la ubicacion principal de un codigo desaparece pero tiene prendas en
+    # otra, la principal pasa a donde tenga mas
+    by_sku: dict[str, list[models.Stock]] = {}
+    for r in db.query(models.Stock).filter(models.Stock.qty > 0).all():
+        by_sku.setdefault(r.sku, []).append(r)
+    for p in db.query(models.Product).all():
+        if p.location_id not in new_ids and by_sku.get(p.sku):
+            p.location_id = max(by_sku[p.sku], key=lambda r: r.qty).location_id
 
     db.query(models.Element).delete()
     db.flush()

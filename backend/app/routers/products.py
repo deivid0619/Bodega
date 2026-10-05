@@ -66,23 +66,26 @@ def create_product(payload: schemas.ProductCreateIn, db: Session = Depends(get_d
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     names = ser.loc_names(db)
     return schemas.MovementResult(
-        product=ser.product_out(product, names, ser.out_30d_map(db, [product.sku])),
+        product=ser.one_product_out(db, product, names),
         movement=ser.movement_out(movement, names),
+        movements=[ser.movement_out(movement, names)],
     )
 
 
 @router.patch("/{sku}", response_model=schemas.ProductOut)
 def update_product(sku: str, payload: schemas.ProductUpdateIn, db: Session = Depends(get_db),
-                    _: models.User = Depends(get_current_user)):
+                    user: models.User = Depends(get_current_user)):
     p = db.query(models.Product).filter(models.Product.sku == sku.upper()).first()
     if not p:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese código no está registrado.")
-    from ..layout_logic import all_locations
-    if payload.location_id is not None:
-        loc_map = all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}
-                                  for e in db.query(models.Element).all()])
-        if payload.location_id not in loc_map:
+    if payload.location_id is not None and payload.location_id != p.location_id:
+        if payload.location_id not in inv.location_ids(db):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esa ubicación no existe.")
+        rows = [r for r in db.query(models.Stock).filter(models.Stock.sku == p.sku).all() if r.qty > 0]
+        if len(rows) == 1 and rows[0].location_id == p.location_id:
+            # todo estaba en la ubicacion principal: las prendas se van con ella
+            inv.move_stock(db, p.sku, p.location_id, payload.location_id, rows[0].qty, user)
+            db.refresh(p)
         p.location_id = payload.location_id
     if payload.name is not None and payload.name.strip():
         p.name = payload.name.strip().upper()
@@ -95,6 +98,21 @@ def update_product(sku: str, payload: schemas.ProductUpdateIn, db: Session = Dep
     db.commit()
     db.refresh(p)
     return _out(db, p)
+
+
+@router.post("/{sku}/move", response_model=schemas.MovementResult)
+def move_product(sku: str, payload: schemas.MoveIn, db: Session = Depends(get_db),
+                 user: models.User = Depends(get_current_user)):
+    try:
+        product, movement = inv.move_stock(db, sku.strip().upper(), payload.from_location,
+                                           payload.to_location, payload.qty, user)
+    except inv.UnknownSku as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+    except inv.InventoryError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    names = ser.loc_names(db)
+    out = ser.movement_out(movement, names)
+    return schemas.MovementResult(product=ser.one_product_out(db, product, names), movement=out, movements=[out])
 
 
 @router.delete("/{sku}", status_code=status.HTTP_204_NO_CONTENT)
@@ -110,6 +128,7 @@ def delete_product(sku: str, db: Session = Depends(get_db), _: models.User = Dep
 def reset_inventory(db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
     """Borra todas las prendas y el historial, pero conserva la distribución
     de la bodega y las cuentas de usuario."""
+    db.query(models.Stock).delete()
     db.query(models.Movement).delete()
     db.query(models.Product).delete()
     db.commit()

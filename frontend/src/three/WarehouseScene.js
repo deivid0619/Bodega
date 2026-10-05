@@ -989,8 +989,15 @@ export class WarehouseScene {
   // ---------- llenar canastas y percheros segun el inventario ----------
   _updateFill(skipShadow) {
     if (!this.world) return
+    // un codigo puede estar en varias ubicaciones: cada una se llena con lo
+    // suyo; "bajo minimo" se juzga con el total del codigo
     const byLoc = {}
-    for (const p of this.products) (byLoc[p.location_id] = byLoc[p.location_id] || []).push(p)
+    const put = (loc, entry) => (byLoc[loc] = byLoc[loc] || []).push(entry)
+    for (const p of this.products) {
+      const rows = p.stock || []
+      for (const s of rows) put(s.location_id, { ...p, qty: s.qty, total: p.qty })
+      if (!rows.some((s) => s.location_id === p.location_id)) put(p.location_id, { ...p, qty: 0, total: p.qty })
+    }
     const touched = new Set()
     const perEl = {}
     const labelColors = new Map()
@@ -998,7 +1005,7 @@ export class WarehouseScene {
       const o = this.locObjs[id]
       const items = (byLoc[id] || []).filter((p) => p.qty > 0).sort((a, b) => b.qty - a.qty || a.size.localeCompare(b.size))
       const units = items.reduce((s, p) => s + p.qty, 0)
-      const low = (byLoc[id] || []).some((p) => p.min_qty > 0 && p.qty <= p.min_qty)
+      const low = (byLoc[id] || []).some((p) => p.min_qty > 0 && p.total <= p.min_qty)
       const agg = (perEl[o.elId] = perEl[o.elId] || { units: 0, low: false })
       agg.units += units
       agg.low = agg.low || low
