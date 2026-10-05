@@ -117,6 +117,7 @@ class Document(Base):
     pending = Column(Integer, nullable=False, default=0)  # remision: unidades que el proveedor quedo debiendo
     supplier = Column(String(120), nullable=True)  # remision: quien la entrega
     doc_date = Column(String(10), nullable=True)  # fecha escrita en el papel (AAAA-MM-DD)
+    notes = Column(String(500), nullable=True)  # lo demas que diga el papel (completa/parcial, observaciones)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user_name = Column(String(120), nullable=False, default="")
     created_at = Column(DateTime(timezone=True), default=now, index=True)

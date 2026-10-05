@@ -199,6 +199,7 @@ class RemisionIn(BaseModel):
     date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     destination: Literal["bodega", "reserva"] = "bodega"
     location_id: Optional[str] = None  # bodega: sin elegir, la ubicacion principal de cada talla
+    notes: str = Field(default="", max_length=500)  # lo demas que diga el papel
     lines: list[RemisionLineIn] = Field(min_length=1)
 
 
@@ -221,6 +222,7 @@ class DocumentOut(BaseModel):
     pending: int = 0
     supplier: Optional[str] = None
     doc_date: Optional[str] = None
+    notes: Optional[str] = None
     lines: list[dict[str, Any]]
     user_name: str
     created_at: UtcDatetime

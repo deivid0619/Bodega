@@ -260,6 +260,7 @@ function Body() {
   const [history, setHistory] = useState(null)
   const [delivery, setDelivery] = useState(0)
   const [addingSize, setAddingSize] = useState(null)
+  const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => () => { if (photo) URL.revokeObjectURL(photo) }, [photo])
@@ -336,7 +337,7 @@ function Body() {
     setSaving(true)
     try {
       const res = await api.post('/api/documents/remision', {
-        number: effective, supplier: supplier.trim(), date: date || undefined, destination: dest,
+        number: effective, supplier: supplier.trim(), date: date || undefined, destination: dest, notes: notes.trim(),
         location_id: dest === 'bodega' && place ? place : undefined,
         lines: lines.map(({ name, size, sku, qty, pending }) => ({ name, size, sku: sku || undefined, qty, pending })),
       })
@@ -447,6 +448,18 @@ function Body() {
         <span>Quedaron unidades pendientes<small>Lo que el proveedor quedó debiendo</small></span>
         <button type="button" className="switch" role="switch" aria-checked={showPending} aria-label="Anotar pendientes" onClick={() => setShowPending((v) => !v)} />
       </div>
+
+      <label className="field">
+        <span className="field-label">Notas <small className="opt">lo demás que diga el papel</small></span>
+        <textarea
+          className="input notes"
+          rows={2}
+          maxLength={500}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Ej. parcial, falta el color negro, llegó con una prenda dañada…"
+        />
+      </label>
 
       <h3 className="h-sec">Dónde queda</h3>
       <div className="seg two" role="toolbar" aria-label="Dónde queda la mercancía">

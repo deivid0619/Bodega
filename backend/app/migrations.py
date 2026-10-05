@@ -10,7 +10,8 @@ from . import models
 # columnas que se agregaron despues de crear cada tabla
 _NEW_COLUMNS = {
     "movements": [("to_location_id", "VARCHAR(32)"), ("note", "VARCHAR(80)")],
-    "documents": [("pending", "INTEGER NOT NULL DEFAULT 0"), ("supplier", "VARCHAR(120)"), ("doc_date", "VARCHAR(10)")],
+    "documents": [("pending", "INTEGER NOT NULL DEFAULT 0"), ("supplier", "VARCHAR(120)"), ("doc_date", "VARCHAR(10)"),
+                  ("notes", "VARCHAR(500)")],
 }
 
 

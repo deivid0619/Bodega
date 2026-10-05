@@ -115,10 +115,11 @@ def test_remision_enters_counted_stock_once():
         assert len(lres) == 1 and lres[0]["qty"] == 5 and lres[0]["sku"] == "REM-L"
 
         # sin numero ni proveedor (hay remisiones que no los traen): entra igual
-        r = client.post("/api/documents/remision", headers=h, json={"lines": [
+        r = client.post("/api/documents/remision", headers=h, json={"notes": "  Parcial,   falta color negro ", "lines": [
             {"name": ref, "size": "S", "sku": "REM-S", "qty": 1}]})
         assert r.status_code == 201, r.text
         assert r.json()["document"]["number"].startswith("SN-") and r.json()["document"]["supplier"] is None
+        assert r.json()["document"]["notes"] == "Parcial, falta color negro"
         assert _qty(client, h, "REM-S") == 6
 
         # si una talla no se puede guardar, no entra nada

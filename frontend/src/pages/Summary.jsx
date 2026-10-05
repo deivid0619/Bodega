@@ -7,6 +7,7 @@ import { api, ApiError } from '../api'
 import { downloadCsv, fmtTime } from '../utils'
 import Icon from '../components/Icon'
 import ResetSheet from '../components/ResetSheet'
+import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
 import { Count, Empty, PageHead, plural } from '../components/Bits'
 
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
@@ -27,6 +28,8 @@ export default function Summary() {
   const [filter, setFilter] = useState('all')
   const { data: moves } = useMovements(filter)
   const [resetting, setResetting] = useState(false)
+  const [docOpen, setDocOpen] = useState(null)
+  const [docList, setDocList] = useState(null)
   const [demoOn, setDemoOn] = useState(null)
 
   const kpi = useMemo(() => ({
@@ -162,19 +165,23 @@ export default function Summary() {
               {remisiones.map((r) => {
                 const owed = (r.lines || []).filter((l) => l.pending > 0)
                 return (
-                  <div className="need" key={r.id}>
-                    <div className="need-t">
+                  <button type="button" className="need doc-item" key={r.id} onClick={() => setDocOpen(r)}>
+                    <span className="need-t">
                       <b className={r.number.startsWith('SN-') ? '' : 'mono'}>{r.number.startsWith('SN-') ? 'Sin número' : r.number}</b>
                       <small>{[r.supplier, r.user_name, fmtTime(r.created_at)].filter(Boolean).join(' · ')}</small>
                       {owed.length > 0 && (
                         <small className="owed">Quedaron debiendo {owed.map((l) => `${l.size || 'única'} ${l.pending}`).join(', ')}</small>
                       )}
-                    </div>
-                    <div className="need-q"><b>{r.units}</b><span>entraron</span></div>
-                  </div>
+                      {r.notes && <small className="note">{r.notes}</small>}
+                    </span>
+                    <span className="need-q"><b>{r.units}</b><span>entraron</span></span>
+                  </button>
                 )
               })}
             </div>
+            <button type="button" className="link-btn see-all" onClick={() => setDocList('remision')}>
+              Ver todas las remisiones<Icon name="arrowRight" size={14} stroke={2.4} />
+            </button>
           </>
         )}
 
@@ -183,15 +190,18 @@ export default function Summary() {
             <h2 className="h-sec">Facturas descontadas</h2>
             <div className="card panel">
               {facturas.map((f) => (
-                <div className="need" key={f.id}>
-                  <div className="need-t">
+                <button type="button" className="need doc-item" key={f.id} onClick={() => setDocOpen(f)}>
+                  <span className="need-t">
                     <b className="mono">{f.number}</b>
                     <small>{plural(f.lines.length, 'referencia', 'referencias')} · {f.user_name} · {fmtTime(f.created_at)}</small>
-                  </div>
-                  <div className="need-q dark"><b>{f.units}</b><span>salieron</span></div>
-                </div>
+                  </span>
+                  <span className="need-q dark"><b>{f.units}</b><span>salieron</span></span>
+                </button>
               ))}
             </div>
+            <button type="button" className="link-btn see-all" onClick={() => setDocList('factura')}>
+              Ver todas las facturas<Icon name="arrowRight" size={14} stroke={2.4} />
+            </button>
           </>
         )}
 
@@ -245,6 +255,8 @@ export default function Summary() {
         </div>
       </div>
       {resetting && <ResetSheet onClose={() => setResetting(false)} />}
+      {docOpen && <DocumentSheet doc={docOpen} onClose={() => setDocOpen(null)} />}
+      {docList && <DocumentsSheet kind={docList} onClose={() => setDocList(null)} />}
     </section>
   )
 }

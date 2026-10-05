@@ -167,6 +167,7 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
             touched.append(sku)
         doc = models.Document(
             kind="remision", number=number, supplier=payload.supplier.strip() or None, doc_date=payload.date,
+            notes=" ".join(payload.notes.split()) or None,
             lines=out_lines, units=sum(r["qty"] for r in out_lines), pending=sum(r["pending"] for r in out_lines),
             user_id=user.id, user_name=user.name,
         )
