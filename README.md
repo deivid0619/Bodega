@@ -197,7 +197,8 @@ variables de arriba.
 ## Limitaciones a propósito (y el siguiente paso natural)
 
 - **Sincronización por sondeo, no en tiempo real**: cada pantalla vuelve a
-  pedir sus datos cada 4-6 segundos, así que si dos personas están viendo
+  pedir sus datos cada pocos segundos (el inventario cada 6, los reportes
+  cada 20 o 30), así que si dos personas están viendo
   la bodega al mismo tiempo, una puede tardar unos segundos en ver lo que
   hizo la otra (el propio movimiento se ve al instante). El siguiente paso
   natural es cambiarlo por Supabase Realtime o un WebSocket, igual a como
@@ -205,9 +206,10 @@ variables de arriba.
 - **Deshacer solo el último movimiento**: como en el prototipo original,
   por simplicidad. Se podría llevar un historial de deshacer más largo por
   usuario.
-- **Sin fotos de producto**: solo código, referencia y talla. Si hace
-  falta, se puede agregar subida de imágenes con Supabase Storage (mismo
-  plan que ya tienes para Turify).
+- **Fotos solo de la tienda**: la foto de cada prenda sale del catálogo de
+  pigmalionmoto.com; no se suben fotos propias, y las de remisiones y
+  facturas no se guardan. Si hace falta, se puede agregar subida de
+  imágenes con Supabase Storage (mismo plan que ya tienes para Turify).
 - **Roles simples**: solo admin/operador. Si crece el equipo, vale la pena
   un rol intermedio (por ejemplo, "puede registrar prendas nuevas pero no
   editar la distribución").
@@ -222,15 +224,21 @@ backend/
     layout_logic.py       muebles → ubicaciones concretas
     layout_service.py     agregar/mover/redimensionar/borrar muebles
     inventory_service.py  entradas/salidas/conteos/deshaces/pedidos
+    catalog.py            catálogo de pigmalionmoto.com (nombre, talla, foto, precio)
+    push.py               avisos al celular (Web Push)
+    migrations.py         columnas nuevas en bases que ya existen
     security.py, deps.py  JWT y control de acceso
-    routers/               auth, layout, products, movements, reports
-  tests/test_flow.py      prueba de extremo a extremo con pytest
+    routers/              auth, layout, products, movements, reports, reserve,
+                          documents, parcels, catalog, push
+  tests/                  pruebas con pytest (flujo completo, documentos,
+                          de paso, reportes, avisos...)
 
 frontend/
   src/
     three/WarehouseScene.js   motor 3D (clase, sin dependencias de React)
     components/WarehouseCanvas.jsx   puente React ↔ Three.js
-    pages/                     Login, Warehouse, Scan, Inventory, Orders, History
+    pages/                     Login, Warehouse, Scan, Inventory, Reserve,
+                               Summary, Count, Reports
     hooks/useApi.js            sondeo de datos compartidos
     context/AuthContext.jsx    sesión y token JWT
 ```

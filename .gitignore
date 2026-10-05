@@ -7,3 +7,6 @@ dist/
 .DS_Store
 venv/
 .claude/
+
+# graphify: mapa del codigo, se genera en cada maquina
+graphify-out/
