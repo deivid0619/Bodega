@@ -1,0 +1,6 @@
+# Archivos binarios: git no les cambia los saltos de linea (en Windows
+# danaria el PDF, que no trae bytes nulos y git lo tomaba por texto)
+*.pdf binary
+*.png binary
+*.jpg binary
+*.wasm binary
