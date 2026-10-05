@@ -293,6 +293,48 @@ def restock(db: Session) -> list[tuple[models.ReserveItem, models.Product, int]]
     return out
 
 
+def _aware(dt: datetime) -> datetime:
+    # SQLite devuelve las fechas sin zona; se guardaron en UTC
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def weekly_flow(db: Session, weeks: int = 8, tz=timezone.utc) -> list[dict]:
+    """Prendas que entraron y salieron por semana (lunes a domingo, hora
+    local), de la mas vieja a la actual. Entradas: entradas y registros
+    nuevos; salidas: salidas. Los conteos y traslados no cuentan."""
+    today = datetime.now(tz).date()
+    start = today - timedelta(days=today.weekday() + 7 * (weeks - 1))
+    since = datetime.combine(start, datetime.min.time(), tzinfo=tz)
+    buckets = {start + timedelta(weeks=i): {"in": 0, "out": 0} for i in range(weeks)}
+    rows = (db.query(models.Movement.type, models.Movement.qty, models.Movement.created_at)
+            .filter(models.Movement.type.in_(("in", "new", "out")), models.Movement.created_at >= since.astimezone(timezone.utc))
+            .all())
+    for type_, qty, created in rows:
+        day = _aware(created).astimezone(tz).date()
+        week = day - timedelta(days=day.weekday())
+        if week in buckets:
+            buckets[week]["out" if type_ == "out" else "in"] += qty
+    return [{"week": w.isoformat(), "in": v["in"], "out": v["out"]} for w, v in sorted(buckets.items())]
+
+
+def dead_stock(db: Session, days: int = 60) -> list[tuple[models.Product, datetime | None]]:
+    """Prendas con existencias que no han salido en `days` dias (o nunca),
+    registradas hace mas de esos dias. De mas a menos prendas paradas."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    last_out = dict(db.query(models.Movement.sku, func.max(models.Movement.created_at))
+                    .filter(models.Movement.type == "out").group_by(models.Movement.sku).all())
+    out = []
+    for p in db.query(models.Product).filter(models.Product.qty > 0).all():
+        last = last_out.get(p.sku)
+        if last is not None and _aware(last) >= since:
+            continue
+        if p.created_at is not None and _aware(p.created_at) >= since:
+            continue  # recien registrada: todavia no ha tenido tiempo de salir
+        out.append((p, _aware(last) if last else None))
+    out.sort(key=lambda t: (-t[0].qty, t[0].name, t[0].size))
+    return out
+
+
 def top_movers(db: Session, days: int = 30, limit: int = 5) -> list[dict]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     rows = (

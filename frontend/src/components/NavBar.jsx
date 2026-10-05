@@ -1,5 +1,5 @@
 import { flushSync } from 'react-dom'
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useNeeds, useRestock } from '../hooks/useApi'
 import Icon from './Icon'
 
@@ -9,6 +9,10 @@ export default function NavBar() {
   const { data: needs } = useNeeds()
   const { data: restock } = useRestock()
   const navigate = useNavigate()
+  const { pathname } = useLocation()
+  // pantallas que cuelgan de una pestana: la pestana sigue marcada
+  const PARENT = { '/reports': '/summary', '/count': '/scan' }
+  const current = PARENT[pathname] || pathname
   // por pedir al proveedor (lo que cubre la reserva se trae, no se pide)
   const needCount = (needs || []).filter((n) => n.order_qty > 0).length
   const restockCount = restock?.length || 0
@@ -29,10 +33,10 @@ export default function NavBar() {
   }
 
   const item = (to, icon, label, extra) => (
-    <NavLink to={to} end={to === '/'} onClick={go(to)} className={({ isActive }) => 'dock-item' + (isActive ? ' active' : '')}>
-      {({ isActive }) => (
+    <NavLink to={to} end={to === '/'} onClick={go(to)} className={() => 'dock-item' + (current === to ? ' active' : '')}>
+      {() => (
         <>
-          {isActive && <i className="dock-ind" aria-hidden="true" />}
+          {current === to && <i className="dock-ind" aria-hidden="true" />}
           <Icon name={icon} />
           {label}
           {extra}
@@ -45,7 +49,7 @@ export default function NavBar() {
     <nav className="dock" aria-label="Secciones">
       {item('/', 'warehouse', 'Bodega')}
       {item('/inventory', 'hanger', 'Inventario')}
-      <NavLink to="/scan" onClick={go('/scan')} className={({ isActive }) => 'dock-scan' + (isActive ? ' active' : '')} aria-label="Escanear">
+      <NavLink to="/scan" onClick={go('/scan')} className={() => 'dock-scan' + (current === '/scan' ? ' active' : '')} aria-label="Escanear">
         <Icon name="scan" size={27} stroke={2.1} />
       </NavLink>
       {item('/reserve', 'reserve', 'Reserva', restockCount > 0 && <span className="dock-badge lime">{restockCount}</span>)}

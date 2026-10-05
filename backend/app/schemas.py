@@ -281,6 +281,19 @@ class RestockOut(BaseModel):
     suggest: int  # cuantas llevar a la bodega
 
 
+class WeekFlowOut(BaseModel):
+    week: str  # lunes de la semana, AAAA-MM-DD
+    in_: int = Field(alias="in", serialization_alias="in")
+    out: int
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class DeadOut(BaseModel):
+    product: ProductOut
+    last_out: Optional[UtcDatetime] = None  # None: nunca ha salido
+
+
 class TopOut(BaseModel):
     sku: str
     name: str

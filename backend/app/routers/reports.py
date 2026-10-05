@@ -3,7 +3,7 @@ import csv
 import io
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,20 @@ def needs(db: Session = Depends(get_db), _: models.User = Depends(get_current_us
     rows = inv.needs(db)
     outs = ser.products_out(db, [p for p, _, _ in rows])
     return [schemas.NeedOut(product=o, order_qty=q, in_reserve=r) for o, (_, q, r) in zip(outs, rows)]
+
+
+@router.get("/weekly", response_model=list[schemas.WeekFlowOut], response_model_by_alias=True)
+def weekly(weeks: int = Query(default=8, ge=1, le=26), db: Session = Depends(get_db),
+           _: models.User = Depends(get_current_user)):
+    return [schemas.WeekFlowOut(**row) for row in inv.weekly_flow(db, weeks=weeks, tz=ser.BOGOTA)]
+
+
+@router.get("/dead", response_model=list[schemas.DeadOut])
+def dead(days: int = Query(default=60, ge=7, le=365), db: Session = Depends(get_db),
+         _: models.User = Depends(get_current_user)):
+    rows = inv.dead_stock(db, days=days)
+    outs = ser.products_out(db, [p for p, _ in rows])
+    return [schemas.DeadOut(product=o, last_out=last) for o, (_, last) in zip(outs, rows)]
 
 
 @router.get("/top", response_model=list[schemas.TopOut])

@@ -8,7 +8,7 @@
   --graphite:#454645; --muted:#73766F; --faint:#A3A79F;
   --line:#E1E3E1; --line-2:#CFD3CC;
   --amber:#E5690F; --amber-soft:#FFF0E3; --red:#C90303; --red-soft:#FFE9E9;
-  --data-1:#6A9A00;
+  --data-1:#6A9A00; --data-2:#2A78D6;
   --font:'DM Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
   --mono:'DM Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
   --r-xs:3px; --r-sm:6px; --r-md:8px; --r-lg:12px; --pill:6px;
@@ -641,6 +641,35 @@ button.pill:active{transform:scale(.95)}
 .count-done li b.ok{color:var(--lime-deep)}
 button.recent-count{width:100%;text-align:left}
 button.recent-count svg{flex:none;color:var(--muted)}
+
+/* ---------- reportes ---------- */
+.report-card{margin:12px 0 0}
+.flow-legend{display:flex;gap:16px;font-size:12.5px;font-weight:600;color:var(--graphite)}
+.flow-legend span{display:inline-flex;align-items:center;gap:7px}
+.flow-legend i{width:12px;height:12px;border-radius:2px}
+.flow-legend i.in{background:var(--data-1)}
+.flow-legend i.out{background:var(--data-2)}
+.flow-readout{margin-top:12px;font-size:13.5px;color:var(--graphite)}
+.flow-readout span{display:block;margin-bottom:3px;font-size:12px;color:var(--muted)}
+.flow-readout b{font:800 italic 21px/1 var(--font);letter-spacing:-.03em;color:var(--ink)}
+.flow-svg{display:block;max-width:100%;height:auto;margin-top:6px;overflow:visible;-webkit-tap-highlight-color:transparent}
+.flow-base{stroke:var(--line-2);stroke-width:1}
+.flow-in{fill:var(--data-1)}
+.flow-out{fill:var(--data-2)}
+.flow-hl{fill:var(--fog)}
+.flow-val{font:700 11px var(--font);fill:var(--ink);text-anchor:middle;font-variant-numeric:tabular-nums}
+.flow-x{font:500 10.5px var(--font);fill:var(--muted);text-anchor:middle}
+.flow-hit{fill:transparent;cursor:pointer;outline:none}
+.flow-hit:focus-visible{stroke:var(--ink);stroke-width:1.5}
+.flow-table{margin-top:12px;font-size:13px}
+.flow-table summary{cursor:pointer;padding:6px 0;font-weight:700;color:var(--graphite)}
+.flow-table table{width:100%;margin-top:6px;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.flow-table th,.flow-table td{padding:7px 4px;border-top:1px solid var(--line);text-align:right}
+.flow-table th:first-child,.flow-table td:first-child{text-align:left}
+.flow-table th{font-weight:600;font-size:12px;color:var(--muted)}
+.flow-total{margin-top:12px;font-size:13.5px;color:var(--graphite)}
+.flow-total b{color:var(--ink)}
+.need-q.idle{background:var(--fog-2)}
 
 /* ---------- transiciones entre pestanas ---------- */
 .topbar{view-transition-name:topbar}

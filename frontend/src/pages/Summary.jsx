@@ -104,6 +104,12 @@ export default function Summary() {
           </a>
         </div>
 
+        <button className="doc-card report-card" onClick={() => navigate('/reports')}>
+          <span className="doc-ico"><Icon name="summary" size={22} /></span>
+          <span className="doc-card-t"><b>Reportes</b><small>Entradas y salidas por semana, y lo que no se mueve</small></span>
+          <Icon name="arrowRight" size={18} />
+        </button>
+
         <h2 className="h-sec" id="reponer">Por reponer {needs?.length > 0 && <small>lleva cada talla al doble del mínimo</small>}</h2>
         {!needs ? (
           <div className="skeleton" />
