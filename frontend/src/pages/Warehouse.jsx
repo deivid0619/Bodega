@@ -22,7 +22,7 @@ function insetsFor({ sheet, editMode }) {
   const top = editMode ? 76 : wide ? 76 : 120
   if (wide) return { top, bottom: 150, left: 0, right: sheet || editMode ? 440 : 0 }
   if (sheet || editMode) return { top, bottom: Math.min(window.innerHeight * (editMode ? 0.46 : 0.52), 540), left: 0, right: 0 }
-  return { top, bottom: 156, left: 0, right: 0 }
+  return { top, bottom: 170, left: 0, right: 0 }
 }
 
 export default function Warehouse() {

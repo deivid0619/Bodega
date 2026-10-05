@@ -461,7 +461,11 @@ button.pill:active{transform:scale(.95)}
 
 @media (max-width:599px){
   .wh-els{display:none}
-  .wh-bottom{justify-content:space-between}
+  /* el boton de escanear sobresale de la barra de abajo: la fila va mas
+     arriba, y General/Planta (sin iconos) no llega al centro */
+  .wh-bottom{justify-content:space-between;bottom:calc(var(--dock-space) + 16px)}
+  .wh-views button{padding:0 10px}
+  .wh-views button svg{display:none}
   .el-tag{height:26px;font-size:11.5px;padding:0 9px 0 3px;gap:5px}
   .el-tag b{width:20px;height:20px;font-size:11.5px}
   .el-tag.solo{padding:0 3px}
