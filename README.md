@@ -11,6 +11,38 @@ de Claude (guardado en `localStorage` del navegador, sin usuarios, sin
 cámara confiable) por una aplicación real con base de datos compartida y
 cuentas por persona.
 
+## Qué hace
+
+- **Bodega 3D**: la distribución real (percheros, canastas, estanterías).
+  Al tocar una ubicación se ve lo que hay, con «Escanear aquí» y «Contar».
+- **Escanear**: entradas, salidas y conteos con la cámara, un lector USB o
+  Bluetooth, o a mano. Un código nuevo se llena solo con el nombre, la
+  talla, la foto y el precio de la tienda: el código de la etiqueta es el
+  mismo de pigmalionmoto.com.
+- **Una prenda en varias ubicaciones**, con traslados entre ellas.
+- **Recibir una remisión**: la foto de la orden queda a la vista y se cuenta
+  por talla lo que llegó. Va a la bodega o a la reserva, con los pendientes
+  del proveedor y las entregas parciales de una misma orden.
+- **Descontar una factura**: foto de la factura impresa. La app lee los
+  códigos y las cantidades en el mismo celular (Tesseract), se revisa y se
+  descuenta todo junto. La misma factura no se aplica dos veces.
+- **Reserva**: mercancía guardada aparte, con la lista «Para llevar a la
+  bodega» (lo agotado o en su mínimo que hay guardado).
+- **Conteo por ubicación**: muestra lo que falta y lo que sobra, y corrige
+  solo esa ubicación.
+- **Resumen y reportes**:
+  - por reponer (sin pedir lo que ya está en la reserva)
+  - lo que más sale
+  - entradas y salidas por semana
+  - lo que no se mueve
+  - valor a precio de tienda
+  - historial y respaldo en CSV
+- **Avisos al celular**, aunque la app esté cerrada. Cada persona elige
+  cuáles quiere: entradas, salidas, conteos, bajo mínimo, y facturas y
+  remisiones.
+- **Empezar de cero** (administrador): deja la bodega vacía para empezar con
+  los datos reales, después de descargar un respaldo.
+
 ## Arquitectura
 
 ```
