@@ -103,16 +103,20 @@ class Movement(Base):
 
 
 class Document(Base):
-    """Factura o remision ya aplicada al inventario. La llave unica
-    (tipo, numero) impide descontar dos veces la misma factura."""
+    """Factura, remision o conteo ya aplicado al inventario. La llave unica
+    (tipo, numero) impide aplicar dos veces el mismo documento."""
     __tablename__ = "documents"
     __table_args__ = (UniqueConstraint("kind", "number", name="uq_document_kind_number"),)
 
     id = Column(Integer, primary_key=True)
-    kind = Column(String(20), nullable=False)  # factura | remision
+    kind = Column(String(20), nullable=False)  # factura | remision | conteo
+    # remision: otra entrega de la misma orden lleva "#2", "#3"... (OPR123#2)
     number = Column(String(40), nullable=False)
-    lines = Column(JSON, nullable=False, default=list)  # [{sku, qty, location_id}]
+    lines = Column(JSON, nullable=False, default=list)  # [{sku, qty, location_id}] (remision: + name, size, pending, dest)
     units = Column(Integer, nullable=False, default=0)
+    pending = Column(Integer, nullable=False, default=0)  # remision: unidades que el proveedor quedo debiendo
+    supplier = Column(String(120), nullable=True)  # remision: quien la entrega
+    doc_date = Column(String(10), nullable=True)  # fecha escrita en el papel (AAAA-MM-DD)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user_name = Column(String(120), nullable=False, default="")
     created_at = Column(DateTime(timezone=True), default=now, index=True)

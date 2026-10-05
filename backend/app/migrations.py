@@ -7,14 +7,21 @@ from sqlalchemy.orm import Session
 
 from . import models
 
+# columnas que se agregaron despues de crear cada tabla
+_NEW_COLUMNS = {
+    "movements": [("to_location_id", "VARCHAR(32)"), ("note", "VARCHAR(80)")],
+    "documents": [("pending", "INTEGER NOT NULL DEFAULT 0"), ("supplier", "VARCHAR(120)"), ("doc_date", "VARCHAR(10)")],
+}
+
 
 def ensure_columns(engine: Engine) -> None:
-    cols = {c["name"] for c in inspect(engine).get_columns("movements")}
+    insp = inspect(engine)
     with engine.begin() as conn:
-        if "to_location_id" not in cols:
-            conn.execute(text("ALTER TABLE movements ADD COLUMN to_location_id VARCHAR(32)"))
-        if "note" not in cols:
-            conn.execute(text("ALTER TABLE movements ADD COLUMN note VARCHAR(80)"))
+        for table, columns in _NEW_COLUMNS.items():
+            have = {c["name"] for c in insp.get_columns(table)}
+            for name, ddl in columns:
+                if name not in have:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
 
 
 def backfill_stock(db: Session) -> None:

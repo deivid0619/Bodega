@@ -1,9 +1,10 @@
 """Documentos que mueven inventario de una vez: la factura (todo lo que
-salio en un despacho) y, despues, la remision de un proveedor. Se aplican
-completos o nada, y el mismo numero no se puede aplicar dos veces."""
+salio en un despacho) y la remision de un proveedor (lo que llego). Se
+aplican completos o nada, y el mismo numero no se puede aplicar dos veces."""
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -25,14 +26,19 @@ def _already(db: Session, kind: str, number: str) -> Optional[models.Document]:
 
 
 @router.get("", response_model=list[schemas.DocumentOut])
-def list_documents(kind: Optional[Literal["factura", "remision"]] = None, number: Optional[str] = None,
-                   limit: int = Query(default=30, le=200), db: Session = Depends(get_db),
-                   _: models.User = Depends(get_current_user)):
+def list_documents(kind: Optional[Literal["factura", "remision", "conteo"]] = None, number: Optional[str] = None,
+                   base: Optional[str] = None, limit: int = Query(default=30, le=200),
+                   db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     q = db.query(models.Document).order_by(models.Document.id.desc())
     if kind:
         q = q.filter(models.Document.kind == kind)
     if number:
         q = q.filter(models.Document.number == _norm_number(number))
+    if base:
+        # todas las entregas de una misma orden: OPR123, OPR123#2, OPR123#3...
+        b = _norm_number(base).split("#")[0]
+        q = q.filter(or_(models.Document.number == b,
+                         models.Document.number.startswith(b + "#", autoescape=True)))
     return q.limit(limit).all()
 
 
@@ -72,4 +78,85 @@ def apply_factura(payload: schemas.FacturaIn, db: Session = Depends(get_db),
         raise HTTPException(status.HTTP_409_CONFLICT, f"La factura {number} ya se descontó.")
     db.refresh(doc)
     products = db.query(models.Product).filter(models.Product.sku.in_(set(touched))).all()
+    return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))
+
+
+def _sibling_location(db: Session, name: str) -> Optional[str]:
+    """Donde estan las otras tallas de la referencia: una talla nueva se
+    guarda con ellas si no se elige otra ubicacion."""
+    p = (db.query(models.Product).filter(models.Product.name == name)
+         .order_by(models.Product.qty.desc()).first())
+    return p.location_id if p else None
+
+
+@router.post("/remision", response_model=schemas.DocumentResult, status_code=status.HTTP_201_CREATED)
+def apply_remision(payload: schemas.RemisionIn, db: Session = Depends(get_db),
+                   user: models.User = Depends(get_current_user)):
+    """Entrada de mercancia de un proveedor, ya contada. Cada talla con codigo
+    entra a la bodega (a su ubicacion principal o a la elegida); sin codigo, o
+    si se elige la reserva, queda en la reserva. Todo junto o nada."""
+    number = _norm_number(payload.number)
+    prev = _already(db, "remision", number)
+    if prev:
+        when = ser.local_time(prev.created_at).strftime("%d/%m/%Y")
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            f"La remisión {number} ya entró el {when} ({prev.user_name}). "
+                            "Si es otra entrega de la misma orden, márcala como otra entrega.")
+
+    # la misma talla repetida se suma
+    merged: dict[tuple[str, str, Optional[str]], list[int]] = {}
+    for line in payload.lines:
+        sku = (line.sku or "").strip().upper() or None
+        key = (" ".join(line.name.upper().split()), line.size.strip().upper(), sku)
+        acc = merged.setdefault(key, [0, 0])
+        acc[0] += line.qty
+        acc[1] += line.pending
+    if not any(q or p for q, p in merged.values()):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La remisión no tiene cantidades.")
+
+    note = f"Remisión {number}"
+    out_lines: list[dict] = []
+    touched: list[str] = []
+    to_bodega = payload.destination == "bodega"
+    try:
+        if to_bodega and payload.location_id and payload.location_id not in inv.location_ids(db):
+            raise inv.InventoryError("Esa ubicación no existe.")
+        for (name, size, sku), (qty, pending) in merged.items():
+            row = {"name": name, "size": size, "sku": sku, "qty": qty, "pending": pending,
+                   "dest": None, "location_id": None}
+            out_lines.append(row)
+            if qty == 0:
+                continue
+            product = db.get(models.Product, sku) if sku else None
+            if not to_bodega or not sku:
+                inv.add_to_reserve(db, product.name if product else name, product.size if product else size, sku, qty)
+                row["dest"] = "reserva"
+                continue
+            if product:
+                _, movs = inv.apply_movement(db, sku, "in", qty, user, location_id=payload.location_id,
+                                             note=note, commit=False)
+                row["location_id"] = movs[-1].location_id
+            else:
+                loc = payload.location_id or _sibling_location(db, name)
+                if not loc:
+                    raise inv.InventoryError(f"{sku} es un código nuevo: elige en qué ubicación guardarlo.")
+                inv.register_product(db, sku, name, size, loc, qty, 0, user, note=note, commit=False)
+                row["location_id"] = loc
+            row["dest"] = "bodega"
+            touched.append(sku)
+        doc = models.Document(
+            kind="remision", number=number, supplier=payload.supplier.strip() or None, doc_date=payload.date,
+            lines=out_lines, units=sum(r["qty"] for r in out_lines), pending=sum(r["pending"] for r in out_lines),
+            user_id=user.id, user_name=user.name,
+        )
+        db.add(doc)
+        db.commit()
+    except inv.InventoryError as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{e} No entró nada de la remisión.")
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status.HTTP_409_CONFLICT, f"La remisión {number} ya entró.")
+    db.refresh(doc)
+    products = db.query(models.Product).filter(models.Product.sku.in_(set(touched))).all() if touched else []
     return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))

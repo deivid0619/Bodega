@@ -66,3 +66,59 @@ def test_factura_is_all_or_nothing_and_once():
 
         # el historial en CSV dice de que factura salio cada prenda
         assert "Factura FEV9001" in client.get("/api/reports/movements.csv", headers=h).text
+
+
+def _reserve(client, h, name, size):
+    return [i for i in client.get("/api/reserve", headers=h).json() if i["name"] == name and i["size"] == size]
+
+
+def test_remision_enters_counted_stock_once():
+    with TestClient(app) as client:
+        h = _h(client)
+        ref = "CHAQUETA REMI PRUEBA"
+        for sku, size, qty in [("REM-S", "S", 1), ("REM-M", "M", 0)]:
+            r = client.post("/api/products", headers=h, json={"sku": sku, "name": ref, "size": size, "location_id": "F-3-1", "qty": qty})
+            assert r.status_code == 201, r.text
+
+        body = {"number": "opr 77", "supplier": "Taller Prueba", "date": "2026-10-04", "destination": "bodega", "lines": [
+            {"name": ref, "size": "S", "sku": "REM-S", "qty": 3, "pending": 1},
+            {"name": ref, "size": "M", "sku": "REM-M", "qty": 2},
+            {"name": ref, "size": "L", "qty": 4, "pending": 2},          # sin codigo: a la reserva
+            {"name": ref, "size": "XL", "sku": "REM-XL", "qty": 1},     # codigo nuevo: junto a sus tallas
+        ]}
+        r = client.post("/api/documents/remision", headers=h, json=body)
+        assert r.status_code == 201, r.text
+        doc = r.json()["document"]
+        assert (doc["number"], doc["units"], doc["pending"], doc["supplier"]) == ("OPR77", 10, 3, "Taller Prueba")
+        assert {l["size"]: l["dest"] for l in doc["lines"]} == {"S": "bodega", "M": "bodega", "L": "reserva", "XL": "bodega"}
+        assert (_qty(client, h, "REM-S"), _qty(client, h, "REM-M"), _qty(client, h, "REM-XL")) == (4, 2, 1)
+        assert client.get("/api/products/REM-XL", headers=h).json()["location_id"] == "F-3-1"
+        assert _reserve(client, h, ref, "L")[0]["qty"] == 4
+        notes = {m["note"] for m in client.get("/api/movements?limit=3", headers=h).json()}
+        assert notes == {"Remisión OPR77"}
+
+        # la misma remision otra vez: rechazada; otra entrega de la misma orden: entra
+        assert client.post("/api/documents/remision", headers=h, json=body).status_code == 409
+        r = client.post("/api/documents/remision", headers=h, json={"number": "OPR77#2", "lines": [
+            {"name": ref, "size": "S", "sku": "REM-S", "qty": 1}]})
+        assert r.status_code == 201, r.text
+        assert [d["number"] for d in client.get("/api/documents?kind=remision&base=OPR77", headers=h).json()] == ["OPR77#2", "OPR77"]
+        assert _qty(client, h, "REM-S") == 5
+
+        # a la reserva: la bodega no cambia y la talla sin codigo recibe el codigo
+        r = client.post("/api/documents/remision", headers=h, json={"number": "OPR78", "destination": "reserva", "lines": [
+            {"name": ref, "size": "S", "sku": "REM-S", "qty": 2}, {"name": ref, "size": "L", "sku": "REM-L", "qty": 1}]})
+        assert r.status_code == 201, r.text
+        assert _qty(client, h, "REM-S") == 5
+        assert _reserve(client, h, ref, "S")[0]["qty"] == 2
+        lres = _reserve(client, h, ref, "L")
+        assert len(lres) == 1 and lres[0]["qty"] == 5 and lres[0]["sku"] == "REM-L"
+
+        # si una talla no se puede guardar, no entra nada
+        r = client.post("/api/documents/remision", headers=h, json={"number": "OPR79", "lines": [
+            {"name": ref, "size": "S", "sku": "REM-S", "qty": 5},
+            {"name": "REFERENCIA NUEVA SIN UBICACION", "size": "M", "sku": "REM-NUEVA", "qty": 1}]})
+        assert r.status_code == 400
+        assert "No entró nada" in r.json()["detail"]
+        assert _qty(client, h, "REM-S") == 5
+        assert client.get("/api/products/REM-NUEVA", headers=h).status_code == 404

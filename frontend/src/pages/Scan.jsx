@@ -6,6 +6,7 @@ import { useToast } from '../components/ToastContext'
 import { locationGroups } from '../locationGroups'
 import NewProductModal from '../components/NewProductModal'
 import FacturaSheet from '../components/FacturaSheet'
+import RemisionSheet from '../components/RemisionSheet'
 import Icon from '../components/Icon'
 import { PageHead, Stepper } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
@@ -52,6 +53,7 @@ export default function Scan() {
   const [pendingSku, setPendingSku] = useState(null)
   const [lastMove, setLastMove] = useState(null)
   const [factura, setFactura] = useState(false)
+  const [remision, setRemision] = useState(false)
   const [session, setSession] = useState([])
   // '' = automatica (la ubicacion principal de cada codigo); null = aun sin decidir
   const [place, setPlace] = useState(null)
@@ -122,11 +124,16 @@ export default function Scan() {
       <div className="page-inner">
         <PageHead title="Escanear" lede="Apunta a la etiqueta y la prenda se registra sola." />
 
-        <button className="doc-card" onClick={() => setFactura(true)}>
-          <span className="doc-ico"><Icon name="receipt" size={22} /></span>
-          <span className="doc-card-t"><b>Descontar una factura</b><small>Foto de la factura impresa: la app lee lo que salió</small></span>
-          <Icon name="arrowRight" size={18} />
-        </button>
+        <div className="doc-cards">
+          <button className="doc-card in" onClick={() => setRemision(true)}>
+            <span className="doc-ico"><Icon name="boxIn" size={22} /></span>
+            <span className="doc-card-t"><b>Recibir remisión</b><small>Lo que llega del proveedor</small></span>
+          </button>
+          <button className="doc-card" onClick={() => setFactura(true)}>
+            <span className="doc-ico"><Icon name="receipt" size={22} /></span>
+            <span className="doc-card-t"><b>Descontar factura</b><small>Lo que salió en cajas</small></span>
+          </button>
+        </div>
 
         <div className="seg" role="toolbar" aria-label="Tipo de movimiento">
           {MODES.map((x) => (
@@ -253,6 +260,7 @@ export default function Scan() {
       </div>
 
       {factura && <FacturaSheet onClose={() => setFactura(false)} />}
+      {remision && <RemisionSheet onClose={() => setRemision(false)} />}
       {pendingSku && (
         <NewProductModal
           sku={pendingSku}

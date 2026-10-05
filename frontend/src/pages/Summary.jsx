@@ -22,6 +22,7 @@ export default function Summary() {
   const { data: products } = useProducts()
   const { data: reserve } = useReserve()
   const { data: facturas } = usePolling('/api/documents?kind=factura&limit=5', { interval: 30000 })
+  const { data: remisiones } = usePolling('/api/documents?kind=remision&limit=5', { interval: 30000 })
   const [filter, setFilter] = useState('all')
   const { data: moves } = useMovements(filter)
   const [resetArmed, setResetArmed] = useState(false)
@@ -140,6 +141,29 @@ export default function Summary() {
           </div>
         ) : (
           <Empty icon="summary" title="Sin salidas todavía">Cuando registres salidas, aquí verás las referencias que más rotan.</Empty>
+        )}
+
+        {remisiones?.length > 0 && (
+          <>
+            <h2 className="h-sec">Remisiones recibidas</h2>
+            <div className="card panel">
+              {remisiones.map((r) => {
+                const owed = (r.lines || []).filter((l) => l.pending > 0)
+                return (
+                  <div className="need" key={r.id}>
+                    <div className="need-t">
+                      <b className="mono">{r.number}</b>
+                      <small>{[r.supplier, r.user_name, fmtTime(r.created_at)].filter(Boolean).join(' · ')}</small>
+                      {owed.length > 0 && (
+                        <small className="owed">Quedaron debiendo {owed.map((l) => `${l.size || 'única'} ${l.pending}`).join(', ')}</small>
+                      )}
+                    </div>
+                    <div className="need-q"><b>{r.units}</b><span>entraron</span></div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
         )}
 
         {facturas?.length > 0 && (

@@ -548,7 +548,61 @@ button.pill:active{transform:scale(.95)}
 .doc-code:focus{outline:none;color:var(--ink);box-shadow:0 2px 0 var(--lime)}
 .doc-footer{position:sticky;bottom:calc(-22px - var(--safe-b));margin:16px -18px calc(-22px - var(--safe-b));padding:12px 18px calc(16px + var(--safe-b));background:linear-gradient(to bottom,rgba(255,255,255,0),#fff 22%)}
 .need-q.dark{background:var(--ink);color:#fff}
+.need-t small.owed{color:#A9480A;font-weight:600}
 @media (prefers-reduced-motion:reduce){.doc-scanline{animation:none}}
+
+/* ---------- remision (entrada de mercancia) ---------- */
+.doc-cards{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 16px}
+.doc-cards .doc-card{margin:0;flex-direction:column;align-items:flex-start;gap:12px;padding:14px 14px 16px}
+.doc-card.in{background:var(--lime);color:var(--ink);box-shadow:0 10px 24px -12px rgba(110,150,0,.55)}
+.doc-card.in .doc-ico{background:var(--ink);color:var(--lime)}
+.doc-card.in .doc-card-t small{color:rgba(11,11,11,.62)}
+.rem-photo{position:relative;display:block;width:100%;height:136px;border-radius:var(--r-md);overflow:hidden;background:var(--fog-2)}
+.rem-photo img{width:100%;height:100%;object-fit:cover}
+.rem-photo span{position:absolute;right:8px;bottom:8px;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border-radius:var(--r-xs);background:rgba(11,11,11,.82);color:#fff;font:700 12.5px/1 var(--font)}
+.zoom{position:fixed;inset:0;z-index:80;background:#0B0B0B;animation:fade-in 160ms ease both}
+.zoom-scroll{position:absolute;inset:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;cursor:zoom-in}
+.zoom-scroll img{max-width:none;margin:0 auto}
+.zoom-close{position:absolute;top:calc(12px + var(--safe-t));right:12px;width:46px;height:46px;border-radius:var(--r-sm);background:rgba(255,255,255,.16);color:#fff;display:grid;place-items:center}
+.zoom-hint{position:absolute;left:16px;right:16px;bottom:calc(16px + var(--safe-b));text-align:center;color:#A9ADA6;font-size:12.5px;pointer-events:none}
+.rem-delivery{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:13.5px;color:var(--graphite)}
+.rem-delivery .link-btn{margin-left:auto}
+.rem-block{margin-top:12px;padding:2px 12px 10px;border-radius:var(--r-md);box-shadow:inset 0 0 0 1.5px var(--line)}
+.rem-block-head{display:flex;align-items:center;gap:10px;padding:12px 0 10px}
+.rem-block-head b{flex:1;min-width:0;font-weight:700;font-size:15px;line-height:1.25;letter-spacing:-.01em}
+.rem-row{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px 10px;padding:10px 0;border-top:1px solid var(--line)}
+.rem-row-t{min-width:0}
+.rem-row-t small{display:block;font-size:12px;line-height:1.3;color:var(--muted);overflow:hidden;text-overflow:ellipsis}
+.rem-row-t small + small{margin-top:2px}
+.rem-row small.warn{color:#A9480A;font-weight:600}
+.rem-row small.due{color:var(--lime-deep);font-weight:700}
+.rem-row-code,.rem-pend{grid-column:2/-1}
+.rem-code{width:100%;height:40px;padding:0 12px;border-radius:var(--r-xs);border:1.5px solid var(--line);background:var(--paper);font:500 16px/1 var(--mono);letter-spacing:.03em;text-transform:uppercase;color:var(--ink)}
+.rem-code::placeholder{font-family:var(--font);font-size:14px;letter-spacing:0;text-transform:none;color:var(--faint)}
+.rem-code:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 4px rgba(192,255,0,.6)}
+.rem-row-code small{display:block;margin-top:5px;font-size:12px}
+.rem-pend{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;font-weight:600;color:var(--graphite)}
+.rem-add{display:flex;gap:8px;padding:10px 0 2px;border-top:1px solid var(--line)}
+.rem-add .rem-code{flex:1;min-width:0}
+.rem-more{padding:12px 4px 4px}
+.rem-pick{margin-top:12px}
+.ref-results{margin-top:8px;display:grid;gap:6px}
+.ref-result{width:100%;display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:var(--r-sm);background:var(--fog);text-align:left;transition:background-color 120ms ease,transform 160ms var(--ease-out)}
+.ref-result:active{transform:scale(.98);background:var(--fog-2)}
+.ref-result-t{flex:1;min-width:0}
+.ref-result-t b{display:block;font-weight:700;font-size:14px;line-height:1.25}
+.ref-result-t small{display:block;margin-top:3px;font-size:12px;color:var(--muted)}
+.ref-result.new{background:var(--lime-soft)}
+.rem-toggle{margin-top:14px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);border-radius:0}
+.rem-toggle small{display:block;margin-top:2px;font-weight:500;font-size:12.5px;color:var(--muted)}
+.seg.two{grid-template-columns:1fr 1fr}
+.stepper.sm{padding:2px}
+.stepper.sm button{width:30px;height:30px}
+.stepper.sm output,.stepper.sm input{min-width:30px;width:36px;font-size:16px}
+/* iPhone acerca la pantalla al tocar un campo con letra menor a 16px */
+@media (pointer:coarse){.doc-code{font-size:16px}}
+@media (hover:hover) and (pointer:fine){.ref-result:hover{background:var(--fog-2)}}
+@media (prefers-reduced-motion:reduce){.zoom{animation:none}}
 
 /* ---------- transiciones entre pestanas ---------- */
 .topbar{view-transition-name:topbar}

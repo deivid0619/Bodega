@@ -185,12 +185,32 @@ class FacturaIn(BaseModel):
     lines: list[DocumentLineIn] = Field(min_length=1)
 
 
+class RemisionLineIn(BaseModel):
+    name: str = Field(min_length=1, max_length=200)  # la remision trae la referencia, no el codigo
+    size: str = Field(default="", max_length=20)
+    sku: Optional[str] = Field(default=None, max_length=64)  # sin codigo: entra a la reserva
+    qty: int = Field(ge=0, default=0)  # lo que llego y se conto
+    pending: int = Field(ge=0, default=0)  # lo que el proveedor quedo debiendo
+
+
+class RemisionIn(BaseModel):
+    number: str = Field(min_length=1, max_length=40)
+    supplier: str = Field(default="", max_length=120)
+    date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    destination: Literal["bodega", "reserva"] = "bodega"
+    location_id: Optional[str] = None  # bodega: sin elegir, la ubicacion principal de cada talla
+    lines: list[RemisionLineIn] = Field(min_length=1)
+
+
 class DocumentOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     kind: str
     number: str
     units: int
+    pending: int = 0
+    supplier: Optional[str] = None
+    doc_date: Optional[str] = None
     lines: list[dict[str, Any]]
     user_name: str
     created_at: UtcDatetime

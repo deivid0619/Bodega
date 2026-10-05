@@ -64,7 +64,8 @@ def _movement(product: models.Product, user: models.User, type_: str, qty: int, 
 
 def register_product(db: Session, sku: str, name: str, size: str, location_id: str,
                       qty: int, min_qty: int, user: models.User,
-                      image_url: str | None = None) -> tuple[models.Product, models.Movement]:
+                      image_url: str | None = None, note: str | None = None,
+                      commit: bool = True) -> tuple[models.Product, models.Movement]:
     sku = sku.strip().upper()
     if db.get(models.Product, sku):
         raise InventoryError(f"El código {sku} ya está registrado.")
@@ -76,12 +77,38 @@ def register_product(db: Session, sku: str, name: str, size: str, location_id: s
     db.add(product)
     if qty > 0:
         db.add(models.Stock(sku=sku, location_id=location_id, qty=qty))
-    movement = _movement(product, user, "new", qty, 0, qty, location_id)
+    movement = _movement(product, user, "new", qty, 0, qty, location_id, note=note)
     db.add(movement)
+    if not commit:
+        db.flush()
+        return product, movement
     db.commit()
     db.refresh(product)
     db.refresh(movement)
     return product, movement
+
+
+def add_to_reserve(db: Session, name: str, size: str, sku: str | None, qty: int) -> models.ReserveItem:
+    """Suma a la reserva: al item con ese codigo o, si no hay codigo, al de la
+    misma referencia y talla sin codigo. No confirma: lo hace quien llama."""
+    name, size = name.strip().upper(), size.strip().upper()
+    item = None
+    if sku:
+        item = db.query(models.ReserveItem).filter(models.ReserveItem.sku == sku).with_for_update().first()
+    if item is None:
+        # la misma referencia y talla guardada sin codigo: es la misma mercancia
+        item = (db.query(models.ReserveItem)
+                .filter(models.ReserveItem.sku.is_(None), models.ReserveItem.name == name,
+                        models.ReserveItem.size == size)
+                .with_for_update().first())
+        if item is not None and sku:
+            item.sku = sku
+    if item is None:
+        item = models.ReserveItem(sku=sku, name=name, size=size, qty=0)
+        db.add(item)
+    item.qty += qty
+    db.flush()
+    return item
 
 
 def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.User,
