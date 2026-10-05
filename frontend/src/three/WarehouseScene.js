@@ -21,6 +21,9 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 
 const BW = 0.42, BH = 0.3, BD = 0.42, PI = Math.PI
+// hasta cuanto pueden estar corridos dos muebles y seguir siendo la misma pila
+// (menos que una canasta: dos muebles uno al lado del otro no se juntan)
+const STACK_GAP = 0.35
 const SLAB = 0.16, WALL_H = 3.0, WALL_T = 0.12, WALL_STUB = 0.34
 const LIME = 0xc0ff00, INK = 0x0b0b0b, AMBER = 0xe5690f
 const PH_MIN = 0.02, PH_MAX = 1.42, R_MIN = 1.6, R_MAX = 40
@@ -902,20 +905,31 @@ export class WarehouseScene {
   }
 
   // muebles apilados en el mismo sitio (G/H/I, o cajas encima de canastas)
-  // comparten una sola etiqueta: id -> la pila, el de mas arriba primero
+  // comparten una sola etiqueta: id -> la pila, el de mas arriba primero.
+  // Siguen siendo la misma pila aunque al editar uno quede corrido unos
+  // centimetros o girado media vuelta (antes eso partia la etiqueta en dos)
   _stacks(elements) {
-    const stacks = new Map()
-    for (const el of elements) {
-      if (!['bins', 'shelf', 'boxes'].includes(el.type) || !el.code) continue
-      const key = `${el.x.toFixed(2)}|${el.z.toFixed(2)}|${el.rot || 0}`
-      if (!stacks.has(key)) stacks.set(key, [])
-      stacks.get(key).push(el)
+    const list = elements.filter((el) => ['bins', 'shelf', 'boxes'].includes(el.type) && el.code)
+    const root = new Map(list.map((el) => [el.id, el.id]))
+    const find = (id) => { while (root.get(id) !== id) id = root.get(id); return id }
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j]
+        if ((a.rot || 0) % 2 !== (b.rot || 0) % 2) continue
+        if (Math.abs(a.x - b.x) <= STACK_GAP && Math.abs(a.z - b.z) <= STACK_GAP) root.set(find(a.id), find(b.id))
+      }
+    }
+    const piles = new Map()
+    for (const el of list) {
+      const k = find(el.id)
+      if (!piles.has(k)) piles.set(k, [])
+      piles.get(k).push(el)
     }
     const out = {}
-    for (const list of stacks.values()) {
-      if (list.length < 2) continue
-      list.sort((a, b) => (b.y0 || 0) - (a.y0 || 0))
-      for (const el of list) out[el.id] = list
+    for (const pile of piles.values()) {
+      if (pile.length < 2) continue
+      pile.sort((a, b) => (b.y0 || 0) - (a.y0 || 0))
+      for (const el of pile) out[el.id] = pile
     }
     return out
   }
