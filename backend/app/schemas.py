@@ -56,6 +56,9 @@ class LocationOut(BaseModel):
     id: str
     kind: str
     name: str
+    # canastas de la mesa: nivel (1 = arriba) y pila, para que el 3D las dibuje
+    level: Optional[int] = None
+    pile: Optional[int] = None
 
 
 class ElementOut(BaseModel):

@@ -64,7 +64,8 @@ def el_name(el: dict) -> str:
 def table_slots(n: int) -> list[tuple[int, int]]:
     """Las canastas debajo de la mesa: (nivel, pila). Pilas de 3, nivel 1 =
     arriba (pegada a la mesa). Si no da exacto, a las ultimas pilas les falta
-    la de arriba. El visor 3D usa este mismo orden."""
+    la de arriba. Se calcula solo aqui: cada ubicacion le lleva al visor 3D
+    su nivel y su pila, y el visor solo las dibuja."""
     if n <= 0:
         return []
     piles = -(-n // TABLE_LEVELS)
@@ -93,7 +94,8 @@ def locs_of_el(el: dict) -> list[dict]:
         out.append({"id": code, "kind": "boxes", "name": el_name(el)})
     elif t == "table" and code:
         for level, pile in table_slots(int(p.get("bins", 0) or 0)):
-            out.append({"id": f"{code}-{level}-{pile}", "kind": "bin", "name": f"Canasta {code}-{level}-{pile}"})
+            out.append({"id": f"{code}-{level}-{pile}", "kind": "bin", "name": f"Canasta {code}-{level}-{pile}",
+                        "level": level, "pile": pile})
     return out
 
 

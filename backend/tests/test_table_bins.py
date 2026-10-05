@@ -29,6 +29,8 @@ def test_table_baskets_hold_stock_and_old_layouts_get_them_once():
         ids = [l["id"] for l in table["locations"]]
         assert table["code"] == "M" and table["name"] == "Mesa M" and len(ids) == 18
         assert ids[:3] == ["M-1-1", "M-1-2", "M-1-3"] and ids[-1] == "M-3-6"
+        # el 3D recibe el nivel y la pila de cada canasta: no los recalcula
+        assert [(l["level"], l["pile"]) for l in table["locations"]] == table_slots(18)
 
         r = client.post("/api/products", headers=h, json={"sku": "MESA-1", "name": "PRUEBA MESA", "size": "S",
                                                            "location_id": "M-2-3", "qty": 2})

@@ -21,17 +21,6 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js'
 
 const BW = 0.42, BH = 0.3, BD = 0.42, PI = Math.PI
-// canastas debajo de la mesa: pilas de 3, nivel 1 = arriba. Mismo orden que
-// table_slots() del backend (las ultimas pilas sin la de arriba si no da exacto)
-const TABLE_LEVELS = 3
-function tableSlots(n) {
-  if (n <= 0) return []
-  const piles = Math.ceil(n / TABLE_LEVELS), short = piles * TABLE_LEVELS - n, out = []
-  for (let level = 1; level <= TABLE_LEVELS; level++) {
-    for (let pile = 1; pile <= piles; pile++) if (!(level === 1 && pile > piles - short)) out.push([level, pile])
-  }
-  return out
-}
 const SLAB = 0.16, WALL_H = 3.0, WALL_T = 0.12, WALL_STUB = 0.34
 const LIME = 0xc0ff00, INK = 0x0b0b0b, AMBER = 0xe5690f
 const PH_MIN = 0.02, PH_MAX = 1.42, R_MIN = 1.6, R_MAX = 40
@@ -782,8 +771,9 @@ export class WarehouseScene {
     // esas canastas guardan prendas, cada una es una ubicacion (M-1-1...)
     const W = el.params.w, D = 1.2, mat = this.mat
     this._mk(RB(W, 0.045, D, 0.014), mat.table, 0, 0.955, 0, g)
-    const n = el.code ? Math.max(0, Math.round(el.params.bins || 0)) : 0
-    if (n) return this._buildTableBins(el, g, n, W, D)
+    // el nivel y la pila de cada canasta vienen del backend (table_slots)
+    const slots = (el.locations || []).filter((l) => l.level && l.pile)
+    if (slots.length) return this._buildTableBins(el, g, slots, W, D)
     const cw = BW, cd = BD, ch = BH * 0.98, stack = 3
     const cols = Math.max(1, Math.floor((W - 0.06) / cw))
     const rows = Math.max(1, Math.floor((D - 0.06) / cd))
@@ -803,10 +793,10 @@ export class WarehouseScene {
     return { w: W, h: 0.98, d: D, locs: [] }
   }
 
-  _buildTableBins(el, g, n, W, D) {
+  _buildTableBins(el, g, slots, W, D) {
     const mat = this.mat, ch = BH * 0.98
-    const slots = tableSlots(n)
-    const piles = Math.ceil(n / TABLE_LEVELS)
+    const levels = Math.max(...slots.map((l) => l.level))
+    const piles = Math.max(...slots.map((l) => l.pile))
     // la mitad de las pilas al frente y la otra mitad atras
     const front = piles > 1 ? Math.ceil(piles / 2) : 1
     const back = piles - front
@@ -821,9 +811,10 @@ export class WarehouseScene {
     const folds = this._inst(this.geo.fold, mat.garment, slots.length * 4, g)
     const cells = []
     const locs = []
-    slots.forEach(([level, pile], i) => {
+    slots.forEach((loc, i) => {
+      const { level, pile } = loc
       const { x, z, isBack } = spot(pile)
-      const y = 0.004 + (TABLE_LEVELS - level) * ch
+      const y = 0.004 + (levels - level) * ch
       this._setI(crates, i, x, y, z)
       this._setI(rims, i, x, y, z)
       for (let l = 0; l < 4; l++) {
@@ -832,13 +823,10 @@ export class WarehouseScene {
       }
       // la etiqueta va en la cara que se ve: adelante o atras
       cells.push({ x, y: y + BH * 0.5, z: isBack ? z - BD * 0.44 - 0.004 : z + BD * 0.44 + 0.004, r: level, c: pile, back: isBack })
-      const loc = el.locations[i]
-      if (loc) {
-        this._locHit(g, loc.id, BW, BH, BD, x, y + BH / 2, z)
-        locs.push({ id: loc.id, kind: 'bin', c: new THREE.Vector3(x, y + BH / 2, z), s: new THREE.Vector3(BW, BH, BD), i, x, y, z, crate: true, folds })
-      }
+      this._locHit(g, loc.id, BW, BH, BD, x, y + BH / 2, z)
+      locs.push({ id: loc.id, kind: 'bin', c: new THREE.Vector3(x, y + BH / 2, z), s: new THREE.Vector3(BW, BH, BD), i, x, y, z, crate: true, folds })
     })
-    const labels = this._labelMesh(el, cells, 0.15, 0.05, { cols: piles, rows: TABLE_LEVELS })
+    const labels = this._labelMesh(el, cells, 0.15, 0.05, { cols: piles, rows: levels })
     g.add(labels)
     for (const L of locs) L.labels = labels
     return { w: Math.max(W, front * BW), h: 0.98, d: D, locs }
