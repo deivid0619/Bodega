@@ -228,3 +228,24 @@ frontend/
     hooks/useApi.js            sondeo de datos compartidos
     context/AuthContext.jsx    sesión y token JWT
 ```
+
+## Variables del servidor (`backend/.env`)
+
+Copia `backend/.env.example` a `backend/.env` y ajusta los valores. En Render
+van en **bodega-backend → Environment**. El archivo `.env` nunca se sube a
+GitHub.
+
+| Variable | Para qué sirve |
+| --- | --- |
+| `DATABASE_URL` | Base de datos: `sqlite:///./bodega.db` en local, la de Supabase (Postgres) en producción |
+| `SECRET_KEY` | Firma las sesiones. Genera una propia: `python -c "import secrets; print(secrets.token_hex(32))"` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Cuánto dura una sesión abierta (480 = 8 horas) |
+| `REGISTRATION_CODE` | Código que se pide al crear una cuenta, para que no se registre cualquiera |
+| `ADMIN_EMAIL`, `ADMIN_NAME`, `ADMIN_PASSWORD` | Administrador que se crea solo la primera vez que arranca la API |
+| `CORS_ORIGINS` | Dominios del frontend que pueden llamar a la API, separados por coma |
+| `CATALOG_URL` | Opcional. Catálogo público de la tienda (por defecto el de pigmalionmoto.com); vacío lo apaga |
+| `VAPID_SUBJECT` | Opcional. Quién firma los avisos al celular (por defecto https://pigmalionmoto.com) |
+| `SKIP_AUTH` | Solo desarrollo: `true` entra sin iniciar sesión. Nunca en producción |
+
+En producción, `ADMIN_PASSWORD` y `REGISTRATION_CODE` deben ser distintos a
+los de ejemplo: el repositorio es público.
