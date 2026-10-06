@@ -9,11 +9,11 @@ import FacturaSheet from '../components/FacturaSheet'
 import RemisionSheet from '../components/RemisionSheet'
 import ParcelSheet from '../components/ParcelSheet'
 import Icon from '../components/Icon'
-import { PageHead, Stepper } from '../components/Bits'
+import { PageHead, Stepper, plural } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
 import Viewfinder, { PhotoRead } from '../components/Viewfinder'
 import { beep } from '../lib/feedback'
-import { fmtTime } from '../utils'
+import { fmtTime, outletIdsOf } from '../utils'
 
 const MODES = [
   { m: 'in', label: 'Entrada', icon: 'boxIn', hint: 'Cada código suma prendas a su ubicación.' },
@@ -25,6 +25,26 @@ const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuev
 const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
 const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0')
 const delta = (m) => (m.type === 'in' || m.type === 'new' ? m.qty : m.type === 'out' ? -m.qty : 0)
+
+// "Confirmar antes de guardar": lo escaneado queda en una lista en este
+// celular (sobrevive a recargar) hasta que se confirma
+const TO_CONFIRM_KEY = 'bodega_por_confirmar'
+const CONFIRM_KEY = 'bodega_confirmar'
+function readStore(key, fallback) {
+  try {
+    const v = localStorage.getItem(key)
+    return v == null ? fallback : JSON.parse(v)
+  } catch {
+    return fallback
+  }
+}
+function writeStore(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // sin almacenamiento (modo privado): la lista vive solo en esta pantalla
+  }
+}
 
 // "Salió de P-A1 (3) y C-1-2 (1)", "Entró a C-1-3"...
 function placesText(res) {
@@ -60,16 +80,21 @@ function ScanHit({ hit, tally, onUndo }) {
   return (
     <>
       <span key={hit.at} className="vf-pulse" aria-hidden="true" />
-      <div key={`h${hit.at}`} className="vf-hit" role="status" aria-live="polite">
+      <div key={`h${hit.at}`} className={`vf-hit ${hit.pending ? 'pending' : ''}`} role="status" aria-live="polite">
         <b className={`vf-hit-q ${hit.type === 'out' ? 'out' : ''}`}>{sign}</b>
         <span className="vf-hit-t">
           <b>{hit.name}{hit.size ? ` · ${hit.size}` : ''}</b>
-          <small>
-            {tally && `${tally.n === 1 ? '1 vez' : `${tally.n} veces`} en esta sesión · llevas ${signed(tally.net)} · `}hay {hit.total}
-          </small>
+          {hit.pending ? (
+            <small>Por confirmar · llevas {signed(hit.type === 'out' ? -hit.lineQty : hit.lineQty)}{hit.n > 1 ? ` (${hit.n} lecturas)` : ''}</small>
+          ) : (
+            <small>
+              {tally && `${tally.n === 1 ? '1 vez' : `${tally.n} veces`} en esta sesión · llevas ${signed(tally.net)} · `}hay {hit.total}
+            </small>
+          )}
+          {hit.short && <small className="vf-hit-warn">Solo hay {hit.have}: revisa antes de confirmar</small>}
           {hit.repeat && <small className="vf-hit-warn">Otra vez la misma prenda: ¿la contaste dos veces?</small>}
         </span>
-        <button type="button" className="vf-hit-undo" onClick={onUndo}>Deshacer</button>
+        <button type="button" className="vf-hit-undo" onClick={onUndo}>{hit.pending ? 'Quitar' : 'Deshacer'}</button>
       </div>
     </>
   )
@@ -120,6 +145,26 @@ export default function Scan() {
   // '' = automatica (la ubicacion principal de cada codigo); null = aun sin decidir
   const [place, setPlace] = useState(null)
 
+  // Confirmar antes de guardar (entradas y salidas): cada lectura va a la
+  // lista "Por confirmar", ahi se corrige la cuenta y se guarda todo junto
+  const [confirmFirst, setConfirmFirst] = useState(() => readStore(CONFIRM_KEY, true) !== false)
+  const [toConfirm, setToConfirmState] = useState(() => {
+    const v = readStore(TO_CONFIRM_KEY, [])
+    return Array.isArray(v) ? v : []
+  })
+  const toConfirmRef = useRef(toConfirm)
+  const setToConfirm = (list) => {
+    toConfirmRef.current = list
+    setToConfirmState(list)
+    writeStore(TO_CONFIRM_KEY, list)
+  }
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
+  const outlet = useMemo(() => outletIdsOf(layout), [layout])
+  const staged = confirmFirst && mode !== 'set'
+  const toConfirmUnits = toConfirm.reduce((t, l) => t + l.qty, 0)
+  const toConfirmTypes = new Set(toConfirm.map((l) => l.type))
+
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const groups = useMemo(() => (layout ? locationGroups(layout.elements) : []), [layout])
@@ -138,14 +183,18 @@ export default function Scan() {
   // ofrece registrarlo
   const handleCode = async (raw) => {
     const sku = String(raw || '').trim().toUpperCase().replace(/\s+/g, '')
-    if (!sku || pendingRef.current) return
+    if (!sku || pendingRef.current || savingRef.current) return
     try {
+      if (staged) {
+        // no se guarda nada todavia: solo se busca la prenda para la lista
+        const p = await api.get(`/api/products/${encodeURIComponent(sku)}`)
+        beep(true)
+        stage(p)
+        return
+      }
       const res = await moveStock(sku, mode, qty, place || undefined)
       beep(true)
-      setLastMove(res)
-      const parts = res.movements?.length ? [...res.movements].reverse() : [res.movement]
-      setSession((s) => [...parts, ...s].slice(0, 25))
-      count(res.movements?.length ? res.movements : [res.movement])
+      record(res)
       showHit(res)
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
@@ -159,6 +208,94 @@ export default function Scan() {
       setHit({ err: msg, at: Date.now() })
       showToast(msg, 'err')
     }
+  }
+
+  const record = (res) => {
+    setLastMove(res)
+    const parts = res.movements?.length ? [...res.movements].reverse() : [res.movement]
+    setSession((s) => [...parts, ...s].slice(0, 25))
+    count(res.movements?.length ? res.movements : [res.movement])
+  }
+
+  // una lectura a la lista: el mismo codigo (y tipo y lugar) se va sumando
+  const stage = (p) => {
+    const loc = place || ''
+    const key = `${mode}|${p.sku}|${loc}`
+    const list = toConfirmRef.current
+    const old = list.find((l) => l.key === key)
+    // en una salida, cuanto hay para sacar (sin ubicacion, el outlet no cuenta)
+    const have = mode === 'out'
+      ? (p.stock || []).reduce((t, st) => t + ((loc ? st.location_id === loc : !outlet.has(st.location_id)) ? st.qty : 0), 0)
+      : null
+    const line = { key, type: mode, sku: p.sku, name: p.name, size: p.size, loc, main: p.location_id,
+                   qty: (old?.qty || 0) + qty, n: (old?.n || 0) + 1, have, edited: old?.edited }
+    setToConfirm([line, ...list.filter((l) => l.key !== key)])
+    const at = Date.now()
+    setHit((prev) => ({
+      pending: true, key, type: mode, qty, sku: p.sku, name: p.name, size: p.size, lineQty: line.qty, n: line.n,
+      have, short: have != null && line.qty > have, at,
+      repeat: !!prev && !prev.err && prev.sku === p.sku && at - prev.at < 8000,
+    }))
+  }
+
+  // cambiar la cantidad a mano (o quitar la ultima lectura, reading = true)
+  const setLineQty = (key, q, reading = false) => {
+    const list = toConfirmRef.current
+    setToConfirm(q > 0
+      ? list.map((l) => (l.key === key ? { ...l, qty: q, err: null, ...(reading ? { n: Math.max(1, l.n - 1) } : { edited: true }) } : l))
+      : list.filter((l) => l.key !== key))
+    // lo de encima de la camara ya no dice cuantas llevas
+    setHit((h) => (h?.pending && h.key === key ? null : h))
+  }
+
+  // "Quitar" encima de la camara: deshace la ultima lectura de esa prenda
+  const unstage = (key, q) => {
+    const l = toConfirmRef.current.find((x) => x.key === key)
+    if (l) setLineQty(key, l.qty - q, true)
+  }
+
+  const confirmAll = async () => {
+    if (savingRef.current || !toConfirmRef.current.length) return
+    savingRef.current = true
+    setSaving(true)
+    setHit(null)
+    const lines = [...toConfirmRef.current].reverse() // en el orden en que se escanearon
+    const failed = []
+    let units = 0
+    for (const l of lines) {
+      try {
+        record(await moveStock(l.sku, l.type, l.qty, l.loc || undefined))
+        units += l.qty
+      } catch (e) {
+        failed.unshift({ ...l, err: e instanceof ApiError ? e.message : 'No hay conexión con el servidor.' })
+      }
+    }
+    setToConfirm(failed)
+    setLastMove(null)
+    savingRef.current = false
+    setSaving(false)
+    if (!failed.length) showToast(`Guardado: ${plural(units, 'prenda', 'prendas')}`)
+    else showToast(`${units ? `Se guardaron ${units}. ` : ''}${plural(failed.length, 'código no se pudo', 'códigos no se pudieron')} guardar: revisa la lista`, 'err')
+  }
+
+  const discardAll = () => {
+    const prev = toConfirmRef.current
+    setToConfirm([])
+    setHit(null)
+    showToast('Lista descartada: no se guardó nada', 'ok', {
+      label: 'Deshacer',
+      onClick: () => {
+        const now = toConfirmRef.current
+        setToConfirm([...now, ...prev.filter((l) => !now.some((x) => x.key === l.key))])
+      },
+    })
+  }
+
+  const toggleConfirm = () => {
+    const on = !confirmFirst
+    writeStore(CONFIRM_KEY, on)
+    setConfirmFirst(on)
+    setHit(null)
   }
 
   const scanner = useBarcodeScanner(handleCode)
@@ -208,7 +345,7 @@ export default function Scan() {
   return (
     <section className="page" aria-label="Escanear">
       <div className="page-inner">
-        <PageHead title="Escanear" lede="Apunta a la etiqueta y la prenda se registra sola." />
+        <PageHead title="Escanear" lede={staged ? 'Apunta a la etiqueta: queda en la lista hasta que confirmes.' : 'Apunta a la etiqueta y la prenda se registra sola.'} />
 
         <div className="doc-cards">
           <button className="doc-card in" onClick={() => setRemision(true)}>
@@ -234,17 +371,64 @@ export default function Scan() {
           ))}
         </div>
         <p className="mode-hint">{current.hint}</p>
+        {mode !== 'set' && (
+          <div className="card ctl confirm-ctl">
+            <span>
+              Confirmar antes de guardar
+              <small>{confirmFirst ? 'Lo escaneado queda en una lista: revisas la cuenta y confirmas' : 'Cada lectura se guarda al instante'}</small>
+            </span>
+            <button type="button" className="switch" role="switch" aria-checked={confirmFirst} aria-label="Confirmar antes de guardar" onClick={toggleConfirm} />
+          </div>
+        )}
         {mode === 'set' && (
           <button className="link-btn count-link" onClick={() => navigate(`/count${place ? `?loc=${encodeURIComponent(place)}` : ''}`)}>
             ¿Vas a contar toda una ubicación? Usa el conteo por ubicación<Icon name="arrowRight" size={14} stroke={2.4} />
           </button>
         )}
 
-        <Viewfinder scanner={scanner} overlay={hit && <ScanHit hit={hit} tally={hit.sku && tally[hit.sku]} onUndo={() => undo(hit.id)} />} />
+        <Viewfinder
+          scanner={scanner}
+          overlay={hit && <ScanHit hit={hit} tally={hit.sku && tally[hit.sku]} onUndo={() => (hit.pending ? unstage(hit.key, hit.qty) : undo(hit.id))} />}
+        />
         <button className={`btn btn-lg btn-block ${camOn ? 'btn-ink' : 'btn-lime'}`} style={{ marginTop: 12 }} onClick={() => (camOn ? stop() : start())}>
           <Icon name={camOn ? 'x' : 'camera'} size={20} />{camOn ? 'Cerrar cámara' : 'Escanear con la cámara'}
         </button>
         <PhotoRead scanner={scanner} onMiss={() => showToast('No encontré un código en la foto. Tómala más de cerca, derecha y con luz.', 'err')} />
+
+        {toConfirm.length > 0 && (
+          <div className="card to-confirm" aria-label="Por confirmar">
+            <div className="to-confirm-head">
+              <div>
+                <b>Por confirmar</b>
+                <small>{plural(toConfirmUnits, 'prenda', 'prendas')} · {plural(toConfirm.length, 'código', 'códigos')} · aún no se guarda nada</small>
+              </div>
+              <button type="button" className="btn btn-lime" onClick={confirmAll} disabled={saving}>
+                <Icon name="check" size={18} stroke={2.4} />
+                {saving ? 'Guardando…' : toConfirmTypes.size > 1 ? 'Confirmar' : toConfirmTypes.has('out') ? 'Confirmar salida' : 'Confirmar entrada'}
+              </button>
+            </div>
+            {toConfirm.map((l) => (
+              <div className={`need to-confirm-row ${l.err ? 'err' : ''}`} key={l.key}>
+                <div className="need-t">
+                  <b>{l.name}{l.size ? ` · ${l.size}` : ''}</b>
+                  <small>
+                    <span className={`to-confirm-type ${l.type}`}>{l.type === 'out' ? 'Salida' : 'Entrada'}</span>
+                    {l.type === 'out' ? ' de ' : ' en '}{l.loc || (l.type === 'out' ? 'donde haya' : l.main)} · {l.edited ? 'cantidad ajustada' : plural(l.n, 'lectura', 'lecturas')}
+                  </small>
+                  {l.err ? <small className="to-confirm-msg">{l.err}</small>
+                    : l.have != null && l.qty > l.have && <small className="to-confirm-msg">Solo hay {l.have}</small>}
+                </div>
+                <Stepper value={l.qty} small disabledMinus={l.qty <= 1 || saving}
+                         onMinus={() => setLineQty(l.key, l.qty - 1)} onPlus={() => setLineQty(l.key, l.qty + 1)}
+                         minusLabel={`Quitar 1 de ${l.name}`} plusLabel={`Sumar 1 a ${l.name}`} />
+                <button type="button" className="to-confirm-x" onClick={() => setLineQty(l.key, 0)} disabled={saving} aria-label={`Quitar ${l.name} de la lista`}>
+                  <Icon name="x" size={16} stroke={2.4} />
+                </button>
+              </div>
+            ))}
+            <button type="button" className="link-btn to-confirm-discard" onClick={discardAll} disabled={saving}>Descartar todo</button>
+          </div>
+        )}
 
         <div className={`card scan-qty ${mode !== 'set' && qty > 1 ? 'bulk' : ''}`}>
           <div>
@@ -294,7 +478,7 @@ export default function Scan() {
             enterKeyHint="done"
             aria-label="Código"
           />
-          <button className="btn btn-ink" onClick={submitManual} disabled={!manual.trim()}>Registrar</button>
+          <button className="btn btn-ink" onClick={submitManual} disabled={!manual.trim()}>{staged ? 'Agregar' : 'Registrar'}</button>
         </div>
         <p className="mode-hint">Con un lector USB o Bluetooth: toca el campo y escanea.</p>
 
