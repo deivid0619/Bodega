@@ -169,6 +169,7 @@ export default function Inventory() {
           onClose={() => setOpenSku(null)}
           onChanged={reload}
           onLocate={(loc) => navigate(`/?loc=${encodeURIComponent(loc)}`)}
+          onShowAll={(p) => navigate(`/?sku=${encodeURIComponent(p.sku)}`)}
         />
       )}
     </section>

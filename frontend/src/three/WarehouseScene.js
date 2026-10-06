@@ -175,6 +175,66 @@ export class WarehouseScene {
     this._fly({ th, ph, r: this._fitBox(box, th, ph, t), tx: t.x, ty: t.y, tz: t.z }, 0.7)
   }
 
+  // Todas las ubicaciones de una prenda marcadas en lima a la vez (no solo
+  // la elegida), cada una con cuantas hay ahi. list: [{ id, qty }]
+  markLocations(list) {
+    this.markList = list || []
+    this._placeMarks()
+    this._refreshSelection()
+  }
+
+  _placeMarks() {
+    for (const m of this.marks) {
+      this.overlay.remove(m.box, m.tag)
+      m.tag.element.remove()
+    }
+    this.marks = []
+    for (const { id, qty } of this.markList) {
+      const o = this.locObjs[id]
+      if (!o) continue
+      const box = new THREE.Group()
+      box.add(new THREE.Mesh(this._unitGeo, this.markFill), new LineSegments2(this._edgeGeo, this.lineMats[0]), new LineSegments2(this._edgeGeo, this.lineMats[1]))
+      box.scale.set(o.size.x + 0.03, o.size.y + 0.03, o.size.z + 0.03)
+      box.position.copy(o.center)
+      const anchor = document.createElement('div')
+      anchor.className = 'css2d-anchor'
+      const chip = document.createElement('div')
+      chip.className = 'loc-mark'
+      const code = document.createElement('b')
+      code.textContent = id
+      const n = document.createElement('span')
+      n.textContent = String(qty)
+      chip.append(code, n)
+      anchor.append(chip)
+      const tag = new CSS2DObject(anchor)
+      tag.position.set(o.center.x, o.center.y + o.size.y / 2 + 0.04, o.center.z)
+      this.overlay.add(box, tag)
+      this.marks.push({ box, tag })
+    }
+    this.dirty = true
+  }
+
+  // la camara encuadra todas las ubicaciones marcadas, desde donde se esta mirando
+  focusLocations(ids) {
+    const found = ids.filter((id) => this.locObjs[id])
+    if (found.length < 2) {
+      if (found.length) this.focusLocation(found[0])
+      return
+    }
+    this.focusedEl = null
+    const box = new THREE.Box3()
+    for (const id of found) {
+      const o = this.locObjs[id]
+      const half = o.size.clone().multiplyScalar(0.5)
+      box.expandByPoint(o.center.clone().sub(half))
+      box.expandByPoint(o.center.clone().add(half))
+    }
+    box.expandByVector(new THREE.Vector3(0.45, 0.35, 0.45))
+    const t = box.getCenter(new THREE.Vector3())
+    const th = this.cam.th.g, ph = 0.95
+    this._fly({ th, ph, r: this._fitBox(box, th, ph, t), tx: t.x, ty: t.y, tz: t.z }, 0.7)
+  }
+
   focusLocation(id) {
     const o = this.locObjs[id]
     if (!o) return
@@ -272,6 +332,12 @@ export class WarehouseScene {
     overlay.add(sel)
     this.sel = sel
     this.selFill = selFill
+    // marcas de "todas las ubicaciones de una prenda": las mismas cajas lima
+    this._unitGeo = unit
+    this._edgeGeo = edges
+    this.markFill = new THREE.MeshBasicMaterial({ color: LIME, transparent: true, opacity: 0.3, depthWrite: false, depthTest: false, toneMapped: false })
+    this.marks = []
+    this.markList = []
     const hover = new LineSegments2(edges, this.lineMats[2])
     hover.visible = false
     overlay.add(hover)
@@ -964,6 +1030,7 @@ export class WarehouseScene {
     this._updateFill(true)
     if (this.selectedLocation && !this.locObjs[this.selectedLocation]) this.selectedLocation = null
     if (this.selectedElement && !this.elInfo[this.selectedElement]) this.selectedElement = null
+    this._placeMarks()
     this._refreshSelection()
     this.renderer.shadowMap.needsUpdate = true
     this.dirty = true
@@ -1092,6 +1159,7 @@ export class WarehouseScene {
     this._updateFill(true)
     if (this.selectedLocation && !this.locObjs[this.selectedLocation]) this.selectedLocation = null
     if (this.selectedElement && !this.elInfo[this.selectedElement]) this.selectedElement = null
+    this._placeMarks()
     this._refreshSelection()
     this.renderer.shadowMap.needsUpdate = true
     this.dirty = true
@@ -1240,7 +1308,13 @@ export class WarehouseScene {
     }
     this.selFill.material.opacity = info ? 0.12 : 0.22
     const focusEl = o ? o.elId : this.focusedEl
-    for (const t of new Set(Object.values(this.tags))) t.div.classList.toggle('dim', !!focusEl && !t.members.includes(focusEl))
+    const marked = new Set(this.markList.map(({ id }) => this.locObjs[id]?.elId).filter(Boolean))
+    for (const t of new Set(Object.values(this.tags))) {
+      const dim = marked.size ? !t.members.some((m) => marked.has(m)) : !!focusEl && !t.members.includes(focusEl)
+      t.div.classList.toggle('dim', dim)
+      // la letra del mueble marcado se esconde: la marca ya dice su codigo (F-3-1) y no se tapan
+      t.div.classList.toggle('under-mark', marked.size > 0 && !dim)
+    }
     this.dirty = true
   }
 

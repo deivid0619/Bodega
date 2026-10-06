@@ -473,6 +473,17 @@ button.pill:active{transform:scale(.95)}
 .el-tag.low::after{content:'';width:7px;height:7px;border-radius:50%;background:var(--amber);margin-left:1px}
 .el-tag.dim{opacity:.35}
 .el-tag:active{transform:scale(.94)}
+/* todas las ubicaciones de una prenda, marcadas a la vez */
+.loc-mark{pointer-events:none;display:flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 8px;border-radius:var(--r-xs);background:var(--lime);color:var(--ink);font:500 11.5px/1 var(--mono);white-space:nowrap;box-shadow:0 0 0 2px var(--ink),0 8px 18px -6px rgba(0,0,0,.55);transform:translateY(-50%)}
+.loc-mark span{min-width:18px;height:18px;padding:0 5px;border-radius:2px;background:var(--ink);color:var(--lime);display:grid;place-items:center;font:800 italic 12px/1 var(--font)}
+.wh-mark{display:flex;align-items:center;gap:10px;margin-top:8px;padding:8px 6px 8px 8px;border-radius:var(--r-md);background:rgba(11,11,11,.9);color:#fff;box-shadow:var(--sh-2)}
+.wh-mark-ico{flex:none;width:30px;height:30px;border-radius:var(--r-xs);background:var(--lime);color:var(--ink);display:grid;place-items:center}
+.wh-mark-t{flex:1;min-width:0}
+.wh-mark-t b{display:block;font-weight:700;font-size:13.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wh-mark-t small{display:block;margin-top:2px;font-size:11.5px;color:#C4C8C0}
+.wh-mark-x{flex:none;width:36px;height:36px;border-radius:var(--r-xs);display:grid;place-items:center;color:#fff;background:rgba(255,255,255,.1)}
+.wh-result.all{background:var(--lime-soft)}
+.el-tag.under-mark{opacity:0;pointer-events:none}
 .loc-pin{pointer-events:none;display:flex;flex-direction:column;align-items:center;transform:translateY(-50%)}
 .loc-pin span{display:flex;align-items:center;gap:7px;height:32px;padding:0 13px 0 6px;border-radius:var(--r-xs);background:var(--lime);color:var(--ink);font:500 13px/1 var(--mono);box-shadow:0 10px 24px -8px rgba(0,0,0,.6),0 0 0 2px var(--ink);white-space:nowrap}
 .loc-pin span i{width:20px;height:20px;border-radius:2px;background:var(--ink);display:grid;place-items:center}

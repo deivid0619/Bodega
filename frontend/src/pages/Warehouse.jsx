@@ -8,7 +8,7 @@ import LocationSheet from '../components/LocationSheet'
 import EditPanel from '../components/EditPanel'
 import ProductModal from '../components/ProductModal'
 import Icon from '../components/Icon'
-import { Count, ProductThumb, SearchField } from '../components/Bits'
+import { Count, ProductThumb, SearchField, plural } from '../components/Bits'
 import { locationGroups } from '../locationGroups'
 
 const STORAGE = ['bins', 'shelf', 'rack', 'boxes', 'table']
@@ -78,16 +78,24 @@ export default function Warehouse() {
     if (loc) out.push({ type: 'loc', id: loc.id, label: loc.name })
     const el = storageEls.find((e) => norm(e.code) === q)
     if (el) out.push({ type: 'el', id: el.id, label: el.name })
-    // una fila por cada lugar donde esta el codigo (puede estar en varios)
-    const hits = []
+    // una fila por cada lugar donde esta el codigo (puede estar en varios) y,
+    // si esta en mas de uno, primero "todas las ubicaciones"
+    const found = []
     for (const p of products || []) {
       const places = p.stock?.length ? p.stock : [{ location_id: p.location_id, qty: 0 }]
       const text = norm(`${p.name} ${p.sku} ${p.size} ${places.map((s) => s.location_id).join(' ')}`)
       if (!text.includes(q)) continue
-      for (const s of places) hits.push({ type: 'prod', p, loc: s.location_id, here: s.qty })
+      const rows = places.map((s) => ({ type: 'prod', p, loc: s.location_id, here: s.qty })).sort((a, b) => b.here - a.here)
+      const stocked = rows.filter((r) => r.here > 0 && locIndex.has(r.loc))
+      found.push({ p, rows, stocked: stocked.length, total: stocked.reduce((t, r) => t + r.here, 0) })
     }
-    hits.sort((a, b) => (b.here > 0) - (a.here > 0) || a.p.name.localeCompare(b.p.name) || b.here - a.here)
-    return [...out, ...hits.slice(0, 8)]
+    found.sort((a, b) => (b.stocked > 0) - (a.stocked > 0) || a.p.name.localeCompare(b.p.name) || a.p.size.localeCompare(b.p.size))
+    const hits = []
+    for (const f of found) {
+      if (f.stocked >= 2) hits.push({ type: 'all', p: f.p, n: f.stocked, total: f.total })
+      hits.push(...f.rows)
+    }
+    return [...out, ...hits.slice(0, 10)]
   }, [query, products, locIndex, storageEls])
 
   const prevEdit = useRef(editMode)
@@ -116,14 +124,58 @@ export default function Warehouse() {
   }
 
   // enlace directo desde Inventario o el detalle de una prenda: /?loc=C-1-1
+  // (una ubicacion) o /?sku=CODIGO (todas las ubicaciones de esa prenda)
   useEffect(() => {
     const loc = params.get('loc')
+    const sku = params.get('sku')
     if (loc && layout) {
       locate(loc)
       setParams({}, { replace: true })
+    } else if (sku && layout && products) {
+      markProduct(sku)
+      setParams({}, { replace: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, params])
+  }, [layout, params, products])
+
+  // Todas las ubicaciones de una prenda marcadas en verde a la vez (no solo
+  // una): "donde esta la XL", con cuantas hay en cada lugar
+  const [marked, setMarked] = useState(null) // { sku, name, size, places: [{ id, qty }] }
+  const placesOf = (p) => (p.stock || []).filter((s) => s.qty > 0 && locIndex.has(s.location_id)).map((s) => ({ id: s.location_id, qty: s.qty }))
+  const markProduct = (sku) => {
+    const p = (products || []).find((x) => x.sku === sku)
+    if (!p) return
+    const places = placesOf(p)
+    setQuery('')
+    setSearchOpen(false)
+    searchRef.current?.blur()
+    if (places.length < 2) {
+      // en un solo lugar (o sin prendas): como siempre, esa ubicacion
+      clearMarks()
+      locate(places[0]?.id || p.location_id, p.sku)
+      return
+    }
+    if (selLoc) sheetRef.current?.close()
+    setMarked({ sku: p.sku, name: p.name, size: p.size, places })
+    setView(null)
+    sceneRef.current?.setViewInsets(insetsFor({ sheet: false, editMode: false }))
+    sceneRef.current?.markLocations(places)
+    sceneRef.current?.focusLocations(places.map((x) => x.id))
+  }
+  const clearMarks = () => {
+    setMarked(null)
+    sceneRef.current?.markLocations([])
+  }
+  // si cambia lo que hay (alguien saca o mete), las marcas se actualizan solas
+  useEffect(() => {
+    if (!marked) return
+    const p = (products || []).find((x) => x.sku === marked.sku)
+    const places = p ? placesOf(p) : []
+    if (JSON.stringify(places) === JSON.stringify(marked.places)) return
+    setMarked({ ...marked, places })
+    sceneRef.current?.markLocations(places)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products])
 
   const closeLocation = () => {
     setSelLoc(null)
@@ -167,6 +219,7 @@ export default function Warehouse() {
   }
 
   const enterEdit = () => {
+    clearMarks()
     closeLocation()
     setView('plan')
     setEditMode(true)
@@ -229,6 +282,7 @@ export default function Warehouse() {
               if (e.key === 'Enter' && results[0]) {
                 const r = results[0]
                 if (r.type === 'prod') locate(r.loc, r.p.sku)
+                else if (r.type === 'all') markProduct(r.p.sku)
                 else if (r.type === 'loc') locate(r.id)
                 else { setQuery(''); focusEl(r.id) }
               }
@@ -240,7 +294,16 @@ export default function Warehouse() {
           {showResults && (
             <div className="wh-results" role="listbox">
               {results.length ? results.map((r) => (
-                r.type === 'prod' ? (
+                r.type === 'all' ? (
+                  <button key={`${r.p.sku}-all`} className="wh-result all" role="option" onClick={() => markProduct(r.p.sku)}>
+                    <ProductThumb src={r.p.image_url} alt="" size="sm" />
+                    <span className="wh-result-t">
+                      <b>{r.p.name}{r.p.size ? ` · ${r.p.size}` : ''}</b>
+                      <small><span className="code lime"><Icon name="pin" size={12} stroke={2.2} />Todas</span>Ver las {r.n} ubicaciones a la vez</small>
+                    </span>
+                    <span className="qty">{r.total}</span>
+                  </button>
+                ) : r.type === 'prod' ? (
                   <button key={`${r.p.sku}-${r.loc}`} className="wh-result" role="option" onClick={() => locate(r.loc, r.p.sku)}>
                     <ProductThumb src={r.p.image_url} alt="" size="sm" />
                     <span className="wh-result-t">
@@ -265,6 +328,16 @@ export default function Warehouse() {
               {needCount > 0 && (
                 <button className="pill warn" onClick={() => navigate('/summary')}><i /><b>{needCount}</b>por reponer</button>
               )}
+            </div>
+          )}
+          {!showResults && marked && (
+            <div className="wh-mark" role="status">
+              <span className="wh-mark-ico"><Icon name="pin" size={16} stroke={2.2} /></span>
+              <span className="wh-mark-t">
+                <b>{marked.name}{marked.size ? ` · ${marked.size}` : ''}</b>
+                <small>En {plural(marked.places.length, 'ubicación', 'ubicaciones')} · {plural(marked.places.reduce((t, x) => t + x.qty, 0), 'prenda', 'prendas')} · toca una para ver qué hay</small>
+              </span>
+              <button type="button" className="wh-mark-x" onClick={clearMarks} aria-label="Quitar las marcas"><Icon name="x" size={18} stroke={2.2} /></button>
             </div>
           )}
         </div>
@@ -338,6 +411,7 @@ export default function Warehouse() {
           onClose={() => setOpenSku(null)}
           onChanged={reloadProducts}
           onLocate={(loc) => { setOpenSku(null); locate(loc) }}
+          onShowAll={(p) => { setOpenSku(null); markProduct(p.sku) }}
         />
       )}
     </section>

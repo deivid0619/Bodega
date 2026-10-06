@@ -23,7 +23,7 @@ function LocationSelect({ value, onChange, locations, currentName }) {
   )
 }
 
-function Body({ sku, locations, onChanged, onLocate }) {
+function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
   const { isAdmin } = useAuth()
   const showToast = useToast()
   const { close } = useSheet()
@@ -182,7 +182,10 @@ function Body({ sku, locations, onChanged, onLocate }) {
         <span className="field-hint">Lo que escanees de este código entra aquí si no eliges otra ubicación.</span>
       </label>
       <div className="btn-row">
-        <button className="btn btn-ghost" onClick={() => onLocate(product.location_id)}><Icon name="warehouse" size={19} />Ver en 3D</button>
+        {/* en el 3D se marcan todas las ubicaciones donde esta, no solo la principal */}
+        <button className="btn btn-ghost" onClick={() => (onShowAll ? onShowAll(product) : onLocate(product.location_id))}>
+          <Icon name="warehouse" size={19} />{places.filter((s) => s.qty > 0).length > 1 ? `Ver las ${places.filter((s) => s.qty > 0).length} en 3D` : 'Ver en 3D'}
+        </button>
         <button className="btn btn-lime" onClick={save} disabled={busy}>{busy ? 'Guardando…' : 'Guardar cambios'}</button>
       </div>
       {isAdmin && (
@@ -195,10 +198,10 @@ function Body({ sku, locations, onChanged, onLocate }) {
   )
 }
 
-export default function ProductModal({ sku, locations, onClose, onChanged, onLocate }) {
+export default function ProductModal({ sku, locations, onClose, onChanged, onLocate, onShowAll }) {
   return (
     <Sheet modal onClose={onClose} label="Detalle de la prenda">
-      <Body sku={sku} locations={locations} onChanged={onChanged} onLocate={onLocate} />
+      <Body sku={sku} locations={locations} onChanged={onChanged} onLocate={onLocate} onShowAll={onShowAll} />
     </Sheet>
   )
 }
