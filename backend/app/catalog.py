@@ -93,6 +93,30 @@ def lookup(sku: str, fetch: bool = True) -> dict | None:
     return items(fetch).get(str(sku or "").strip().upper())
 
 
+def _close(a: str, b: str) -> bool:
+    """Distintos en una sola letra: una de mas, una de menos o una cambiada."""
+    if a == b or abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) > len(b):
+        a, b = b, a
+    i = 0
+    while i < len(a) and a[i] == b[i]:
+        i += 1
+    return a[i + 1:] == b[i + 1:] if len(a) == len(b) else a[i:] == b[i + 1:]
+
+
+def near(sku: str, limit: int = 3, fetch: bool = True) -> list[dict]:
+    """Codigos de la tienda casi iguales al de una etiqueta. En algunas tallas
+    la tienda tiene el codigo mas corto que la etiqueta (P-PRM001800XL en la
+    etiqueta, P-PRM00180XL en la tienda). El final (la talla) tiene que ser el
+    mismo, para no confundir una talla con otra."""
+    code = "".join(str(sku or "").upper().split())
+    if len(code) < 6:
+        return []
+    tail = code[-2:]
+    return [it for k, it in items(fetch).items() if k.endswith(tail) and _close(k, code)][:limit]
+
+
 def search(q: str, limit: int = 8) -> list[dict]:
     """Productos de la tienda cuyo nombre tiene todas las palabras buscadas (o
     con un codigo que empieza asi), con sus tallas."""

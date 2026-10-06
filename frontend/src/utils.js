@@ -47,20 +47,39 @@ export function refCode(skus) {
 }
 
 // Lo que hay de un codigo en la reserva: con su codigo o, si se guardo sin
-// codigo, con la misma referencia y talla (igual que en el servidor).
+// codigo, con la misma referencia y talla (igual que en el servidor), sin
+// importar tildes ni espacios: PROTECCIÓN = PROTECCION.
+const refSize = (name, size) => `${refKey(name)}|${refKey(size)}`
+
 export function reserveIndex(items) {
   const bySku = new Map()
   const byRef = new Map()
   for (const it of items || []) {
     if (!(it.qty > 0)) continue
-    const [map, key] = it.sku ? [bySku, it.sku] : [byRef, `${it.name}|${it.size || ''}`]
+    const [map, key] = it.sku ? [bySku, it.sku] : [byRef, refSize(it.name, it.size)]
     map.set(key, [...(map.get(key) || []), it])
   }
   return { bySku, byRef }
 }
 
 export function reserveFor(p, index) {
-  return [...(index.bySku.get(p.sku) || []), ...(index.byRef.get(`${p.name}|${p.size || ''}`) || [])]
+  return [...(index.bySku.get(p.sku) || []), ...(index.byRef.get(refSize(p.name, p.size)) || [])]
+}
+
+// Lo de la reserva guardado a mano (sin codigo) que parece la misma prenda
+// con otro nombre: la misma talla y al menos dos palabras en comun (GUANTES
+// PROTECCION VORTEX NG / GUANTES MOTO PROTECCIÓN VORTEX NEÓN)
+export function similarInReserve(items, name, size) {
+  const words = (s) => new Set(refKey(s).split(' ').filter((w) => w.length > 2))
+  const mine = words(name)
+  if (mine.size < 2) return []
+  return (items || []).filter((it) => {
+    if (!(it.qty > 0) || it.sku || refKey(it.size) !== refKey(size)) return false
+    const theirs = words(it.name)
+    let common = 0
+    for (const w of theirs) if (mine.has(w)) common++
+    return common >= 2 && common >= Math.min(mine.size, theirs.size) / 2
+  }).slice(0, 3)
 }
 
 // Ubicaciones de muebles marcados como outlet (lo que hay ahi no cuenta)

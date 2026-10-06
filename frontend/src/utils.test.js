@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { asksFrom, outAvailable, outParts, placesOf, refCode, refKey, reserveFor, reserveIndex, stockSplit } from './utils'
+import { asksFrom, outAvailable, outParts, placesOf, refCode, refKey, reserveFor, reserveIndex, similarInReserve, stockSplit } from './utils'
 
 // Una referencia son sus tallas con el mismo nombre: en los codigos de
 // Pigmalion la talla va en la mitad (PGPRBI070SFEM), no al final
@@ -70,5 +70,24 @@ describe('de donde sale una salida', () => {
     expect(outParts(4, 'C-2-4', p)).toEqual([{ qty: 2, loc: 'C-2-4' }, { qty: 2, loc: '' }])
     expect(outParts(4, '', p)).toEqual([{ qty: 4, loc: '' }])
     expect(outParts(1, 'C-9-9', p)).toEqual([{ qty: 1, loc: '' }])
+  })
+})
+
+// La misma prenda escrita distinto en la reserva y en la bodega
+describe('reserva con otro nombre', () => {
+  it('cuenta igual con o sin tildes y espacios de mas', () => {
+    const index = reserveIndex([{ id: 9, sku: null, name: 'GUANTES PROTECCIÓN  VORTEX', size: 'xl', qty: 5 }])
+    expect(reserveFor({ sku: 'X', name: 'GUANTES PROTECCION VORTEX', size: 'XL' }, index).map((it) => it.id)).toEqual([9])
+  })
+
+  it('sugiere la guardada a mano con palabras en comun y la misma talla', () => {
+    const items = [
+      { id: 1, sku: null, name: 'GUANTES PROTECCION VORTEX NG MAS', size: 'XL', qty: 5 },
+      { id: 2, sku: null, name: 'GUANTES PROTECCION VORTEX NG MAS', size: 'L', qty: 3 }, // otra talla
+      { id: 3, sku: 'P-1', name: 'GUANTES PROTECCION VORTEX', size: 'XL', qty: 2 }, // ya tiene codigo
+      { id: 4, sku: null, name: 'CHAQUETA FENIX', size: 'XL', qty: 1 },
+    ]
+    expect(similarInReserve(items, 'GUANTES MOTO PROTECCIÓN VORTEX NEÓN', 'XL').map((it) => it.id)).toEqual([1])
+    expect(similarInReserve(items, 'GUANTES', 'XL')).toEqual([])
   })
 })

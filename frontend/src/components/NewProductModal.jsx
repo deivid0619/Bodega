@@ -4,7 +4,8 @@ import { useReserve } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import { LocationSelect } from './ProductModal'
-import { guessSizeFromSku, money, reserveFor, reserveIndex } from '../utils'
+import NearPick from './NearPick'
+import { guessSizeFromSku, money, reserveFor, reserveIndex, similarInReserve } from '../utils'
 
 function Form({ sku, defaultLocation, locations, onCreated }) {
   const showToast = useToast()
@@ -20,10 +21,15 @@ function Form({ sku, defaultLocation, locations, onCreated }) {
   // la prenda ya esta en la reserva: si se trae de alla, se descuenta de la
   // reserva (si no, quedaria contada dos veces: en la reserva y en la bodega)
   const { data: reserve } = useReserve()
-  const inReserve = useMemo(() => reserveFor(
+  const matched = useMemo(() => reserveFor(
     { sku, name: name.trim().toUpperCase(), size: size.trim().toUpperCase() }, reserveIndex(reserve),
   )[0] || null, [reserve, sku, name, size])
+  // guardada a mano en la reserva con otro nombre: se elige y queda unida a este codigo
+  const [linked, setLinked] = useState(null)
+  const similar = useMemo(() => (matched ? [] : similarInReserve(reserve, name, size)), [matched, reserve, name, size])
+  const inReserve = matched || linked
   const [fromReserve, setFromReserve] = useState(true)
+  const [near, setNear] = useState([]) // codigos casi iguales en la tienda
 
   // el codigo de la etiqueta es el de la tienda: nombre, talla y foto de una vez
   useEffect(() => {
@@ -35,9 +41,16 @@ function Form({ sku, defaultLocation, locations, onCreated }) {
         setName((n) => n || hit.name)
         if (hit.size) setSize(hit.size)
       })
-      .catch(() => {})
+      .catch(() => api.get(`/api/catalog/near/${encodeURIComponent(sku)}`).then((list) => { if (alive) setNear(list) }).catch(() => {}))
     return () => { alive = false }
   }, [sku])
+
+  const pickNear = (o) => {
+    setShop({ ...o, near: true })
+    setName(o.name)
+    if (o.size) setSize(o.size)
+    setNear([])
+  }
 
   const submit = async (e) => {
     e.preventDefault()
@@ -62,6 +75,10 @@ function Form({ sku, defaultLocation, locations, onCreated }) {
         onCreated({ product, movement: moves[moves.length - 1], movements: moves })
         close()
         return
+      }
+      if (linked) {
+        // es la de la reserva aunque no vengan de alla: queda unida por el codigo
+        await api.patch(`/api/reserve/${linked.id}`, { sku })
       }
       const res = await api.post('/api/products', {
         sku, name: name.trim().toUpperCase(), size: size.trim().toUpperCase(),
@@ -88,12 +105,13 @@ function Form({ sku, defaultLocation, locations, onCreated }) {
         <div className="shop-hit">
           {shop.image ? <img src={shop.image} alt="" /> : <span className="shop-noimg" />}
           <div>
-            <span className="tag tag-in">Encontrada en la tienda</span>
+            <span className="tag tag-in">{shop.near ? 'Datos de la tienda' : 'Encontrada en la tienda'}</span>
             <b>{shop.name}{shop.size ? ` · ${shop.size}` : ''}</b>
-            {shop.price > 0 && <small>{money(shop.price)}</small>}
+            {shop.near ? <small>En la tienda: {shop.sku} · queda con el código de la etiqueta</small> : shop.price > 0 && <small>{money(shop.price)}</small>}
           </div>
         </div>
       )}
+      {!shop && <NearPick options={near} onPick={pickNear} />}
       <form onSubmit={submit}>
         <label className="field" style={{ marginTop: shop ? 16 : 0 }}>
           <span className="field-label">Referencia</span>
@@ -109,6 +127,24 @@ function Form({ sku, defaultLocation, locations, onCreated }) {
             <input className="input" type="number" min="0" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
           </label>
         </div>
+        {!inReserve && similar.length > 0 && (
+          <div className="near-pick reserve">
+            <span className="tag tag-warn">¿Está en la reserva?</span>
+            <p>Hay guardada a mano una parecida. Si es la misma, elígela: queda unida a este código y no se cuenta aparte.</p>
+            {similar.map((it) => (
+              <button type="button" key={it.id} className="near-opt" onClick={() => setLinked(it)}>
+                {it.image_url ? <img src={it.image_url} alt="" /> : <span className="shop-noimg" />}
+                <span className="near-opt-t"><b>{it.name}{it.size ? ` · ${it.size}` : ''}</b><small>{it.qty} en la reserva</small></span>
+              </button>
+            ))}
+          </div>
+        )}
+        {linked && (
+          <p className="linked-note">
+            Unida a la de la reserva: {linked.name}{linked.size ? ` · ${linked.size}` : ''}
+            <button type="button" className="link-btn" onClick={() => setLinked(null)}>No es esta</button>
+          </p>
+        )}
         {inReserve && (
           <label className="from-reserve">
             <input type="checkbox" checked={fromReserve} onChange={(e) => setFromReserve(e.target.checked)} />

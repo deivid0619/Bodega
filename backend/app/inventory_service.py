@@ -4,6 +4,7 @@ y los reportes de pedidos e historial."""
 from __future__ import annotations
 
 import random
+import unicodedata
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func
@@ -262,6 +263,15 @@ def undo_last_movement(db: Session, movement_id: int, user: models.User) -> mode
     return product
 
 
+def ref_key(name: str, size: str = "") -> tuple[str, str]:
+    """Referencia y talla comparables: sin tildes, mayusculas y un solo espacio
+    (PROTECCIÓN = PROTECCION)."""
+    def norm(s: str) -> str:
+        s = unicodedata.normalize("NFD", str(s or ""))
+        return " ".join("".join(ch for ch in s if unicodedata.category(ch) != "Mn").upper().split())
+    return norm(name), norm(size)
+
+
 def _reserve_index(db: Session) -> tuple[dict[str, list[models.ReserveItem]], dict[tuple[str, str], list[models.ReserveItem]]]:
     by_sku: dict[str, list[models.ReserveItem]] = {}
     by_ref: dict[tuple[str, str], list[models.ReserveItem]] = {}
@@ -269,7 +279,7 @@ def _reserve_index(db: Session) -> tuple[dict[str, list[models.ReserveItem]], di
         if it.sku:
             by_sku.setdefault(it.sku, []).append(it)
         else:
-            by_ref.setdefault((it.name, it.size), []).append(it)
+            by_ref.setdefault(ref_key(it.name, it.size), []).append(it)
     return by_sku, by_ref
 
 
@@ -277,7 +287,7 @@ def _reserve_for(p: models.Product, index) -> list[models.ReserveItem]:
     """Lo que hay en la reserva de este codigo: con su codigo o, si se guardo
     sin codigo, con la misma referencia y talla."""
     by_sku, by_ref = index
-    return by_sku.get(p.sku, []) + by_ref.get((p.name, p.size), [])
+    return by_sku.get(p.sku, []) + by_ref.get(ref_key(p.name, p.size), [])
 
 
 def apart_qty(db: Session) -> dict[str, int]:

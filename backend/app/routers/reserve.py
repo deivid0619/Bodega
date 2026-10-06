@@ -65,6 +65,11 @@ def _photo(db: Session, sku: str, fetch: bool = True) -> str | None:
     if p and p.image_url:
         return p.image_url
     hit = catalog.lookup(sku, fetch=fetch)
+    if not hit:
+        # un codigo casi igual en la tienda (P-PRM001800XL / P-PRM00180XL): la
+        # foto solo si hay uno solo, para no poner la de otra prenda
+        close = catalog.near(sku, fetch=fetch)
+        hit = close[0] if len(close) == 1 else None
     return (hit or {}).get("image") or None
 
 
@@ -93,8 +98,10 @@ def _item_for(db: Session, sku: str, name: str, size: str, lock: bool = False):
         q = q.with_for_update()
     item = q.filter(models.ReserveItem.sku == sku).order_by(models.ReserveItem.id).first()
     if not item:
-        item = q.filter(models.ReserveItem.sku.is_(None), models.ReserveItem.name == name,
-                        models.ReserveItem.size == size).order_by(models.ReserveItem.id).first()
+        # sin tildes ni espacios de mas: PROTECCIÓN y PROTECCION son la misma
+        want = inv.ref_key(name, size)
+        item = next((it for it in q.filter(models.ReserveItem.sku.is_(None)).order_by(models.ReserveItem.id).all()
+                     if inv.ref_key(it.name, it.size) == want), None)
     return item
 
 

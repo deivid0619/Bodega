@@ -18,6 +18,12 @@ def lookup(sku: str, _: models.User = Depends(get_current_user)):
     return hit
 
 
+@router.get("/near/{sku}", response_model=list[schemas.CatalogItemOut])
+def near(sku: str, _: models.User = Depends(get_current_user)):
+    """Lo que hay en la tienda con un codigo casi igual (para elegir)."""
+    return catalog.near(sku)
+
+
 @router.get("/search", response_model=list[schemas.CatalogProductOut])
 def search(q: str = Query(min_length=2, max_length=80), limit: int = Query(default=8, ge=1, le=20),
            _: models.User = Depends(get_current_user)):
