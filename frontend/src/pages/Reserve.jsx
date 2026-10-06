@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
-import { refreshInventory, setReserveQty, useLayout, useReserve, useRestock } from '../hooks/useApi'
+import { mutate, refreshInventory, revalidate, setReserveQty, useLayout, useReserve, useRestock } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { locationGroups } from '../locationGroups'
 import NewReserveModal from '../components/NewReserveModal'
@@ -71,11 +71,52 @@ export default function Reserve() {
   // la que ya se llevo desaparece al instante, sin esperar el siguiente sondeo
   const tasks = (restock || []).filter((t) => !done.has(`${t.product.sku}:${t.product.qty}`))
 
+  const zeros = (items || []).filter((i) => i.qty <= 0)
+
+  // quitar una de la lista (con Deshacer, por si fue sin querer)
+  const remove = async (item) => {
+    mutate('/api/reserve', (list) => list.filter((i) => i.id !== item.id))
+    try {
+      await api.delete(`/api/reserve/${item.id}`)
+      showToast(`Quitada de la reserva: ${item.name}${item.size ? ` ${item.size}` : ''}`, 'ok', {
+        label: 'Deshacer',
+        onClick: async () => {
+          try {
+            await api.post('/api/reserve', { sku: item.sku || undefined, name: item.name, size: item.size, qty: item.qty, image_url: item.image_url || undefined })
+          } catch (e) {
+            showToast(e instanceof ApiError ? e.message : 'No se pudo deshacer.', 'err')
+          }
+          refreshInventory()
+        },
+      })
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No se pudo quitar.', 'err')
+    }
+    revalidate('/api/reserve')
+  }
+
+  // las que se acabaron (en 0), todas de una vez
+  const cleanZeros = async () => {
+    // (en /api/reserve/restock cada fila trae su reserva: esas no se tocan)
+    mutate('/api/reserve', (list) => list.filter((i) => i.reserve || i.qty > 0))
+    try {
+      const { removed } = await api.post('/api/reserve/clean')
+      showToast(`${plural(removed, 'agotada quitada', 'agotadas quitadas')} de la reserva`)
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No se pudieron quitar.', 'err')
+    }
+    revalidate('/api/reserve')
+  }
+
   const bump = async (item, delta) => {
     const next = item.qty + delta
     if (next < 0) return
     try {
       await setReserveQty(item, next)
+      // se acabo: se ofrece quitarla de la lista
+      if (next === 0) {
+        showToast(`${item.name}${item.size ? ` ${item.size}` : ''} quedó en 0`, 'ok', { label: 'Quitarla', onClick: () => remove({ ...item, qty: 0 }) })
+      }
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo ajustar.', 'err')
     }
@@ -116,25 +157,43 @@ export default function Reserve() {
         </button>
 
         <h2 className="h-sec">Lo que hay guardado</h2>
+        {zeros.length > 1 && (
+          <div className="res-zeros">
+            <span>{plural(zeros.length, 'referencia se acabó', 'referencias se acabaron')} (en 0)</span>
+            <button type="button" className="btn btn-ink btn-sm" onClick={cleanZeros}>
+              <Icon name="trash" size={16} stroke={2} />Quitar las agotadas
+            </button>
+          </div>
+        )}
         <div className="list">
           {!items ? (
             [0, 1].map((i) => <div key={i} className="skeleton" />)
           ) : items.length ? (
             items.map((item) => (
-              <article className="card res-card" key={item.id}>
+              <article className={`card res-card ${item.qty <= 0 ? 'empty' : ''}`} key={item.id}>
                 <ProductThumb size="sm" src={item.image_url} alt={item.name} />
                 <div style={{ minWidth: 0 }}>
                   <h3 className="res-name">{item.name}</h3>
                   <div className="res-meta">
                     <span className="tag tag-out">{item.size || 'Única'}</span>
                     {item.sku ? <span className="code">{item.sku}</span> : <span className="tag tag-warn">Sin código</span>}
+                    {item.qty <= 0 && <span className="tag tag-warn">Se acabó</span>}
                   </div>
                 </div>
+                <button type="button" className="res-del" onClick={() => remove(item)} aria-label={`Quitar ${item.name} de la reserva`}>
+                  <Icon name="trash" size={18} stroke={1.9} />
+                </button>
                 <div className="res-actions">
                   <Stepper value={item.qty} onMinus={() => bump(item, -1)} onPlus={() => bump(item, 1)} disabledMinus={item.qty === 0} />
-                  <button className="btn btn-ink btn-sm" disabled={item.qty === 0} onClick={() => setSending(item)}>
-                    Enviar a bodega<Icon name="arrowRight" size={17} stroke={2.2} />
-                  </button>
+                  {item.qty > 0 ? (
+                    <button className="btn btn-ink btn-sm" onClick={() => setSending(item)}>
+                      Enviar a bodega<Icon name="arrowRight" size={17} stroke={2.2} />
+                    </button>
+                  ) : (
+                    <button className="btn btn-ghost btn-sm" onClick={() => remove(item)}>
+                      <Icon name="trash" size={16} stroke={2} />Quitar de la reserva
+                    </button>
+                  )}
                 </div>
               </article>
             ))

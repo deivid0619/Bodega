@@ -10,7 +10,7 @@ from .. import inventory_service as inv
 from .. import models, push, schemas
 from .. import serializers as ser
 from ..database import get_db
-from ..deps import get_current_user, require_admin
+from ..deps import get_current_user
 from .products import _out as _product_out
 
 router = APIRouter(prefix="/api/reserve", tags=["bodega de reserva"])
@@ -45,6 +45,7 @@ def create_reserve(payload: schemas.ReserveItemCreateIn, db: Session = Depends(g
     item = models.ReserveItem(
         sku=(payload.sku or "").strip().upper() or None,
         name=payload.name.strip().upper(), size=payload.size.strip().upper(), qty=payload.qty,
+        image_url=payload.image_url or None,
     )
     db.add(item)
     db.commit()
@@ -98,6 +99,7 @@ def _item_for(db: Session, sku: str, name: str, size: str, lock: bool = False):
 
 
 NOT_FOUND = "Ese código no está en la bodega ni en la tienda: escribe la referencia."
+FROM_RESERVE = "Desde la reserva"
 
 
 @router.get("/identify/{sku}", response_model=schemas.ReserveIdentifyOut)
@@ -151,8 +153,17 @@ def update_reserve(item_id: int, payload: schemas.ReserveItemUpdateIn, db: Sessi
     return item
 
 
+@router.post("/clean")
+def clean_reserve(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Quita de la reserva lo que se acabo (en 0)."""
+    removed = db.query(models.ReserveItem).filter(models.ReserveItem.qty <= 0).delete(synchronize_session=False)
+    db.commit()
+    return {"removed": removed}
+
+
+# quitar una de la lista es como dejarla en 0 (eso ya lo puede hacer cualquiera)
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_reserve(item_id: int, db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
+def delete_reserve(item_id: int, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     item = db.get(models.ReserveItem, item_id)
     if not item:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese ítem de reserva ya no existe.")
@@ -184,12 +195,14 @@ def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, back
     try:
         if existing:
             # entra a la ubicacion elegida, aunque el codigo ya tenga otra principal
-            product, movs = inv.apply_movement(db, sku, "in", payload.qty, user, location_id=payload.location_id)
+            product, movs = inv.apply_movement(db, sku, "in", payload.qty, user, location_id=payload.location_id,
+                                               note=FROM_RESERVE)
             if not product.image_url and photo:
                 product.image_url = photo
         else:
             product, movement = inv.register_product(
                 db, sku, item.name, item.size, payload.location_id, payload.qty, 0, user, image_url=photo,
+                note=FROM_RESERVE,
             )
             movs = [movement]
     except inv.InventoryError as e:
@@ -202,4 +215,13 @@ def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, back
         background.add_task(push.notify, kind, title, f"{body} · desde la reserva", *rest)
     db.refresh(item)
     db.refresh(product)
-    return schemas.ReserveTransferResult(reserve=item, product=_product_out(db, product))
+    names = ser.loc_names(db)
+    out = schemas.ReserveTransferResult(
+        reserve=item, product=_product_out(db, product),
+        movement=ser.movement_out(movs[-1], names), movements=[ser.movement_out(m, names) for m in movs],
+    )
+    if item.qty <= 0:
+        # se acabo: sale sola de la reserva (no queda una linea en 0)
+        db.delete(item)
+        db.commit()
+    return out

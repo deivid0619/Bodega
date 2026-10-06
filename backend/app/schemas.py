@@ -262,6 +262,7 @@ class ReserveItemCreateIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     size: str = ""
     qty: int = Field(ge=0, default=0)
+    image_url: Optional[str] = Field(default=None, max_length=500)
 
 
 class ReserveScanIn(BaseModel):
@@ -300,8 +301,10 @@ class ReserveTransferIn(BaseModel):
 
 
 class ReserveTransferResult(BaseModel):
-    reserve: ReserveItemOut
+    reserve: ReserveItemOut  # con qty 0 si se acabo (y ya no esta en la reserva)
     product: ProductOut
+    movement: Optional[MovementOut] = None  # la entrada a la bodega, como en un escaneo
+    movements: list[MovementOut] = []
 
 
 # ---------- reportes ----------

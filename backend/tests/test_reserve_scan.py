@@ -89,3 +89,30 @@ def test_old_reserve_items_get_their_photo(monkeypatch):
         listed = next(i for i in client.get("/api/reserve", headers=h).json() if i["id"] == item["id"])
         assert listed["image_url"] == photo
         _cleanup(client, h, [item["id"]])
+
+
+def test_what_runs_out_leaves_the_reserve():
+    with TestClient(app) as client:
+        h = _h(client)
+        sku = f"ACABA{uuid.uuid4().hex[:6].upper()}"
+        item = client.post("/api/reserve", headers=h, json={"sku": sku, "name": "CHAQUETA SE ACABA", "size": "M", "qty": 2}).json()
+
+        # enviar todo a la bodega: llega con su movimiento y la linea sale sola de la reserva
+        r = client.post(f"/api/reserve/{item['id']}/transfer", headers=h, json={"qty": 2, "location_id": "C-1-1"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["reserve"]["qty"] == 0 and body["product"]["qty"] == 2
+        assert body["movement"]["note"] == "Desde la reserva" and body["movement"]["qty"] == 2
+        assert all(i["id"] != item["id"] for i in client.get("/api/reserve", headers=h).json())
+
+        # lo que quedo en 0 a mano se quita de una vez
+        a = client.post("/api/reserve", headers=h, json={"name": "GUANTE CERO A", "qty": 0}).json()
+        b = client.post("/api/reserve", headers=h, json={"name": "GUANTE CERO B", "qty": 3}).json()
+        client.patch(f"/api/reserve/{b['id']}", headers=h, json={"qty": 0})
+        keep = client.post("/api/reserve", headers=h, json={"name": "GUANTE SE QUEDA", "qty": 1}).json()
+        assert client.post("/api/reserve/clean", headers=h).json()["removed"] >= 2
+        ids = {i["id"] for i in client.get("/api/reserve", headers=h).json()}
+        assert a["id"] not in ids and b["id"] not in ids and keep["id"] in ids
+
+        _cleanup(client, h, [keep["id"]])
+        assert client.delete(f"/api/products/{sku}", headers=h).status_code == 204

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api'
-import { moveStock, refreshInventory, setReserveQty, useLayout } from '../hooks/useApi'
+import { moveStock, refreshInventory, setReserveQty, useLayout, useReserve } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { locationGroups } from '../locationGroups'
 import NewProductModal from '../components/NewProductModal'
@@ -14,7 +14,7 @@ import { PageHead, Stepper, plural } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
 import Viewfinder, { PhotoRead } from '../components/Viewfinder'
 import { beep } from '../lib/feedback'
-import { asksFrom, fmtTime, outAvailable, outParts, outletIdsOf, placesOf } from '../utils'
+import { asksFrom, fmtTime, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../utils'
 import FromPick from '../components/FromPick'
 
 const MODES = [
@@ -103,6 +103,9 @@ function ScanHit({ hit, tally, onUndo }) {
             </small>
           )}
           {hit.short && <small className="vf-hit-warn">Solo hay {hit.have}: revisa antes de confirmar</small>}
+          {!hit.pending && hit.type === 'in' && hit.inReserve > 0 && (
+            <small className="vf-hit-warn">Hay {hit.inReserve} en la reserva: si vienen de allá, deshaz y envíalas desde Reserva</small>
+          )}
           {hit.repeat && <small className="vf-hit-warn">Otra vez la misma prenda: ¿la contaste dos veces?</small>}
         </span>
         <button type="button" className="vf-hit-undo" onClick={onUndo}>{hit.pending ? 'Quitar' : 'Deshacer'}</button>
@@ -127,11 +130,12 @@ export default function Scan() {
   const [session, setSession] = useState([])
   const [hit, setHit] = useState(null) // lo ultimo registrado, para mostrarlo encima de la camara
   // la misma prenda otra vez en pocos segundos: puede ser la misma etiqueta contada dos veces
-  const showHit = (res) => {
+  const showHit = (res, reserveCheck = true) => {
     const parts = res.movements?.length ? res.movements : [res.movement]
     const at = Date.now()
     setHit((prev) => ({
       id: res.movement.id, type: res.movement.type, qty: parts.reduce((s, m) => s + m.qty, 0), image: res.product.image_url,
+      inReserve: reserveCheck ? reserveFor(res.product, rIndex).reduce((t, it) => t + it.qty, 0) : 0,
       sku: res.product.sku, name: res.product.name, size: res.product.size, total: res.product.qty, at,
       repeat: !!prev && !prev.err && prev.sku === res.product.sku && at - prev.at < 8000,
     }))
@@ -180,12 +184,18 @@ export default function Scan() {
   const [keepQty, setKeepQty] = useState(false)
   useEffect(() => { if (qty <= 1) setKeepQty(false) }, [qty])
   const outlet = useMemo(() => outletIdsOf(layout), [layout])
+  // lo que hay en la reserva: una entrada de algo que esta alla pregunta si viene de alla
+  const { data: reserveList } = useReserve()
+  const rIndex = useMemo(() => reserveIndex(reserveList), [reserveList])
   const staged = confirmFirst && mode !== 'set'
   const toConfirmUnits = toConfirm.reduce((t, l) => t + l.qty, 0)
   const toConfirmTypes = new Set(toConfirm.map((l) => l.type))
   // salidas de prendas que estan en varios lugares: falta decir de donde salen
   const needsFrom = (l) => l.type === 'out' && !l.loc && l.from === undefined && asksFrom(placesOf(l, outlet))
   const missingFrom = toConfirm.filter(needsFrom).length
+  // entradas de algo que esta en la reserva: falta decir si viene de alla
+  const needsRes = (l) => l.type === 'in' && l.res && l.fromRes === undefined
+  const missingRes = toConfirm.filter(needsRes).length
 
   const [params] = useSearchParams()
   const navigate = useNavigate()
@@ -310,8 +320,10 @@ export default function Scan() {
     const stock = (p.stock || []).map((st) => ({ location_id: st.location_id, qty: st.qty }))
     const from = old?.from
     const have = mode === 'out' ? outAvailable({ stock }, outlet, loc || from) : null
+    const r = mode === 'in' ? reserveFor(p, rIndex)[0] : null
     const line = { key, type: mode, sku: p.sku, name: p.name, size: p.size, loc, main: p.location_id,
-                   qty: (old?.qty || 0) + qty, n: (old?.n || 0) + 1, stock, from, edited: old?.edited }
+                   qty: (old?.qty || 0) + qty, n: (old?.n || 0) + 1, stock, from, edited: old?.edited,
+                   res: r ? { id: r.id, qty: r.qty } : null, fromRes: old?.fromRes }
     setToConfirm([line, ...list.filter((l) => l.key !== key)])
     const at = Date.now()
     setHit((prev) => ({
@@ -331,6 +343,10 @@ export default function Scan() {
     setHit((h) => (h?.pending && h.key === key ? null : h))
   }
 
+  const setFromRes = (key, fromRes) => {
+    setToConfirm(toConfirmRef.current.map((l) => (l.key === key ? { ...l, fromRes, err: null } : l)))
+  }
+
   const setFrom = (key, from) => {
     setToConfirm(toConfirmRef.current.map((l) => (l.key === key ? { ...l, from, err: null } : l)))
   }
@@ -342,7 +358,7 @@ export default function Scan() {
   }
 
   const confirmAll = async () => {
-    if (savingRef.current || !toConfirmRef.current.length || toConfirmRef.current.some(needsFrom)) return
+    if (savingRef.current || !toConfirmRef.current.length || toConfirmRef.current.some((l) => needsFrom(l) || needsRes(l))) return
     savingRef.current = true
     setSaving(true)
     setHit(null)
@@ -357,6 +373,16 @@ export default function Scan() {
         if (l.type === 'reserve') {
           recordReserve(await api.post('/api/reserve/scan', { sku: l.sku, qty: l.qty }))
           done = l.qty
+        } else if (l.type === 'in' && l.fromRes && l.res) {
+          // viene de la reserva: se descuenta de alla (no queda contada dos veces)
+          const take = Math.min(l.qty, l.res.qty)
+          const tr = await api.post(`/api/reserve/${l.res.id}/transfer`, { qty: take, location_id: l.loc || l.main, sku: l.sku })
+          record({ product: tr.product, movement: tr.movement, movements: tr.movements })
+          done += take
+          if (l.qty > take) {
+            record(await moveStock(l.sku, 'in', l.qty - take, l.loc || undefined))
+            done += l.qty - take
+          }
         } else for (const part of parts) {
           record(await moveStock(l.sku, l.type, part.qty, part.loc || undefined))
           done += part.qty
@@ -368,6 +394,7 @@ export default function Scan() {
     }
     setToConfirm(failed)
     setLastMove(null)
+    refreshInventory()
     savingRef.current = false
     setSaving(false)
     if (!failed.length) showToast(`Guardado: ${plural(units, 'prenda', 'prendas')}`)
@@ -516,12 +543,17 @@ export default function Scan() {
                 <b>Por confirmar</b>
                 <small>{plural(toConfirmUnits, 'prenda', 'prendas')} · {plural(toConfirm.length, 'código', 'códigos')} · aún no se guarda nada</small>
               </div>
+              {missingRes > 0 && (
+                <p className="to-confirm-ask">
+                  {missingRes === 1 ? 'Falta decir si una prenda viene de la reserva' : `Falta decir si ${missingRes} prendas vienen de la reserva`}
+                </p>
+              )}
               {missingFrom > 0 && (
                 <p className="to-confirm-ask">
                   {missingFrom === 1 ? 'Falta elegir de dónde sale una prenda' : `Falta elegir de dónde salen ${missingFrom} prendas`}: está en varios lugares
                 </p>
               )}
-              <button type="button" className="btn btn-lime" onClick={confirmAll} disabled={saving || missingFrom > 0}>
+              <button type="button" className="btn btn-lime" onClick={confirmAll} disabled={saving || missingFrom > 0 || missingRes > 0}>
                 <Icon name="check" size={18} stroke={2.4} />
                 {saving ? 'Guardando…' : toConfirmTypes.size > 1 ? 'Confirmar'
                   : toConfirmTypes.has('out') ? 'Confirmar salida' : toConfirmTypes.has('reserve') ? 'Guardar en la reserva' : 'Confirmar entrada'}
@@ -552,6 +584,16 @@ export default function Scan() {
                 </button>
                 {asksFrom(places) && (
                   <FromPick places={places} value={l.from} qty={l.qty} disabled={saving} onChange={(v) => setFrom(l.key, v)} />
+                )}
+                {l.type === 'in' && l.res && (
+                  <div className="from-pick" role="group" aria-label={`${l.name}: vienen de la reserva`}>
+                    <span className={l.fromRes === undefined ? 'ask' : ''}>¿Vienen de la reserva? Allá hay {l.res.qty}</span>
+                    <button type="button" className="any" aria-pressed={l.fromRes === true} disabled={saving} onClick={() => setFromRes(l.key, true)}>Sí, de la reserva</button>
+                    <button type="button" className="any" aria-pressed={l.fromRes === false} disabled={saving} onClick={() => setFromRes(l.key, false)}>No, son nuevas</button>
+                    {l.fromRes && l.qty > l.res.qty && (
+                      <small>De la reserva salen {l.res.qty}; {l.qty - l.res.qty === 1 ? 'la otra entra' : `las otras ${l.qty - l.res.qty} entran`} como nuevas.</small>
+                    )}
+                  </div>
                 )}
               </div>
               )
@@ -695,10 +737,8 @@ export default function Scan() {
           onClose={() => setPendingSku(null)}
           onCreated={(res) => {
             refreshInventory()
-            setLastMove(res)
-            setSession((s) => [res.movement, ...s].slice(0, 25))
-            count([res.movement])
-            showHit(res)
+            record(res) // puede traer varios movimientos (lo traido de la reserva y lo nuevo)
+            showHit(res, false) // lo de la reserva ya se pregunto en el formulario
           }}
         />
       )}

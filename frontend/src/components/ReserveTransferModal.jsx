@@ -23,7 +23,7 @@ function Form({ item, locations, onDone }) {
       const res = await api.post(`/api/reserve/${item.id}/transfer`, {
         qty: Number(qty), location_id: locationId, sku: sku.trim().toUpperCase() || undefined,
       })
-      showToast(`${qty} ${res.product.name} ${res.product.size} ${Number(qty) === 1 ? 'enviada' : 'enviadas'} a ${locationId}`)
+      showToast(`${qty} ${res.product.name} ${res.product.size} ${Number(qty) === 1 ? 'enviada' : 'enviadas'} a ${locationId}${res.reserve.qty <= 0 ? ' · se acabó en la reserva' : ''}`)
       onDone(res)
       close()
     } catch (err) {

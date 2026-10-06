@@ -435,6 +435,20 @@ button.code:active{transform:scale(.95)}
 .res-card{padding:14px;display:grid;grid-template-columns:auto 1fr;gap:12px 14px;align-items:center}
 .res-card .res-actions{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:12px;border-top:1px solid var(--line)}
 .res-name{font:700 15px/1.25 var(--font);letter-spacing:-.01em}
+.res-card{position:relative}
+.res-card .res-name{padding-right:30px}
+.res-del{position:absolute;top:8px;right:8px;width:36px;height:36px;display:grid;place-items:center;border-radius:var(--r-xs);color:var(--muted);transition:background-color 120ms ease,color 120ms ease}
+.res-del:active{background:var(--fog-2);color:var(--ink)}
+@media (hover:hover) and (pointer:fine){.res-del:hover{background:var(--fog-2);color:var(--ink)}}
+.res-card.empty{background:var(--fog)}
+.res-card.empty .res-name{color:var(--muted)}
+.res-zeros{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:-2px 0 10px;padding:10px 10px 10px 14px;border-radius:var(--r-sm);background:var(--amber-soft);color:#A9480A;font-size:13.5px;font-weight:700}
+.res-zeros .btn{flex:none}
+/* registrar algo que esta en la reserva: se trae de alla */
+.from-reserve{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px;border-radius:var(--r-sm);background:var(--amber-soft);cursor:pointer}
+.from-reserve input{flex:none;width:19px;height:19px;margin:1px 0 0;accent-color:var(--ink)}
+.from-reserve b{display:block;font-size:14px;color:var(--ink)}
+.from-reserve small{display:block;margin-top:2px;font-size:12.5px;color:#7A3A0C}
 .res-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:7px}
 .task-card{padding:14px;display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center}
 .task-t h3{font:700 15px/1.25 var(--font);letter-spacing:-.01em}
