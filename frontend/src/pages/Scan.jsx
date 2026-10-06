@@ -30,6 +30,7 @@ const delta = (m) => (m.type === 'in' || m.type === 'new' ? m.qty : m.type === '
 // celular (sobrevive a recargar) hasta que se confirma
 const TO_CONFIRM_KEY = 'bodega_por_confirmar'
 const CONFIRM_KEY = 'bodega_confirmar'
+const ONE_KEY = 'bodega_una_a_la_vez'
 function readStore(key, fallback) {
   try {
     const v = localStorage.getItem(key)
@@ -160,6 +161,12 @@ export default function Scan() {
   }
   const [saving, setSaving] = useState(false)
   const savingRef = useRef(false)
+  // una prenda a la vez: la camara espera un toque despues de cada lectura
+  const [oneByOne, setOneByOne] = useState(() => readStore(ONE_KEY, true) !== false)
+  // "Prendas por escaneo" de mas de 1 vale para una sola lectura y vuelve a
+  // 1 (asi no se queda en 5 sin querer), salvo que se pida mantenerla
+  const [keepQty, setKeepQty] = useState(false)
+  useEffect(() => { if (qty <= 1) setKeepQty(false) }, [qty])
   const outlet = useMemo(() => outletIdsOf(layout), [layout])
   const staged = confirmFirst && mode !== 'set'
   const toConfirmUnits = toConfirm.reduce((t, l) => t + l.qty, 0)
@@ -190,12 +197,14 @@ export default function Scan() {
         const p = await api.get(`/api/products/${encodeURIComponent(sku)}`)
         beep(true)
         stage(p)
+        afterRead()
         return
       }
       const res = await moveStock(sku, mode, qty, place || undefined)
       beep(true)
       record(res)
       showHit(res)
+      afterRead()
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         beep(true)
@@ -208,6 +217,10 @@ export default function Scan() {
       setHit({ err: msg, at: Date.now() })
       showToast(msg, 'err')
     }
+  }
+
+  const afterRead = () => {
+    if (mode !== 'set' && qty > 1 && !keepQty) setQty(1)
   }
 
   const record = (res) => {
@@ -291,6 +304,12 @@ export default function Scan() {
     })
   }
 
+  const toggleOneByOne = () => {
+    const on = !oneByOne
+    writeStore(ONE_KEY, on)
+    setOneByOne(on)
+  }
+
   const toggleConfirm = () => {
     const on = !confirmFirst
     writeStore(CONFIRM_KEY, on)
@@ -298,7 +317,7 @@ export default function Scan() {
     setHit(null)
   }
 
-  const scanner = useBarcodeScanner(handleCode)
+  const scanner = useBarcodeScanner(handleCode, { single: oneByOne })
   const { status, start, stop } = scanner
   const camOn = status === 'on'
 
@@ -371,15 +390,24 @@ export default function Scan() {
           ))}
         </div>
         <p className="mode-hint">{current.hint}</p>
-        {mode !== 'set' && (
-          <div className="card ctl confirm-ctl">
+        <div className="card scan-opts">
+          {mode !== 'set' && (
+            <div className="ctl">
+              <span>
+                Confirmar antes de guardar
+                <small>{confirmFirst ? 'Lo escaneado queda en una lista: revisas la cuenta y confirmas' : 'Cada lectura se guarda al instante'}</small>
+              </span>
+              <button type="button" className="switch" role="switch" aria-checked={confirmFirst} aria-label="Confirmar antes de guardar" onClick={toggleConfirm} />
+            </div>
+          )}
+          <div className="ctl">
             <span>
-              Confirmar antes de guardar
-              <small>{confirmFirst ? 'Lo escaneado queda en una lista: revisas la cuenta y confirmas' : 'Cada lectura se guarda al instante'}</small>
+              Una prenda a la vez
+              <small>{oneByOne ? 'Después de cada lectura la cámara espera: tocas "Escanear siguiente"' : 'La cámara lee una tras otra sin parar'}</small>
             </span>
-            <button type="button" className="switch" role="switch" aria-checked={confirmFirst} aria-label="Confirmar antes de guardar" onClick={toggleConfirm} />
+            <button type="button" className="switch" role="switch" aria-checked={oneByOne} aria-label="Una prenda a la vez" onClick={toggleOneByOne} />
           </div>
-        )}
+        </div>
         {mode === 'set' && (
           <button className="link-btn count-link" onClick={() => navigate(`/count${place ? `?loc=${encodeURIComponent(place)}` : ''}`)}>
             ¿Vas a contar toda una ubicación? Usa el conteo por ubicación<Icon name="arrowRight" size={14} stroke={2.4} />
@@ -435,8 +463,16 @@ export default function Scan() {
             <b>{mode === 'set' ? 'Cantidad contada' : 'Prendas por escaneo'}</b>
             <small>
               {mode === 'set' ? 'Así queda el total de ese código'
-                : qty > 1 ? `Ojo: cada lectura ${mode === 'out' ? 'descuenta' : 'suma'} ${qty}` : 'Normalmente 1'}
+                : qty <= 1 ? 'Normalmente 1'
+                  : keepQty ? `Ojo: cada lectura ${mode === 'out' ? 'descuenta' : 'suma'} ${qty}`
+                    : `Solo la próxima lectura ${mode === 'out' ? 'descuenta' : 'suma'} ${qty}; luego vuelve a 1`}
             </small>
+            {mode !== 'set' && qty > 1 && (
+              <label className="keep-qty">
+                <input type="checkbox" checked={keepQty} onChange={(e) => setKeepQty(e.target.checked)} />
+                Mantener {qty} en las siguientes
+              </label>
+            )}
           </div>
           <Stepper
             onMinus={() => setQty((q) => Math.max(mode === 'set' ? 0 : 1, q - 1))}

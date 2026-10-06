@@ -34,8 +34,20 @@ async function tune(track) {
   return !!caps.torch
 }
 
-export function useBarcodeScanner(onCode) {
+// single: "una prenda a la vez". Despues de cada lectura la camara sigue
+// abierta pero no lee nada hasta tocar "Escanear siguiente" (resume): asi
+// una etiqueta que se queda en la vista no se cuenta sin querer. No se
+// cierra la camara porque en iPhone volver a abrirla tarda y a veces vuelve
+// a pedir permiso.
+export function useBarcodeScanner(onCode, { single = false } = {}) {
   const [status, setStatus] = useState('off') // off | on | fail
+  const [paused, setPausedState] = useState(false)
+  const pausedRef = useRef(false)
+  // el visor fuera de la pantalla (se bajo a ver la lista): no lee nada
+  const visibleRef = useRef(true)
+  const setVisible = useCallback((v) => { visibleRef.current = v }, [])
+  const singleRef = useRef(single)
+  useEffect(() => { singleRef.current = single })
   const [message, setMessage] = useState('')
   const [note, setNote] = useState('') // por que se apago, si fue sola
   const [torch, setTorchState] = useState('none') // none | off | on
@@ -56,14 +68,28 @@ export function useBarcodeScanner(onCode) {
     torchRef.current = v
     setTorchState(v)
   }
+  const setPaused = (v) => {
+    pausedRef.current = v
+    setPausedState(v)
+  }
 
   const emit = useCallback((code) => {
+    if (pausedRef.current) return
     const now = Date.now()
     const still = code === lastRef.current.code && now - lastRef.current.t < SAME_GAP
     lastRef.current = { code, t: now } // mientras se siga viendo, no vuelve a contar
     if (still) return
     activeRef.current = now
+    if (singleRef.current) setPaused(true)
     onCodeRef.current(code)
+  }, [])
+
+  // "Escanear siguiente": la primera lectura despues de tocar cuenta, aunque
+  // sea el mismo codigo (dos prendas iguales)
+  const resume = useCallback(() => {
+    lastRef.current = { code: '', t: 0 }
+    activeRef.current = Date.now()
+    setPaused(false)
   }, [])
 
   const stop = useCallback(async () => {
@@ -82,6 +108,7 @@ export function useBarcodeScanner(onCode) {
     }
     if (videoRef.current) videoRef.current.srcObject = null
     setTorch('none')
+    setPaused(false)
     setStatus('off')
   }, [])
 
@@ -128,7 +155,7 @@ export function useBarcodeScanner(onCode) {
           return
         }
         try {
-          if (video.readyState >= 2) {
+          if (!pausedRef.current && visibleRef.current && video.readyState >= 2) {
             // el de Chrome lee el cuadro completo sin esfuerzo; a ZXing se le
             // pasa solo la franja del recuadro, mas grande y mas rapida
             zoomed = !zoomed
@@ -139,7 +166,7 @@ export function useBarcodeScanner(onCode) {
             }
           }
         } catch { /* cuadro sin lectura */ }
-        timerRef.current = setTimeout(scan, native ? 120 : 50)
+        timerRef.current = setTimeout(scan, pausedRef.current || !visibleRef.current ? 250 : native ? 120 : 50)
       }
       scan()
     } catch (err) {
@@ -184,5 +211,5 @@ export function useBarcodeScanner(onCode) {
     return !!code
   }, [])
 
-  return { status, message, note, videoRef, start, stop, torch, toggleTorch, readFile }
+  return { status, message, note, videoRef, start, stop, torch, toggleTorch, readFile, paused, resume, setVisible }
 }
