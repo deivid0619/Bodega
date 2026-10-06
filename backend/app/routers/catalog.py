@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from .. import catalog, models, schemas
+from .. import inventory_service as inv
 from ..database import get_db
 from ..deps import get_current_user, require_admin
 
@@ -18,10 +19,40 @@ def lookup(sku: str, _: models.User = Depends(get_current_user)):
     return hit
 
 
-@router.get("/near/{sku}", response_model=list[schemas.CatalogItemOut])
-def near(sku: str, _: models.User = Depends(get_current_user)):
-    """Lo que hay en la tienda con un codigo casi igual (para elegir)."""
-    return catalog.near(sku)
+@router.get("/status", response_model=schemas.CatalogStatusOut)
+def store_status(_: models.User = Depends(get_current_user)):
+    """Si la conexion con la tienda esta bien: de ahi salen nombres, tallas,
+    fotos y los codigos para comparar."""
+    if not catalog.status()["codes"]:
+        catalog.items()  # recien despierto: se lee ya
+    return catalog.status()
+
+
+@router.post("/refresh", response_model=schemas.CatalogStatusOut)
+def store_refresh(_: models.User = Depends(get_current_user)):
+    return catalog.refresh()
+
+
+@router.get("/near/{sku}", response_model=list[schemas.CatalogNearOut])
+def near(sku: str, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Codigos casi iguales al de una etiqueta (que puede venir mal impresa):
+    los de la tienda y los que ya estan registrados en la bodega."""
+    code = "".join(sku.upper().split())
+    out = [{**it, "in_bodega": db.get(models.Product, it["sku"]) is not None} for it in catalog.near(code)]
+    seen = {o["sku"] for o in out}
+    if len(code) >= 6:
+        for p in db.query(models.Product).filter(models.Product.sku.like(f"%{code[-2:]}")).all():
+            if p.sku not in seen and catalog.close_codes(p.sku, code):
+                out.append({"sku": p.sku, "name": p.name, "size": p.size, "price": 0, "image": p.image_url, "in_bodega": True})
+    return out[:4]
+
+
+@router.post("/alias", status_code=status.HTTP_204_NO_CONTENT)
+def save_alias(payload: schemas.AliasIn, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """La etiqueta `code` viene con el codigo mal: es `sku`. Desde ahora, al
+    escanearla se usa el codigo bueno."""
+    inv.save_alias(db, payload.code, payload.sku)
+    db.commit()
 
 
 @router.get("/search", response_model=list[schemas.CatalogProductOut])

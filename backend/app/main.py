@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError
 from . import models
 from .config import settings
 from .database import Base, SessionLocal, engine
+from .catalog import warm as warm_catalog
 from .migrations import backfill_stock, ensure_columns, remove_sample_product, table_bins
 from .routers import auth, catalog, documents, layout, movements, parcels, products, push, reports, reserve
 from .seed import seed
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI):
         remove_sample_product(db)
     finally:
         db.close()
+    warm_catalog()
     yield
 
 

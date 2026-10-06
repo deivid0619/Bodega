@@ -61,7 +61,7 @@ def apply_factura(payload: schemas.FacturaIn, background: BackgroundTasks, db: S
     # la misma referencia repetida en la factura se descuenta una sola vez, sumada
     merged: dict[tuple[str, Optional[str]], int] = {}
     for line in payload.lines:
-        key = (line.sku.strip().upper(), line.location_id or None)
+        key = (inv.resolve_sku(db, line.sku), line.location_id or None)
         merged[key] = merged.get(key, 0) + line.qty
 
     note = f"Factura {number}"
@@ -129,7 +129,7 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
     # la misma talla repetida se suma
     merged: dict[tuple[str, str, Optional[str]], list[int]] = {}
     for line in payload.lines:
-        sku = (line.sku or "").strip().upper() or None
+        sku = inv.resolve_sku(db, line.sku or "") or None
         key = (" ".join(line.name.upper().split()), line.size.strip().upper(), sku)
         acc = merged.setdefault(key, [0, 0])
         acc[0] += line.qty
@@ -215,7 +215,7 @@ def apply_count(payload: schemas.CountIn, background: BackgroundTasks, db: Sessi
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Esa ubicación no existe.")
     counted: dict[str, int] = {}
     for line in payload.lines:
-        counted[line.sku.strip().upper()] = line.qty
+        counted[inv.resolve_sku(db, line.sku)] = line.qty
 
     note = f"Conteo {loc}"
     out_lines: list[dict] = []

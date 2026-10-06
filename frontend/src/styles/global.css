@@ -457,6 +457,15 @@ button.code:active{transform:scale(.95)}
 .near-opt > svg{flex:none;color:#A9480A}
 .near-opt:active{transform:scale(.98)}
 .linked-note{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 0;font-size:13px;font-weight:600;color:var(--lime-deep)}
+/* conexion con la tienda virtual */
+.store-status{display:flex;align-items:center;gap:12px;margin-top:10px;padding:10px 10px 10px 14px;border-radius:var(--r-md);background:var(--paper);box-shadow:var(--sh-1)}
+.store-dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--lime-deep);box-shadow:0 0 0 4px var(--lime-soft)}
+.store-status.warn .store-dot{background:var(--amber);box-shadow:0 0 0 4px var(--amber-soft)}
+.store-status.bad .store-dot{background:var(--red);box-shadow:0 0 0 4px var(--red-soft)}
+.store-t{flex:1;min-width:0}
+.store-t b{display:block;font-size:14px}
+.store-t small{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
+.store-status .btn{flex:none}
 /* registrar algo que esta en la reserva: se trae de alla */
 .from-reserve{display:flex;align-items:flex-start;gap:10px;margin-top:14px;padding:12px;border-radius:var(--r-sm);background:var(--amber-soft);cursor:pointer}
 .from-reserve input{flex:none;width:19px;height:19px;margin:1px 0 0;accent-color:var(--ink)}

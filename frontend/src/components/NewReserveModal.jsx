@@ -53,8 +53,13 @@ function Form({ sku: scanned = '', defaultQty = 1, onCreated }) {
     setBusy(true)
     try {
       // un codigo conocido se suma a lo que ya haya en la reserva (no se repite)
-      const item = found && found.source !== 'parecida' && Number(qty) > 0
-        ? (await api.post('/api/reserve/scan', { sku: found.sku, qty: Number(qty) })).item
+      const label = (scanned || sku).trim().toUpperCase()
+      if (found?.source === 'parecida' && Number(qty) > 0) {
+        // la etiqueta traia el codigo mal: queda reconocida y se guarda con el bueno
+        await api.post('/api/catalog/alias', { code: label, sku: found.sku })
+      }
+      const item = found && Number(qty) > 0
+        ? (await api.post('/api/reserve/scan', { sku: found.source === 'parecida' ? label : found.sku, qty: Number(qty) })).item
         : await api.post('/api/reserve', {
           name: name.trim().toUpperCase(), size: size.trim().toUpperCase(),
           qty: Number(qty), sku: sku.trim().toUpperCase() || undefined, image_url: photo || undefined,
@@ -89,7 +94,7 @@ function Form({ sku: scanned = '', defaultQty = 1, onCreated }) {
               {found.source === 'parecida' ? 'Datos de la tienda' : found.source === 'tienda' ? 'Encontrada en la tienda' : found.source === 'bodega' ? 'Está en la bodega' : 'Ya está en la reserva'}
             </span>
             <b>{found.name}{found.size ? ` · ${found.size}` : ''}</b>
-            {found.source === 'parecida' && <small>En la tienda: {found.sku} · queda con el código de la etiqueta</small>}
+            {found.source === 'parecida' && <small>Código bueno: <b className="mono">{found.sku}</b>. La etiqueta queda reconocida: la próxima vez que la escanees, se usa este.</small>}
           </div>
         </div>
       )}

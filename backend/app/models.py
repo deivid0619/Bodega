@@ -160,6 +160,16 @@ class ReserveItem(Base):
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 
 
+class CodeAlias(Base):
+    """Un codigo de etiqueta mal impreso que apunta al bueno (el de la tienda):
+    al escanear esa etiqueta se usa el codigo bueno."""
+    __tablename__ = "code_aliases"
+
+    code = Column(String(64), primary_key=True)
+    sku = Column(String(64), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class PushSubscription(Base):
     """Un celular (o navegador) que recibe avisos, de quien es y cuales
     quiere: in, out, set, low (bajo minimo), docs (facturas y remisiones)."""

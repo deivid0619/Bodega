@@ -34,6 +34,7 @@ def list_products(
             (models.Product.size.ilike(like)) | (models.Product.location_id.ilike(like))
         )
     products = q.all()
+    _fill_photos(db, products)
     from ..layout_logic import all_locations
     loc_map = all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}
                               for e in db.query(models.Element).all()])
@@ -47,18 +48,55 @@ def list_products(
     return ser.products_out(db, products)
 
 
+# codigos que no tienen foto en la tienda, para no buscarlos en cada consulta
+# (se vuelven a buscar cuando se trae el catalogo otra vez)
+_NO_PHOTO: dict[str, float] = {}
+
+
+def _fill_photos(db: Session, products: list[models.Product]) -> None:
+    """Una prenda, una foto: la que no tiene toma la de su reserva o la de la
+    tienda (sin salir a internet: lo que ya este en memoria), una sola vez."""
+    missing = [p for p in products if not p.image_url]
+    if not missing:
+        return
+    reserve = {it.sku: it.image_url for it in db.query(models.ReserveItem)
+               .filter(models.ReserveItem.sku.in_([p.sku for p in missing]), models.ReserveItem.image_url.isnot(None))}
+    stamp = catalog.version()
+    found = False
+    for p in missing:
+        photo = reserve.get(p.sku)
+        if not photo and _NO_PHOTO.get(p.sku) != stamp:
+            hit = catalog.lookup(p.sku, fetch=False)
+            if not hit:
+                close = catalog.near(p.sku, fetch=False)
+                hit = close[0] if len(close) == 1 else None
+            photo = (hit or {}).get("image")
+            if not photo:
+                _NO_PHOTO[p.sku] = stamp
+        if photo:
+            p.image_url = photo
+            found = True
+    if found:
+        db.commit()
+
+
 @router.get("/{sku}", response_model=schemas.ProductOut)
 def get_product(sku: str, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
-    p = db.query(models.Product).filter(models.Product.sku == sku.upper()).first()
+    # una etiqueta con el codigo mal ya corregida trae la prenda del codigo bueno
+    p = db.get(models.Product, inv.resolve_sku(db, sku))
     if not p:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese código no está registrado.")
+    _fill_photos(db, [p])
     return _out(db, p)
 
 
 @router.post("", response_model=schemas.MovementResult, status_code=status.HTTP_201_CREATED)
 def create_product(payload: schemas.ProductCreateIn, background: BackgroundTasks, db: Session = Depends(get_db),
                     user: models.User = Depends(get_current_user)):
-    image = payload.image_url or (catalog.lookup(payload.sku) or {}).get("image")
+    # la foto: la del formulario, la de su reserva o la de la tienda
+    in_reserve = (db.query(models.ReserveItem)
+                  .filter(models.ReserveItem.sku == payload.sku.strip().upper(), models.ReserveItem.image_url.isnot(None)).first())
+    image = payload.image_url or (in_reserve.image_url if in_reserve else None) or (catalog.lookup(payload.sku) or {}).get("image")
     try:
         product, movement = inv.register_product(
             db, payload.sku, payload.name, payload.size, payload.location_id,
@@ -66,6 +104,10 @@ def create_product(payload: schemas.ProductCreateIn, background: BackgroundTasks
         )
     except inv.InventoryError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    if payload.label_code:
+        # la etiqueta traia el codigo mal: se recuerda para la proxima vez
+        inv.save_alias(db, payload.label_code, product.sku)
+        db.commit()
     if movement.qty > 0:
         for event in push.movement_events(product, "new", [movement], user):
             background.add_task(push.notify, *event)

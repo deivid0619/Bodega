@@ -15,11 +15,12 @@ import httpx
 from .config import settings
 
 TTL = 6 * 3600  # cada cuanto se vuelve a leer la tienda
-RETRY = 300  # si fallo, reintentar en 5 minutos
+RETRY = 90  # si fallo, reintentar en minuto y medio (mientras tanto, lo ultimo que se leyo)
+MAX_PAGES = 40  # 250 productos por pagina: hasta 10.000 productos
 SIZE_OPTIONS = {"TALLA", "SIZE", "TAMAÑO", "TAMANO"}
 
 _lock = threading.Lock()
-_cache: dict = {"at": 0.0, "items": {}, "error": None}
+_cache: dict = {"at": 0.0, "items": {}, "error": None, "ok_at": None}
 
 
 def _thumb(url: str | None, width: int = 400) -> str | None:
@@ -59,7 +60,7 @@ def parse(products: list[dict]) -> dict[str, dict]:
 def _fetch() -> list[dict]:
     out: list[dict] = []
     with httpx.Client(timeout=8, headers={"User-Agent": "Bodega-Pigmalion/1.0"}, follow_redirects=True) as client:
-        for page in range(1, 6):
+        for page in range(1, MAX_PAGES + 1):
             r = client.get(settings.catalog_url, params={"limit": 250, "page": page})
             r.raise_for_status()
             batch = r.json().get("products") or []
@@ -83,17 +84,23 @@ def items(fetch: bool = True) -> dict[str, dict]:
             _cache["items"] = parse(_fetch())
             _cache["error"] = None
             _cache["at"] = time.time() + TTL
+            _cache["ok_at"] = time.time()
         except Exception as e:  # sin internet o la tienda cambio: se sigue con lo que habia
             _cache["error"] = str(e)[:200]
             _cache["at"] = time.time() + RETRY
     return _cache["items"]
 
 
+def version() -> float:
+    """Cambia cada vez que se vuelve a traer el catalogo."""
+    return _cache["at"]
+
+
 def lookup(sku: str, fetch: bool = True) -> dict | None:
     return items(fetch).get(str(sku or "").strip().upper())
 
 
-def _close(a: str, b: str) -> bool:
+def close_codes(a: str, b: str) -> bool:
     """Distintos en una sola letra: una de mas, una de menos o una cambiada."""
     if a == b or abs(len(a) - len(b)) > 1:
         return False
@@ -114,7 +121,7 @@ def near(sku: str, limit: int = 3, fetch: bool = True) -> list[dict]:
     if len(code) < 6:
         return []
     tail = code[-2:]
-    return [it for k, it in items(fetch).items() if k.endswith(tail) and _close(k, code)][:limit]
+    return [it for k, it in items(fetch).items() if k.endswith(tail) and close_codes(k, code)][:limit]
 
 
 def search(q: str, limit: int = 8) -> list[dict]:
@@ -134,4 +141,21 @@ def search(q: str, limit: int = 8) -> list[dict]:
 
 
 def status() -> dict:
-    return {"enabled": bool(settings.catalog_url), "codes": len(_cache["items"]), "error": _cache["error"]}
+    """Como esta la conexion con la tienda (para mostrarlo en la app)."""
+    return {"enabled": bool(settings.catalog_url), "codes": len(_cache["items"]), "error": _cache["error"],
+            "ok_at": _cache["ok_at"]}
+
+
+def refresh() -> dict:
+    """Leer la tienda ya (boton "Actualizar")."""
+    with _lock:
+        _cache["at"] = 0.0
+    items()
+    return status()
+
+
+def warm() -> None:
+    """Al arrancar el servidor (en Render se duerme y se despierta), la tienda
+    se lee de una vez en segundo plano: el primer escaneo ya la encuentra."""
+    if settings.catalog_url:
+        threading.Thread(target=items, daemon=True).start()

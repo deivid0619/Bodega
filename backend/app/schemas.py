@@ -134,6 +134,12 @@ class ProductCreateIn(BaseModel):
     qty: int = Field(ge=0, default=0)
     min_qty: int = Field(ge=0, default=0)
     image_url: Optional[str] = None
+    label_code: Optional[str] = Field(default=None, max_length=64)  # la etiqueta, si traia el codigo mal
+
+
+class AliasIn(BaseModel):
+    code: str = Field(min_length=1, max_length=64)  # lo que dice la etiqueta
+    sku: str = Field(min_length=1, max_length=64)  # el codigo bueno
 
 
 class ProductUpdateIn(BaseModel):
@@ -339,6 +345,17 @@ class CatalogItemOut(BaseModel):
     size: str
     price: int
     image: Optional[str] = None
+
+
+class CatalogStatusOut(BaseModel):
+    enabled: bool
+    codes: int  # cuantos codigos de la tienda hay en memoria
+    error: Optional[str] = None  # por que fallo la ultima vez (si fallo)
+    ok_at: Optional[float] = None  # cuando se leyo bien por ultima vez (segundos epoch)
+
+
+class CatalogNearOut(CatalogItemOut):
+    in_bodega: bool = False  # ese codigo bueno ya esta registrado en la bodega
 
 
 class CatalogSizeOut(BaseModel):

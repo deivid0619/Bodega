@@ -185,7 +185,8 @@ async function confirm(sku, request) {
     const left = pendingBySku.get(sku) - 1
     pendingBySku.set(sku, left)
     // con varios toques seguidos, solo la ultima respuesta trae el estado final
-    if (left === 0) mutate('/api/products', (list) => list.map((p) => (p.sku === sku ? res.product : p)))
+    // (una etiqueta corregida responde con el codigo bueno: tambien ese)
+    if (left === 0) mutate('/api/products', (list) => list.map((p) => (p.sku === sku || p.sku === res.product?.sku ? res.product : p)))
     revalidate('/api/reports/needs')
     revalidate('/api/movements')
     return res

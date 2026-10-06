@@ -9,6 +9,7 @@ import Icon from '../components/Icon'
 import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
 import PassingSection from '../components/Passing'
+import StoreStatus from '../components/StoreStatus'
 import { Count, Empty, PageHead, plural } from '../components/Bits'
 
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
@@ -111,6 +112,7 @@ export default function Summary() {
           <span className="doc-card-t"><b>Reportes</b><small>Entradas y salidas por semana, y lo que no se mueve</small></span>
           <Icon name="arrowRight" size={18} />
         </button>
+        <StoreStatus />
 
         <h2 className="h-sec" id="reponer">Por reponer {needs?.length > 0 && <small>lleva cada talla al doble del mínimo</small>}</h2>
         {!needs ? (

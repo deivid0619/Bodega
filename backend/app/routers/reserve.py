@@ -20,12 +20,18 @@ router = APIRouter(prefix="/api/reserve", tags=["bodega de reserva"])
 def list_reserve(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     items = db.query(models.ReserveItem).order_by(models.ReserveItem.name, models.ReserveItem.size).all()
     # lo que se guardo sin foto (antes no se guardaba): la de la bodega o la
-    # de la tienda, una sola vez
+    # de la tienda, una sola vez; y la prenda de la bodega sin foto toma la
+    # de la reserva (una prenda, una foto)
     found = False
     for it in items:
         if it.sku and not it.image_url:
             it.image_url = _photo(db, it.sku)
             found = found or bool(it.image_url)
+        if it.sku and it.image_url:
+            p = db.get(models.Product, it.sku)
+            if p and not p.image_url:
+                p.image_url = it.image_url
+                found = True
     if found:
         db.commit()
     return items
@@ -56,6 +62,11 @@ def create_reserve(payload: schemas.ReserveItemCreateIn, db: Session = Depends(g
 # ---- escanear para la reserva: igual que una entrada, pero sin ubicacion ----
 def _norm_sku(sku: str) -> str:
     return "".join(str(sku or "").upper().split())
+
+
+def _code(db: Session, sku: str) -> str:
+    """El codigo de la etiqueta, ya corregido si venia mal impreso."""
+    return inv.resolve_sku(db, _norm_sku(sku))
 
 
 def _photo(db: Session, sku: str, fetch: bool = True) -> str | None:
@@ -112,7 +123,7 @@ FROM_RESERVE = "Desde la reserva"
 @router.get("/identify/{sku}", response_model=schemas.ReserveIdentifyOut)
 def identify(sku: str, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     """Que prenda es (sin guardar nada), para la lista "Por confirmar"."""
-    sku = _norm_sku(sku)
+    sku = _code(db, sku)
     who = _identify(db, sku)
     if not who:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
@@ -124,11 +135,16 @@ def identify(sku: str, db: Session = Depends(get_db), _: models.User = Depends(g
 def scan_in(payload: schemas.ReserveScanIn, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     """Suma a la reserva lo escaneado: a lo que ya habia de ese codigo, o
     nuevo con el nombre y la talla de la bodega o de la tienda."""
-    sku = _norm_sku(payload.sku)
+    label = _norm_sku(payload.sku)
+    sku = _code(db, label)
     who = _identify(db, sku)  # puede ir a la tienda: antes de bloquear nada
     if not who:
         raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
     item = _item_for(db, sku, who["name"], who["size"], lock=True)
+    if not item and label != sku:
+        # guardada antes con la etiqueta mal: es la misma
+        item = (db.query(models.ReserveItem).filter(models.ReserveItem.sku == label).with_for_update()
+                .order_by(models.ReserveItem.id).first())
     created = item is None
     if created:
         item = models.ReserveItem(sku=sku, name=who["name"], size=who["size"], qty=0)
@@ -192,7 +208,7 @@ def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, back
     if payload.qty > item.qty:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Solo hay {item.qty} en reserva.")
 
-    sku = (payload.sku or item.sku or "").strip().upper()
+    sku = inv.resolve_sku(db, payload.sku or item.sku or "")
     if not sku:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta el código (SKU) para enviarlo a la bodega.")
 

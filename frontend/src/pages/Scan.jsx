@@ -106,6 +106,7 @@ function ScanHit({ hit, tally, onUndo }) {
           {!hit.pending && hit.type === 'in' && hit.inReserve > 0 && (
             <small className="vf-hit-warn">Hay {hit.inReserve} en la reserva: si vienen de allá, deshaz y envíalas desde Reserva</small>
           )}
+          {hit.label && <small>Etiqueta {hit.label} · se usó el código bueno {hit.sku}</small>}
           {hit.repeat && <small className="vf-hit-warn">Otra vez la misma prenda: ¿la contaste dos veces?</small>}
         </span>
         <button type="button" className="vf-hit-undo" onClick={onUndo}>{hit.pending ? 'Quitar' : 'Deshacer'}</button>
@@ -233,6 +234,8 @@ export default function Scan() {
         const p = await api.get(`/api/products/${encodeURIComponent(sku)}`)
         beep(true)
         stage(p)
+        // una etiqueta con el codigo mal ya corregida: se dice cual se uso
+        if (p.sku !== sku) setHit((h) => (h ? { ...h, label: sku } : h))
         afterRead()
         return
       }
@@ -240,6 +243,7 @@ export default function Scan() {
       beep(true)
       record(res)
       showHit(res)
+      if (res.product.sku !== sku) setHit((h) => (h ? { ...h, label: sku } : h))
       afterRead()
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {

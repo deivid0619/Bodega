@@ -41,6 +41,29 @@ def outlet_ids(db: Session) -> set[str]:
     return {k for k, v in _locations(db).items() if v.get("outlet")}
 
 
+def resolve_sku(db: Session, code: str) -> str:
+    """El codigo bueno de una etiqueta: el mismo o, si la etiqueta viene con
+    el codigo mal y ya se corrigio, el de la tienda."""
+    code = "".join(str(code or "").upper().split())
+    if not code or db.get(models.Product, code):
+        return code
+    alias = db.get(models.CodeAlias, code)
+    return alias.sku if alias else code
+
+
+def save_alias(db: Session, code: str, sku: str) -> None:
+    """Recuerda que la etiqueta `code` es el codigo `sku` (sin guardar)."""
+    code = "".join(str(code or "").upper().split())
+    sku = "".join(str(sku or "").upper().split())
+    if not code or not sku or code == sku or db.get(models.Product, code):
+        return
+    alias = db.get(models.CodeAlias, code)
+    if alias:
+        alias.sku = sku
+    else:
+        db.add(models.CodeAlias(code=code, sku=sku))
+
+
 def _lock(db: Session, sku: str) -> tuple[models.Product, dict[str, models.Stock]]:
     # SELECT ... FOR UPDATE sobre el codigo y sus existencias: si dos personas
     # mueven el mismo codigo al tiempo, la segunda espera a la primera en vez
@@ -136,6 +159,7 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
     principal y luego de donde haya mas (puede tocar varias ubicaciones, una
     fila de historial por cada una).
     """
+    sku = resolve_sku(db, sku)  # una etiqueta con el codigo mal ya corregida
     product, rows = _lock(db, sku)
     before = product.qty
     locs = _locations(db)
