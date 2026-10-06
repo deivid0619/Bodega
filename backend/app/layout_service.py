@@ -66,25 +66,29 @@ def _replace_all(db: Session, new_elements: list[dict], room: dict | None = None
             seen[loc["id"]] = ne["id"]
     new_ids = set(seen.keys()) | {DISPATCH}  # Despacho no es un mueble: nunca se pierde
 
+    # cada ubicacion sigue siendo la del mismo lugar del mueble (fila y
+    # columna, nivel...): quitar o agregar una columna no corre las demas
+    # (antes C-2-2 pasaba a C-2-1); solo cambia el nombre si cambia el codigo
     rename: dict[str, str] = {}
     for ne in new_elements:
         old = old_by_id.get(ne["id"])
         if not old:
             continue
-        old_locs = locs_of_el(old)
-        new_locs = locs_of_el(ne)
-        for i, ol in enumerate(old_locs):
-            if i < len(new_locs) and ol["id"] != new_locs[i]["id"]:
-                rename[ol["id"]] = new_locs[i]["id"]
+        same_place = {l["slot"]: l["id"] for l in locs_of_el(ne)}
+        for ol in locs_of_el(old):
+            new_id = same_place.get(ol["slot"])
+            if new_id and new_id != ol["id"]:
+                rename[ol["id"]] = new_id
     rename.update({a: b for a, b in (moves or {}).items() if a != b})
 
     # solo se miran las existencias que quedarian por fuera (no toda la tabla)
-    lost = {sku for (sku,) in db.query(models.Stock.sku).filter(
-        models.Stock.qty > 0, models.Stock.location_id.notin_(new_ids | set(rename))).distinct()}
+    lost = sorted({loc for (loc,) in db.query(models.Stock.location_id).filter(
+        models.Stock.qty > 0, models.Stock.location_id.notin_(new_ids | set(rename))).distinct()})
     if lost:
-        n = len(lost)
-        noun = "código con prendas quedaría" if n == 1 else "códigos con prendas quedarían"
-        raise LayoutError(f"{n} {noun} sin ubicación. Muévelos a otro lugar primero.")
+        one = len(lost) == 1
+        shown = ", ".join(lost[:4]) + ("…" if len(lost) > 4 else "")
+        raise LayoutError(f"{shown} {'tiene prendas y quedaría' if one else 'tienen prendas y quedarían'} sin ubicación. "
+                          "Muévelas a otro lugar primero.")
 
     if rename:
         # se reescriben las filas (borrar y volver a crear) para que un

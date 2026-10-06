@@ -173,6 +173,12 @@ export function applyLocally(p, type, n, loc) {
 
 async function optimistic(sku, local, request) {
   mutate('/api/products', (list) => list.map((p) => (p.sku === sku ? local(p) : p)))
+  return confirm(sku, request)
+}
+
+// manda el cambio (ya visible en pantalla) y, cuando no queda nada mas por
+// confirmar de ese codigo, deja lo que diga el servidor
+async function confirm(sku, request) {
   pendingBySku.set(sku, (pendingBySku.get(sku) || 0) + 1)
   try {
     const res = await enqueue(sku, request)
@@ -199,6 +205,47 @@ export function moveStock(sku, type, qty = 1, locationId) {
     (p) => applyLocally(p, type, qty, locationId),
     () => api.post('/api/movements', { sku, type, qty, ...(locationId ? { location_id: locationId } : {}) }),
   )
+}
+
+// Toques seguidos en + / − de un mismo codigo y ubicacion se juntan en un
+// solo movimiento (+5 en vez de cinco +1): la pantalla cambia con cada toque
+// y al servidor va un solo envio cuando se deja de tocar. Con el servidor
+// lejos cada envio tarda, y cinco en fila se sentian lentos.
+const bumps = new Map()
+
+export function bumpStock(sku, delta, locationId) {
+  mutate('/api/products', (list) => list.map((p) => (p.sku === sku ? applyLocally(p, delta > 0 ? 'in' : 'out', Math.abs(delta), locationId) : p)))
+  const key = `${sku}|${locationId || ''}`
+  let b = bumps.get(key)
+  if (!b) {
+    b = { net: 0, waiters: [], timer: null }
+    bumps.set(key, b)
+    // mientras se junta, una respuesta vieja de ese codigo no pisa estos toques
+    pendingBySku.set(sku, (pendingBySku.get(sku) || 0) + 1)
+  }
+  b.net += delta
+  clearTimeout(b.timer)
+  b.timer = setTimeout(() => flushBump(key, sku, locationId), 450)
+  return new Promise((resolve, reject) => b.waiters.push({ resolve, reject }))
+}
+
+async function flushBump(key, sku, locationId) {
+  const b = bumps.get(key)
+  bumps.delete(key)
+  pendingBySku.set(sku, pendingBySku.get(sku) - 1)
+  if (!b.net) {
+    // sumo y resto lo mismo: no hay nada que enviar
+    if (!pendingBySku.get(sku)) revalidate('/api/products')
+    b.waiters.forEach((w) => w.resolve(null))
+    return
+  }
+  const body = { sku, type: b.net > 0 ? 'in' : 'out', qty: Math.abs(b.net), ...(locationId ? { location_id: locationId } : {}) }
+  try {
+    const res = await confirm(sku, () => api.post('/api/movements', body))
+    b.waiters.forEach((w) => w.resolve(res))
+  } catch (err) {
+    b.waiters.forEach((w) => w.reject(err))
+  }
 }
 
 // Traslado entre ubicaciones (el total no cambia).

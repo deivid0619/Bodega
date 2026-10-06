@@ -23,6 +23,8 @@ const MODES = [
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
 
 const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
+const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0')
+const delta = (m) => (m.type === 'in' || m.type === 'new' ? m.qty : m.type === 'out' ? -m.qty : 0)
 
 // "Salió de P-A1 (3) y C-1-2 (1)", "Entró a C-1-3"...
 function placesText(res) {
@@ -44,6 +46,25 @@ export default function Scan() {
   const [remision, setRemision] = useState(false)
   const [parcel, setParcel] = useState(false)
   const [session, setSession] = useState([])
+  // lo que llevas registrado en esta sesion, por codigo (la lista de abajo
+  // solo muestra lo ultimo; esto no se corta): asi no se pierde la cuenta
+  const [tally, setTally] = useState({})
+  const count = (parts, sign = 1, after) => setTally((t) => {
+    const m = parts[parts.length - 1]
+    const cur = t[m.sku] || { sku: m.sku, name: m.product_name, size: m.product_size, net: 0, n: 0, counted: false }
+    return {
+      ...t,
+      [m.sku]: {
+        ...cur,
+        net: cur.net + sign * parts.reduce((s, p) => s + delta(p), 0),
+        n: cur.n + sign,
+        after: after ?? m.after,
+        counted: cur.counted || m.type === 'set',
+        at: Date.now(),
+      },
+    }
+  })
+  const tallyList = useMemo(() => Object.values(tally).filter((t) => t.n > 0).sort((a, b) => b.at - a.at), [tally])
   // '' = automatica (la ubicacion principal de cada codigo); null = aun sin decidir
   const [place, setPlace] = useState(null)
 
@@ -72,6 +93,7 @@ export default function Scan() {
       setLastMove(res)
       const parts = res.movements?.length ? [...res.movements].reverse() : [res.movement]
       setSession((s) => [...parts, ...s].slice(0, 25))
+      count(res.movements?.length ? res.movements : [res.movement])
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         beep(true)
@@ -112,8 +134,10 @@ export default function Scan() {
 
   const undo = async (id) => {
     try {
-      await api.post(`/api/movements/${id}/undo`)
+      const product = await api.post(`/api/movements/${id}/undo`)
       refreshInventory()
+      const undone = session.find((m) => m.id === id)
+      if (undone) count([undone], -1, product.qty)
       setSession((s) => s.filter((m) => m.id !== id))
       if (lastMove?.movement?.id === id) setLastMove(null)
       showToast('Movimiento deshecho')
@@ -166,10 +190,13 @@ export default function Scan() {
         </button>
         <PhotoRead scanner={scanner} onMiss={() => showToast('No encontré un código en la foto. Tómala más de cerca, derecha y con luz.', 'err')} />
 
-        <div className="card scan-qty">
+        <div className={`card scan-qty ${mode !== 'set' && qty > 1 ? 'bulk' : ''}`}>
           <div>
             <b>{mode === 'set' ? 'Cantidad contada' : 'Prendas por escaneo'}</b>
-            <small>{mode === 'set' ? 'Así queda el total de ese código' : 'Normalmente 1'}</small>
+            <small>
+              {mode === 'set' ? 'Así queda el total de ese código'
+                : qty > 1 ? `Ojo: cada lectura ${mode === 'out' ? 'descuenta' : 'suma'} ${qty}` : 'Normalmente 1'}
+            </small>
           </div>
           <Stepper
             onMinus={() => setQty((q) => Math.max(mode === 'set' ? 0 : 1, q - 1))}
@@ -228,6 +255,7 @@ export default function Scan() {
             <div className="result-code mono">{lastMove.product.sku}</div>
             <p className="result-left">
               {placesText(lastMove)} · quedan <b>{lastMove.product.qty}</b> en total
+              {tally[lastMove.product.sku]?.n > 1 && <> · llevas <b>{signed(tally[lastMove.product.sku].net)}</b> en esta sesión</>}
             </p>
             <button className="undo" onClick={() => undo(mv.id)}><Icon name="undo" size={16} />Deshacer</button>
             <div className="result-size">{lastMove.product.size || 'U'}</div>
@@ -235,6 +263,21 @@ export default function Scan() {
         )}
 
         <h2 className="h-sec">En esta sesión {session.length > 0 && <small>{session.length}</small>}</h2>
+        {tallyList.length > 0 && (
+          <div className="card panel tally" aria-label="Lo que llevas por código">
+            {tallyList.map((t) => (
+              <div className="need" key={t.sku}>
+                <div className="need-t">
+                  <b>{t.name}{t.size ? ` · ${t.size}` : ''}</b>
+                  <small><span className="mono">{t.sku}</span> · {t.n === 1 ? '1 registro' : `${t.n} registros`} · hay {t.after} en total</small>
+                </div>
+                <div className={`need-q ${t.net < 0 ? 'dark' : !t.net ? 'idle' : ''}`}>
+                  <b>{t.net || !t.counted ? signed(t.net) : `=${t.after}`}</b><span>{t.net || !t.counted ? 'llevas' : 'contado'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         {session.length ? (
           <ul className="moves card panel">
             {session.map((m) => (
@@ -266,6 +309,7 @@ export default function Scan() {
             refreshInventory()
             setLastMove(res)
             setSession((s) => [res.movement, ...s].slice(0, 25))
+            count([res.movement])
           }}
         />
       )}

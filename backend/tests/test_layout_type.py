@@ -21,6 +21,38 @@ def _parcel_loc(client, h, parcel_id):
     return next(p for p in client.get("/api/parcels", headers=h).json() if p["id"] == parcel_id)["location_id"]
 
 
+def test_removing_a_column_does_not_shift_the_other_baskets():
+    with TestClient(app) as client:
+        h = _h(client)
+        tag = uuid.uuid4().hex[:5].upper()
+        wall = client.post("/api/layout/elements", headers=h, json={"type": "bins", "x": 0, "z": 0}).json()  # 4 x 6
+        code, sku = wall["code"], f"COL-{tag}"
+        r = client.post("/api/products", headers=h, json={"sku": sku, "name": "PRUEBA COLUMNA", "size": "",
+                                                           "location_id": f"{code}-2-2", "qty": 3})
+        assert r.status_code == 201, r.text
+        parcel = client.post("/api/parcels", headers=h, json={"owner": "Prueba", "location_id": f"{code}-3-2"}).json()
+
+        # quitar una columna: lo de la 2-2 sigue en la 2-2 (antes pasaba a la 2-1... o a otra fila)
+        for cols in (3, 2, 5):
+            r = client.patch(f"/api/layout/elements/{wall['id']}", headers=h, json={"params": {"cols": cols}})
+            assert r.status_code == 200, r.text
+            assert _stock(client, h, sku) == {f"{code}-2-2": 3}
+            assert _parcel_loc(client, h, parcel["id"]) == f"{code}-3-2"
+
+        # quitar la columna donde hay prendas: no deja, y dice cual canasta
+        r = client.patch(f"/api/layout/elements/{wall['id']}", headers=h, json={"params": {"cols": 1}})
+        assert r.status_code == 400 and f"{code}-2-2" in r.json()["detail"]
+
+        # cambiar el codigo: misma fila y columna, otro nombre
+        r = client.patch(f"/api/layout/elements/{wall['id']}", headers=h, json={"code": f"Q{tag[:3]}"})
+        assert r.status_code == 200, r.text
+        assert _stock(client, h, sku) == {f"Q{tag[:3]}-2-2": 3}
+
+        assert client.delete(f"/api/products/{sku}", headers=h).status_code == 204
+        assert client.delete(f"/api/parcels/{parcel['id']}", headers=h).status_code == 204
+        assert client.delete(f"/api/layout/elements/{wall['id']}", headers=h).status_code == 204
+
+
 def test_bins_become_boxes_and_back_keeping_what_they_hold():
     with TestClient(app) as client:
         h = _h(client)

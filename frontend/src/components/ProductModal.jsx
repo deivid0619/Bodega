@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ToastContext'
-import { applyLocally, moveStock, useReserve } from '../hooks/useApi'
+import { applyLocally, bumpStock, useReserve } from '../hooks/useApi'
 import { reserveIndex, stockSplit } from '../utils'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import MoveSheet from './MoveSheet'
@@ -45,12 +45,19 @@ function Body({ sku, locations, onChanged, onLocate }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sku])
 
+  // cada toque se ve en el acto; lo del servidor solo se toma cuando llega
+  // la respuesta del ultimo toque (antes cada respuesta devolvia el numero
+  // a un valor viejo y parecia que se demoraba en sumar o restar)
+  const taps = useRef(0)
   const bump = async (type, locationId) => {
     setProduct((p) => applyLocally(p, type, 1, locationId))
+    taps.current += 1
     try {
-      const res = await moveStock(sku, type, 1, locationId)
-      setProduct(res.product)
+      const res = await bumpStock(sku, type === 'in' ? 1 : -1, locationId)
+      taps.current -= 1
+      if (!taps.current && res) setProduct(res.product)
     } catch (e) {
+      taps.current -= 1
       showToast(e instanceof ApiError ? e.message : 'No se pudo registrar.', 'err')
       api.get(`/api/products/${encodeURIComponent(sku)}`).then(setProduct).catch(() => {})
     }

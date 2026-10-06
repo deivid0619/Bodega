@@ -323,6 +323,10 @@ button.code:active{transform:scale(.95)}
 .scan-qty{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:14px;padding:12px 12px 12px 18px}
 .scan-qty b{font-weight:700;font-size:14.5px}
 .scan-qty small{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+/* cada lectura suma (o descuenta) mas de 1: que se note */
+.scan-qty.bulk{box-shadow:inset 0 0 0 2px var(--amber),var(--sh-1)}
+.scan-qty.bulk small{color:#A9480A;font-weight:700}
+.tally{margin-bottom:10px}
 .manual{display:flex;gap:8px;margin-top:12px}
 .manual .input{flex:1;min-width:0}
 .result{position:relative;overflow:hidden;margin-top:18px;padding:18px;border-radius:var(--r-lg);background:var(--ink);color:#fff;box-shadow:var(--sh-2)}

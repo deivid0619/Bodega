@@ -75,27 +75,29 @@ def table_slots(n: int) -> list[tuple[int, int]]:
 
 
 def locs_of_el(el: dict) -> list[dict]:
-    """Ubicaciones concretas que contiene un mueble."""
+    """Ubicaciones concretas que contiene un mueble. "slot" es su lugar dentro
+    del mueble (fila y columna, nivel, barra...): al cambiar el tamano o el
+    codigo, cada ubicacion sigue siendo la del mismo lugar."""
     t, code, p = el["type"], el.get("code"), el.get("params") or {}
     out: list[dict] = []
     if t == "bins":
         for r in range(1, int(p.get("rows", 1)) + 1):
             for c in range(1, int(p.get("cols", 1)) + 1):
-                out.append({"id": f"{code}-{r}-{c}", "kind": "bin", "name": f"Canasta {code}-{r}-{c}"})
+                out.append({"id": f"{code}-{r}-{c}", "kind": "bin", "name": f"Canasta {code}-{r}-{c}", "slot": f"{r}-{c}"})
     elif t == "shelf":
         for i in range(1, int(p.get("levels", 1)) + 1):
             suf = " (abajo)" if i == 1 else ""
-            out.append({"id": f"{code}-N{i}", "kind": "shelf", "name": f"Estantería {code}, nivel {i}{suf}"})
+            out.append({"id": f"{code}-N{i}", "kind": "shelf", "name": f"Estantería {code}, nivel {i}{suf}", "slot": f"N{i}"})
     elif t == "rack":
         for i in range(1, int(p.get("bars", 1)) + 1):
             suf = " (arriba)" if i == 1 else ""
-            out.append({"id": f"P-{code}{i}", "kind": "rod", "name": f"Perchero {code}, barra {i}{suf}"})
+            out.append({"id": f"P-{code}{i}", "kind": "rod", "name": f"Perchero {code}, barra {i}{suf}", "slot": f"B{i}"})
     elif t == "boxes":
-        out.append({"id": code, "kind": "boxes", "name": el_name(el)})
+        out.append({"id": code, "kind": "boxes", "name": el_name(el), "slot": "cajas"})
     elif t == "table" and code:
         for level, pile in table_slots(int(p.get("bins", 0) or 0)):
             out.append({"id": f"{code}-{level}-{pile}", "kind": "bin", "name": f"Canasta {code}-{level}-{pile}",
-                        "level": level, "pile": pile})
+                        "level": level, "pile": pile, "slot": f"{level}-{pile}"})
     return out
 
 

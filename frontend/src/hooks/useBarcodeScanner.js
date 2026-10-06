@@ -14,6 +14,10 @@ const ZOOM = 1.8
 const AIM = 'Pon el código dentro del recuadro, a unos 20 cm'
 // sin leer nada en este tiempo, la camara se apaga sola (bateria y linterna)
 const IDLE_MS = 45_000
+// la misma etiqueta solo cuenta otra vez despues de salir de la vista este
+// tiempo. Antes se volvia a contar cada 1,8 s mientras siguiera frente a la
+// camara: con "Prendas por escaneo" en 20, sumaba 20 mas sin querer
+const SAME_GAP = 1200
 
 // enfoque continuo y zoom, cada uno por aparte: si la camara no acepta uno,
 // el otro igual se aplica. Devuelve si tiene linterna.
@@ -54,8 +58,9 @@ export function useBarcodeScanner(onCode) {
 
   const emit = useCallback((code) => {
     const now = Date.now()
-    if (code === lastRef.current.code && now - lastRef.current.t < 1800) return
-    lastRef.current = { code, t: now }
+    const still = code === lastRef.current.code && now - lastRef.current.t < SAME_GAP
+    lastRef.current = { code, t: now } // mientras se siga viendo, no vuelve a contar
+    if (still) return
     activeRef.current = now
     onCodeRef.current(code)
   }, [])
@@ -90,6 +95,7 @@ export function useBarcodeScanner(onCode) {
     const stale = () => session !== sessionRef.current
     setNote('')
     activeRef.current = Date.now()
+    lastRef.current = { code: '', t: 0 } // al abrir la camara, la primera lectura siempre cuenta
     setStatus('on')
     setMessage('Abriendo la cámara…')
     try {

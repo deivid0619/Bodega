@@ -1,6 +1,6 @@
 import { forwardRef, useState } from 'react'
 import { ApiError } from '../api'
-import { moveStock, usePolling } from '../hooks/useApi'
+import { bumpStock, usePolling } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader } from './Sheet'
 import MoveSheet from './MoveSheet'
@@ -35,7 +35,7 @@ const LocationSheet = forwardRef(function LocationSheet(
 
   const bump = async (sku, type) => {
     try {
-      await moveStock(sku, type, 1, locationId)
+      await bumpStock(sku, type === 'in' ? 1 : -1, locationId)
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo registrar.', 'err')
     }
