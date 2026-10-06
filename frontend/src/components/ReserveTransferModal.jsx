@@ -15,7 +15,9 @@ function Form({ item, locations, onDone }) {
   const { close } = useSheet()
   const [mode, setMode] = useState('bodega') // bodega | despachar
   const [qty, setQty] = useState(Math.min(1, item.qty) || 1)
-  const [locationId, setLocationId] = useState(locations[0]?.options[0]?.id || '')
+  // a la bodega va a una ubicacion de verdad: para lo que sale esta "Despachar"
+  const places = locations.filter((g) => !g.options.some((o) => o.id === 'DESPACHO'))
+  const [locationId, setLocationId] = useState(places[0]?.options[0]?.id || '')
   const [sku, setSku] = useState(item.sku || '')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
@@ -74,7 +76,7 @@ function Form({ item, locations, onDone }) {
         <p className="mode-hint">
           {out
             ? 'Salen ya, empacadas: se descuentan de la reserva sin quedar en ninguna canasta.'
-            : 'Se guardan en una ubicación de la bodega. Si van a salir después, despáchalas desde aquí cuando salgan.'}
+            : 'Se guardan en una canasta, perchero o estantería. Si todavía no sabes dónde van, déjalas en la reserva hasta saberlo.'}
         </p>
         {!item.sku && (
           <label className="field">
@@ -105,7 +107,7 @@ function Form({ item, locations, onDone }) {
         ) : (
           <label className="field">
             <span className="field-label">Ubicación en la bodega</span>
-            <LocationSelect value={locationId} onChange={setLocationId} locations={locations} currentName={locationId} />
+            <LocationSelect value={locationId} onChange={setLocationId} locations={places} currentName={locationId} />
           </label>
         )}
         {error && <p className="form-err" role="alert">{error}</p>}
