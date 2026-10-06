@@ -75,7 +75,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
   const [armedType, setArmedType] = useState(null)
   const typeTimer = useRef(null)
 
-  useEffect(() => { setCodeInput(element?.code || ''); setArmedDelete(false); setArmedType(null) }, [element?.id, element?.code, element?.type])
+  useEffect(() => { setCodeInput(element?.code || ''); setArmedType(null) }, [element?.id, element?.code, element?.type])
 
   const fail = (e, fallback) => showToast(e instanceof ApiError ? e.message : fallback, 'err')
 
