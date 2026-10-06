@@ -26,7 +26,8 @@ function groupProducts(list, index, reserveOnly, outlet) {
     g.reserve += split.reserve
     g.passing += split.passing
     g.outlet += split.outlet
-    if (!g.image && p.image_url) g.image = p.image_url
+    // la foto de la bodega o, si no tiene, la de su reserva (que la trae de la tienda)
+    if (!g.image) g.image = p.image_url || reserveFor(p, index).find((it) => it.image_url)?.image_url || null
     for (const st of p.stock || []) g.locs.set(st.location_id, (g.locs.get(st.location_id) || 0) + st.qty)
   }
   const groups = [...map.values()]
@@ -43,6 +44,7 @@ function groupProducts(list, index, reserveOnly, outlet) {
     }
     g.items.push({ key: `r-${it.id}`, size: it.size, item: it, bodega: 0, reserve: it.qty, passing: 0 })
     g.reserve += it.qty
+    if (!g.image && it.image_url) g.image = it.image_url
   }
   for (const g of groups) g.items.sort((a, b) => sizeIdx(a.size) - sizeIdx(b.size))
   return groups.sort((a, b) => a.name.localeCompare(b.name))
