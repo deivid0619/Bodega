@@ -60,3 +60,24 @@ def test_a_factura_photo_is_kept_a_month(tmp_path, monkeypatch):
         assert listed["photo_count"] == 0 and listed["units"] == 1
 
         client.delete(f"/api/products/{sku}", headers=h)
+
+
+def test_where_the_photos_go(monkeypatch):
+    from app import photo_store
+    # la URL del proyecto sale sola de la base de datos de Supabase
+    monkeypatch.setattr(settings, "supabase_url", "")
+    monkeypatch.setattr(settings, "database_url", "postgresql://postgres.abcdefghijklmnopqrst:clave@aws-0-us-east-1.pooler.supabase.com:6543/postgres")
+    assert photo_store.project_url() == "https://abcdefghijklmnopqrst.supabase.co"
+    monkeypatch.setattr(settings, "database_url", "postgresql://postgres:clave@db.zyxwvutsrqponmlkjihg.supabase.co:5432/postgres")
+    assert photo_store.project_url() == "https://zyxwvutsrqponmlkjihg.supabase.co"
+    # llave nueva: solo en apikey (no es JWT); la de antes: tambien como Bearer
+    monkeypatch.setattr(settings, "supabase_service_key", "sb_secret_prueba")
+    assert photo_store._headers() == {"apikey": "sb_secret_prueba"}
+    monkeypatch.setattr(settings, "supabase_service_key", "eyJhbGciOi.prueba")
+    assert photo_store._headers()["Authorization"] == "Bearer eyJhbGciOi.prueba"
+    # en produccion (Postgres) sin llave: no se guardan (el disco de Render se borra)
+    monkeypatch.setattr(settings, "supabase_service_key", "")
+    assert not photo_store.usable() and photo_store.status()["where"] == "none"
+    # en el computador (SQLite): carpeta local
+    monkeypatch.setattr(settings, "database_url", "sqlite:///./bodega.db")
+    assert photo_store.usable() and photo_store.status()["where"] == "local"

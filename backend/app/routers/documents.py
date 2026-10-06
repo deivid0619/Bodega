@@ -46,6 +46,12 @@ def _purge_in_background() -> None:
     threading.Thread(target=run, daemon=True).start()
 
 
+@router.get("/photo-store", response_model=schemas.PhotoStoreOut)
+def photo_store_status(_: models.User = Depends(get_current_user)):
+    """Si las fotos se estan guardando bien (en el Resumen)."""
+    return photo_store.status()
+
+
 @router.post("/{doc_id}/photos", response_model=schemas.DocumentOut)
 async def add_photo(doc_id: int, request: Request, db: Session = Depends(get_db),
                     _: models.User = Depends(get_current_user)):
@@ -54,6 +60,9 @@ async def add_photo(doc_id: int, request: Request, db: Session = Depends(get_db)
     doc = db.get(models.Document, doc_id)
     if not doc or doc.kind not in ("factura", "remision"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese documento no existe.")
+    if not photo_store.usable():
+        # en produccion sin Supabase se perderian al reiniciar: mejor decirlo
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, photo_store.NOT_READY)
     ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
     if ctype not in photo_store.TYPES:
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Solo fotos (JPG, PNG o WebP).")

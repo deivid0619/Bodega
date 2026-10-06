@@ -248,6 +248,14 @@ class DocumentOut(BaseModel):
     photos_until: Optional[UtcDatetime] = None  # hasta cuando se guardan
 
 
+class PhotoStoreOut(BaseModel):
+    """Donde se guardan las fotos de remisiones y facturas, y si funciona."""
+    ok: bool
+    where: Literal["supabase", "local", "none"]
+    days: int
+    detail: str
+
+
 class DocumentResult(BaseModel):
     document: DocumentOut
     products: list[ProductOut]

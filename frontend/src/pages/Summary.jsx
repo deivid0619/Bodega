@@ -11,7 +11,7 @@ import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
 import MovementSheet, { pairOf } from '../components/MovementSheet'
 import PassingSection from '../components/Passing'
-import StoreStatus from '../components/StoreStatus'
+import StoreStatus, { PhotoStoreStatus } from '../components/StoreStatus'
 import { Count, Empty, PageHead, plural } from '../components/Bits'
 
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
@@ -140,6 +140,7 @@ export default function Summary() {
           <Icon name="arrowRight" size={18} />
         </button>
         <StoreStatus />
+        <PhotoStoreStatus />
 
         <h2 className="h-sec" id="reponer">Por reponer {needs?.length > 0 && <small>lleva cada talla al doble del mínimo</small>}</h2>
         {!needs ? (

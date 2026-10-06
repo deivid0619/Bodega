@@ -40,3 +40,22 @@ export default function StoreStatus() {
     </div>
   )
 }
+
+// Donde se guardan las fotos de remisiones y facturas (un mes) y si funciona:
+// para revisar que quedo bien conectado Supabase despues de poner la llave
+export function PhotoStoreStatus() {
+  const { data } = usePolling('/api/documents/photo-store', { interval: 600000 })
+  if (!data) return null
+  const title = data.where === 'supabase'
+    ? (data.ok ? `Fotos de remisiones y facturas: se guardan ${data.days} días` : 'Fotos de remisiones y facturas: no se están guardando')
+    : data.where === 'local' ? 'Fotos de remisiones y facturas: en este computador' : 'Fotos de remisiones y facturas: no se están guardando'
+  return (
+    <div className={`store-status ${data.ok ? (data.where === 'local' ? 'warn' : 'ok') : 'bad'}`} role="status">
+      <span className="store-dot" aria-hidden="true" />
+      <span className="store-t">
+        <b>{title}</b>
+        <small>{data.detail}</small>
+      </span>
+    </div>
+  )
+}
