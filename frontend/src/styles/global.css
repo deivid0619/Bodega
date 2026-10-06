@@ -272,6 +272,16 @@ button.code:active{transform:scale(.95)}
 }
 
 /* ---------- avisos (toast) ---------- */
+/* confirmar antes de borrar: encima de todo, Cancelar es el marcado */
+.confirm-layer{position:fixed;inset:0;z-index:90;display:grid;place-items:center;padding:16px}
+.confirm-scrim{position:absolute;inset:0;background:rgba(11,11,11,.52);animation:fade-in 160ms ease both}
+.confirm-box{position:relative;width:min(400px,100%);padding:20px 18px 16px;border-radius:var(--r-lg);background:var(--paper);color:var(--ink);box-shadow:var(--sh-3);animation:confirm-in 200ms var(--ease-out) both}
+.confirm-box h2{margin:0;font:800 italic 21px/1.15 var(--font);letter-spacing:-.03em}
+.confirm-box p{margin:8px 0 0;font-size:14px;line-height:1.45;color:var(--graphite)}
+.confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+.confirm-actions .btn-ghost:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+@keyframes confirm-in{from{opacity:0;transform:translateY(8px) scale(.97)}}
+@media (prefers-reduced-motion:reduce){.confirm-scrim,.confirm-box{animation:none}}
 .toast{position:fixed;left:50%;bottom:calc(var(--dock-space) + 6px);z-index:70;display:flex;align-items:center;gap:10px;width:max-content;max-width:min(460px,calc(100% - 32px));padding:12px 18px 12px 12px;border-radius:var(--r-sm);background:var(--ink);color:#fff;font-weight:600;font-size:14px;box-shadow:var(--sh-3);transform:translate(-50%,20px);opacity:0;pointer-events:none;transition:transform 380ms var(--ease-out),opacity 220ms ease}
 .toast.show{transform:translate(-50%,0);opacity:1}
 .toast-icon{flex:none;width:26px;height:26px;border-radius:var(--r-xs);display:grid;place-items:center;background:var(--lime);color:var(--ink)}

@@ -7,6 +7,7 @@ import { mutate, revalidate, useLayout, usePolling } from '../hooks/useApi'
 import { DISPATCH, locationGroups } from '../locationGroups'
 import { fmtTime } from '../utils'
 import { useToast } from './ToastContext'
+import { useConfirm } from './ConfirmContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { Empty, Stepper } from './Bits'
@@ -66,6 +67,7 @@ export async function markDone(parcel, showToast) {
 function Form({ parcel, defaultLocation, showMap }) {
   const { close } = useSheet()
   const showToast = useToast()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const { user, isAdmin } = useAuth()
   const { data: layout } = useLayout()
@@ -79,7 +81,6 @@ function Form({ parcel, defaultLocation, showMap }) {
   const [notes, setNotes] = useState(parcel?.notes || '')
   const [place, setPlace] = useState(parcel?.location_id || defaultLocation || DISPATCH)
   const [busy, setBusy] = useState(false)
-  const [sure, setSure] = useState(false)
   const labelRef = useRef(null)
   const notesRef = useRef(null)
 
@@ -126,10 +127,12 @@ function Form({ parcel, defaultLocation, showMap }) {
   }
 
   const remove = async () => {
-    if (!sure) {
-      setSure(true)
-      return
-    }
+    const ok = await confirm({
+      title: `¿Borrar ${parcelName(parcel)}${parcel.owner ? ` de ${parcel.owner}` : ''}?`,
+      body: 'Se quita de lo que está de paso. Úsalo solo si lo anotaste por error: si ya salió, toca "Ya salió".',
+      confirmLabel: 'Sí, borrar',
+    })
+    if (!ok) return
     try {
       await api.delete(`/api/parcels/${parcel.id}`)
       revalidate('/api/parcels')
@@ -242,8 +245,8 @@ function Form({ parcel, defaultLocation, showMap }) {
           <button className="btn btn-lime btn-lg btn-block" disabled={!!problem || busy} onClick={save}>{busy ? 'Guardando…' : 'Anotar'}</button>
         )}
         {canDelete && (
-          <button type="button" className={`link-btn parcel-del ${sure ? 'sure' : ''}`} onClick={remove}>
-            {sure ? 'Toca otra vez para borrarlo' : 'Borrar: lo anoté por error'}
+          <button type="button" className="link-btn parcel-del" onClick={remove}>
+            Borrar: lo anoté por error
           </button>
         )}
       </div>

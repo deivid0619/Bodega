@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { useToast } from './ToastContext'
+import { useConfirm } from './ConfirmContext'
 import Sheet, { SheetHeader } from './Sheet'
 import Icon from './Icon'
 
@@ -68,9 +69,8 @@ function Mini({ value, onMinus, onPlus }) {
 
 export default function EditPanel({ room, element, getTheta, onDone, onChanged, onDraft, onSettled, onExit }) {
   const showToast = useToast()
+  const confirm = useConfirm()
   const [adding, setAdding] = useState(false)
-  const [armedDelete, setArmedDelete] = useState(false)
-  const [armedReset, setArmedReset] = useState(false)
   const [codeInput, setCodeInput] = useState(element?.code || '')
   const [armedType, setArmedType] = useState(null)
   const typeTimer = useRef(null)
@@ -188,7 +188,12 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
   }
 
   const del = async () => {
-    if (!armedDelete) { setArmedDelete(true); setTimeout(() => setArmedDelete(false), 3000); return }
+    const ok = await confirm({
+      title: `¿Eliminar ${element.name}?`,
+      body: 'Se quita este mueble de la bodega. Si tiene prendas, no se deja eliminar hasta que las muevas a otro lugar.',
+      confirmLabel: 'Sí, eliminar',
+    })
+    if (!ok) return
     await saved()
     try {
       const name = element.name
@@ -208,7 +213,12 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
   }
 
   const resetLayout = async () => {
-    if (!armedReset) { setArmedReset(true); setTimeout(() => setArmedReset(false), 3000); return }
+    const ok = await confirm({
+      title: '¿Volver a la distribución original?',
+      body: 'Se pierden los muebles agregados y los cambios de tamaño y de lugar. Las prendas no se tocan: si alguna quedaría sin ubicación, no se hace.',
+      confirmLabel: 'Sí, restaurar',
+    })
+    if (!ok) return
     try {
       await api.post('/api/layout/reset')
       onChanged(null)
@@ -242,7 +252,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
           <Mini value={`${room.depth.toFixed(1)} m`} onMinus={() => roomStep('depth', -1)} onPlus={() => roomStep('depth', 1)} />
         </div>
         <button className="btn btn-danger btn-block" style={{ marginTop: 10 }} onClick={resetLayout}>
-          {armedReset ? 'Toca otra vez para confirmar' : 'Volver a la distribución original'}
+          Volver a la distribución original
         </button>
       </>
     )
@@ -307,7 +317,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
         )}
         <div className="btn-row">
           <button className="btn btn-ghost" onClick={duplicate}><Icon name="copy" size={18} />Duplicar</button>
-          <button className="btn btn-danger" onClick={del}>{armedDelete ? 'Toca otra vez' : 'Eliminar'}</button>
+          <button className="btn btn-danger" onClick={del}>Eliminar</button>
         </div>
         <p className="tip">
           También lo puedes arrastrar con un dedo. Las flechas lo mueven 10 cm.

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { refreshInventory, useLayout, useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
+import { useConfirm } from '../components/ConfirmContext'
 import { api, ApiError } from '../api'
 import { downloadCsv, fmtTime, outletIdsOf, refKey, stockSplit } from '../utils'
 import Icon from '../components/Icon'
@@ -20,6 +21,7 @@ export default function Summary() {
   const { isAdmin } = useAuth()
   const navigate = useNavigate()
   const showToast = useToast()
+  const confirm = useConfirm()
   const { data: needs } = useNeeds()
   const { data: top } = useTop()
   const { data: products } = useProducts()
@@ -84,6 +86,10 @@ export default function Summary() {
     }
   }
   const toggleDemo = async () => {
+    const ok = await confirm(demoOn
+      ? { title: '¿Quitar los datos de prueba?', body: 'Se borran las prendas y los movimientos de ejemplo. Lo que registraste tú no se toca.', confirmLabel: 'Sí, quitarlos' }
+      : { title: '¿Cargar datos de prueba?', body: 'Se agregan prendas y movimientos de ejemplo para ver cómo se ve la app. Se quitan con el mismo botón.', confirmLabel: 'Cargar', danger: false })
+    if (!ok) return
     try {
       const res = await api.post('/api/reports/demo')
       setDemoOn(res.demo)

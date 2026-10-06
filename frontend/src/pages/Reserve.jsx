@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { mutate, refreshInventory, revalidate, setReserveQty, useLayout, useReserve, useRestock } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
+import { useConfirm } from '../components/ConfirmContext'
 import { locationGroups } from '../locationGroups'
 import NewReserveModal from '../components/NewReserveModal'
 import ReserveTransferModal from '../components/ReserveTransferModal'
@@ -62,6 +63,7 @@ export default function Reserve() {
   const { data: restock } = useRestock()
   const { data: layout } = useLayout()
   const showToast = useToast()
+  const confirm = useConfirm()
   const navigate = useNavigate()
   const [adding, setAdding] = useState(false)
   const [sending, setSending] = useState(null)
@@ -75,6 +77,14 @@ export default function Reserve() {
 
   // quitar una de la lista (con Deshacer, por si fue sin querer)
   const remove = async (item) => {
+    const ok = await confirm({
+      title: `¿Quitar ${item.name}${item.size ? ` ${item.size}` : ''} de la reserva?`,
+      body: item.qty > 0
+        ? `Se ${item.qty === 1 ? 'quita la prenda guardada' : `quitan las ${item.qty} prendas guardadas`} de esta referencia.`
+        : 'Está en 0: solo se quita de la lista.',
+      confirmLabel: 'Sí, quitar',
+    })
+    if (!ok) return
     mutate('/api/reserve', (list) => list.filter((i) => i.id !== item.id))
     try {
       await api.delete(`/api/reserve/${item.id}`)
@@ -97,6 +107,13 @@ export default function Reserve() {
 
   // las que se acabaron (en 0), todas de una vez
   const cleanZeros = async () => {
+    const names = zeros.slice(0, 4).map((z) => `${z.name}${z.size ? ` ${z.size}` : ''}`).join(', ')
+    const ok = await confirm({
+      title: `¿Quitar las ${zeros.length} agotadas?`,
+      body: `Están en 0: ${names}${zeros.length > 4 ? '…' : ''}.`,
+      confirmLabel: 'Sí, quitarlas',
+    })
+    if (!ok) return
     // (en /api/reserve/restock cada fila trae su reserva: esas no se tocan)
     mutate('/api/reserve', (list) => list.filter((i) => i.reserve || i.qty > 0))
     try {

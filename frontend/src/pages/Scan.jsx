@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { moveStock, refreshInventory, setReserveQty, useLayout, useReserve } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
+import { useConfirm } from '../components/ConfirmContext'
 import { locationGroups } from '../locationGroups'
 import NewProductModal from '../components/NewProductModal'
 import NewReserveModal from '../components/NewReserveModal'
@@ -118,6 +119,7 @@ function ScanHit({ hit, tally, onUndo }) {
 export default function Scan() {
   const { data: layout } = useLayout()
   const showToast = useToast()
+  const confirm = useConfirm()
   // desde la reserva se llega con ?modo=reserva
   const [mode, setMode] = useState(() => (new URLSearchParams(window.location.search).get('modo') === 'reserva' ? 'reserve' : 'in'))
   const [qty, setQty] = useState(1)
@@ -405,7 +407,14 @@ export default function Scan() {
     else showToast(`${units ? `Se guardaron ${units}. ` : ''}${plural(failed.length, 'código no se pudo', 'códigos no se pudieron')} guardar: revisa la lista`, 'err')
   }
 
-  const discardAll = () => {
+  const discardAll = async () => {
+    const units = toConfirmRef.current.reduce((t, l) => t + l.qty, 0)
+    const ok = await confirm({
+      title: '¿Descartar la lista?',
+      body: `Se borran ${plural(units, 'prenda', 'prendas')} que todavía no se han guardado.`,
+      confirmLabel: 'Sí, descartar',
+    })
+    if (!ok) return
     const prev = toConfirmRef.current
     setToConfirm([])
     setHit(null)
@@ -583,7 +592,10 @@ export default function Scan() {
                 <Stepper value={l.qty} small disabledMinus={l.qty <= 1 || saving}
                          onMinus={() => setLineQty(l.key, l.qty - 1)} onPlus={() => setLineQty(l.key, l.qty + 1)}
                          minusLabel={`Quitar 1 de ${l.name}`} plusLabel={`Sumar 1 a ${l.name}`} />
-                <button type="button" className="to-confirm-x" onClick={() => setLineQty(l.key, 0)} disabled={saving} aria-label={`Quitar ${l.name} de la lista`}>
+                <button type="button" className="to-confirm-x" disabled={saving} aria-label={`Quitar ${l.name} de la lista`}
+                        onClick={async () => {
+                          if (await confirm({ title: `¿Quitar ${l.name}${l.size ? ` ${l.size}` : ''} de la lista?`, body: `${plural(l.qty, 'prenda', 'prendas')} sin guardar.`, confirmLabel: 'Sí, quitar' })) setLineQty(l.key, 0)
+                        }}>
                   <Icon name="x" size={16} stroke={2.4} />
                 </button>
                 {asksFrom(places) && (

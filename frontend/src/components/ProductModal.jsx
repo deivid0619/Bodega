@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ToastContext'
+import { useConfirm } from './ConfirmContext'
 import { applyLocally, bumpStock, useLayout, useReserve } from '../hooks/useApi'
 import { outletIdsOf, reserveIndex, stockSplit } from '../utils'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
@@ -26,13 +27,13 @@ function LocationSelect({ value, onChange, locations, currentName }) {
 function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
   const { isAdmin } = useAuth()
   const showToast = useToast()
+  const confirm = useConfirm()
   const { close } = useSheet()
   const navigate = useNavigate()
   const { data: reserve } = useReserve()
   const { data: layout } = useLayout()
   const [product, setProduct] = useState(null)
   const [form, setForm] = useState(null)
-  const [armed, setArmed] = useState(false)
   const [busy, setBusy] = useState(false)
   const [moving, setMoving] = useState(null)
 
@@ -82,11 +83,12 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
   }
 
   const remove = async () => {
-    if (!armed) {
-      setArmed(true)
-      setTimeout(() => setArmed(false), 3000)
-      return
-    }
+    const ok = await confirm({
+      title: `¿Eliminar el código ${sku}?`,
+      body: `${product.name}${product.size ? ` · ${product.size}` : ''}. Se borra de la bodega${product.qty > 0 ? ` con sus ${product.qty} prendas en todas sus ubicaciones` : ''}. No se puede deshacer.`,
+      confirmLabel: 'Sí, eliminar',
+    })
+    if (!ok) return
     try {
       await api.delete(`/api/products/${encodeURIComponent(sku)}`)
       onChanged()
@@ -192,7 +194,7 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
       </div>
       {isAdmin && (
         <button className="btn btn-danger btn-block" style={{ marginTop: 8 }} onClick={remove}>
-          {armed ? 'Toca otra vez para eliminar' : 'Eliminar este código'}
+          Eliminar este código
         </button>
       )}
       {moving && <MoveSheet product={product} from={moving} locations={locations} onMoved={(res) => setProduct(res.product)} onClose={() => setMoving(null)} />}
