@@ -13,7 +13,8 @@ import { PageHead, Stepper, plural } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
 import Viewfinder, { PhotoRead } from '../components/Viewfinder'
 import { beep } from '../lib/feedback'
-import { fmtTime, outletIdsOf } from '../utils'
+import { asksFrom, fmtTime, outAvailable, outParts, outletIdsOf, placesOf } from '../utils'
+import FromPick from '../components/FromPick'
 
 const MODES = [
   { m: 'in', label: 'Entrada', icon: 'boxIn', hint: 'Cada código suma prendas a su ubicación.' },
@@ -171,6 +172,9 @@ export default function Scan() {
   const staged = confirmFirst && mode !== 'set'
   const toConfirmUnits = toConfirm.reduce((t, l) => t + l.qty, 0)
   const toConfirmTypes = new Set(toConfirm.map((l) => l.type))
+  // salidas de prendas que estan en varios lugares: falta decir de donde salen
+  const needsFrom = (l) => l.type === 'out' && !l.loc && l.from === undefined && asksFrom(placesOf(l, outlet))
+  const missingFrom = toConfirm.filter(needsFrom).length
 
   const [params] = useSearchParams()
   const navigate = useNavigate()
@@ -236,12 +240,12 @@ export default function Scan() {
     const key = `${mode}|${p.sku}|${loc}`
     const list = toConfirmRef.current
     const old = list.find((l) => l.key === key)
-    // en una salida, cuanto hay para sacar (sin ubicacion, el outlet no cuenta)
-    const have = mode === 'out'
-      ? (p.stock || []).reduce((t, st) => t + ((loc ? st.location_id === loc : !outlet.has(st.location_id)) ? st.qty : 0), 0)
-      : null
+    // donde hay (para preguntar de donde sale) y cuanto se puede sacar
+    const stock = (p.stock || []).map((st) => ({ location_id: st.location_id, qty: st.qty }))
+    const from = old?.from
+    const have = mode === 'out' ? outAvailable({ stock }, outlet, loc || from) : null
     const line = { key, type: mode, sku: p.sku, name: p.name, size: p.size, loc, main: p.location_id,
-                   qty: (old?.qty || 0) + qty, n: (old?.n || 0) + 1, have, edited: old?.edited }
+                   qty: (old?.qty || 0) + qty, n: (old?.n || 0) + 1, stock, from, edited: old?.edited }
     setToConfirm([line, ...list.filter((l) => l.key !== key)])
     const at = Date.now()
     setHit((prev) => ({
@@ -261,6 +265,10 @@ export default function Scan() {
     setHit((h) => (h?.pending && h.key === key ? null : h))
   }
 
+  const setFrom = (key, from) => {
+    setToConfirm(toConfirmRef.current.map((l) => (l.key === key ? { ...l, from, err: null } : l)))
+  }
+
   // "Quitar" encima de la camara: deshace la ultima lectura de esa prenda
   const unstage = (key, q) => {
     const l = toConfirmRef.current.find((x) => x.key === key)
@@ -268,7 +276,7 @@ export default function Scan() {
   }
 
   const confirmAll = async () => {
-    if (savingRef.current || !toConfirmRef.current.length) return
+    if (savingRef.current || !toConfirmRef.current.length || toConfirmRef.current.some(needsFrom)) return
     savingRef.current = true
     setSaving(true)
     setHit(null)
@@ -276,12 +284,18 @@ export default function Scan() {
     const failed = []
     let units = 0
     for (const l of lines) {
+      // una salida: primero de donde se eligio y, si ahi no alcanza, el resto de donde haya
+      const parts = l.type === 'out' ? outParts(l.qty, l.loc || l.from || '', l) : [{ qty: l.qty, loc: l.loc }]
+      let done = 0
       try {
-        record(await moveStock(l.sku, l.type, l.qty, l.loc || undefined))
-        units += l.qty
+        for (const part of parts) {
+          record(await moveStock(l.sku, l.type, part.qty, part.loc || undefined))
+          done += part.qty
+        }
       } catch (e) {
-        failed.unshift({ ...l, err: e instanceof ApiError ? e.message : 'No hay conexión con el servidor.' })
+        failed.unshift({ ...l, qty: l.qty - done, err: e instanceof ApiError ? e.message : 'No hay conexión con el servidor.' })
       }
+      units += done
     }
     setToConfirm(failed)
     setLastMove(null)
@@ -430,21 +444,29 @@ export default function Scan() {
                 <b>Por confirmar</b>
                 <small>{plural(toConfirmUnits, 'prenda', 'prendas')} · {plural(toConfirm.length, 'código', 'códigos')} · aún no se guarda nada</small>
               </div>
-              <button type="button" className="btn btn-lime" onClick={confirmAll} disabled={saving}>
+              {missingFrom > 0 && (
+                <p className="to-confirm-ask">
+                  {missingFrom === 1 ? 'Falta elegir de dónde sale una prenda' : `Falta elegir de dónde salen ${missingFrom} prendas`}: está en varios lugares
+                </p>
+              )}
+              <button type="button" className="btn btn-lime" onClick={confirmAll} disabled={saving || missingFrom > 0}>
                 <Icon name="check" size={18} stroke={2.4} />
                 {saving ? 'Guardando…' : toConfirmTypes.size > 1 ? 'Confirmar' : toConfirmTypes.has('out') ? 'Confirmar salida' : 'Confirmar entrada'}
               </button>
             </div>
-            {toConfirm.map((l) => (
+            {toConfirm.map((l) => {
+              const places = l.type === 'out' && !l.loc ? placesOf(l, outlet) : []
+              const have = l.type === 'out' && l.stock ? outAvailable(l, outlet, l.loc || l.from) : null
+              return (
               <div className={`need to-confirm-row ${l.err ? 'err' : ''}`} key={l.key}>
                 <div className="need-t">
                   <b>{l.name}{l.size ? ` · ${l.size}` : ''}</b>
                   <small>
                     <span className={`to-confirm-type ${l.type}`}>{l.type === 'out' ? 'Salida' : 'Entrada'}</span>
-                    {l.type === 'out' ? ' de ' : ' en '}{l.loc || (l.type === 'out' ? 'donde haya' : l.main)} · {l.edited ? 'cantidad ajustada' : plural(l.n, 'lectura', 'lecturas')}
+                    {l.type === 'out' ? ' de ' : ' en '}{l.loc || (l.type === 'out' ? (l.from || 'donde haya') : l.main)} · {l.edited ? 'cantidad ajustada' : plural(l.n, 'lectura', 'lecturas')}
                   </small>
                   {l.err ? <small className="to-confirm-msg">{l.err}</small>
-                    : l.have != null && l.qty > l.have && <small className="to-confirm-msg">Solo hay {l.have}</small>}
+                    : have != null && l.qty > have && <small className="to-confirm-msg">Solo hay {have}</small>}
                 </div>
                 <Stepper value={l.qty} small disabledMinus={l.qty <= 1 || saving}
                          onMinus={() => setLineQty(l.key, l.qty - 1)} onPlus={() => setLineQty(l.key, l.qty + 1)}
@@ -452,8 +474,12 @@ export default function Scan() {
                 <button type="button" className="to-confirm-x" onClick={() => setLineQty(l.key, 0)} disabled={saving} aria-label={`Quitar ${l.name} de la lista`}>
                   <Icon name="x" size={16} stroke={2.4} />
                 </button>
+                {asksFrom(places) && (
+                  <FromPick places={places} value={l.from} qty={l.qty} disabled={saving} onChange={(v) => setFrom(l.key, v)} />
+                )}
               </div>
-            ))}
+              )
+            })}
             <button type="button" className="link-btn to-confirm-discard" onClick={discardAll} disabled={saving}>Descartar todo</button>
           </div>
         )}
@@ -497,7 +523,9 @@ export default function Scan() {
           </select>
           <span className="field-hint">
             {mode === 'out'
-              ? place ? `Las salidas se descuentan solo de ${place}.` : 'Sale primero de la ubicación principal y, si no alcanza, de donde haya.'
+              ? place
+                ? staged ? `Salen primero de ${place}; si ahí no alcanza, el resto de donde haya.` : `Las salidas se descuentan solo de ${place}.`
+                : staged ? 'Si la prenda está en varios lugares, en la lista eliges de cuál salió.' : 'Sale primero de la ubicación principal y, si no alcanza, de donde haya.'
               : place ? `Lo que escanees ${mode === 'set' ? 'se cuenta' : 'entra'} en ${place}.` : `Cada código ${mode === 'set' ? 'se cuenta' : 'entra'} en su ubicación principal.`}
           </span>
         </label>

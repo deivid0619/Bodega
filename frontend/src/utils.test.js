@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { refCode, refKey, reserveFor, reserveIndex, stockSplit } from './utils'
+import { asksFrom, outAvailable, outParts, placesOf, refCode, refKey, reserveFor, reserveIndex, stockSplit } from './utils'
 
 // Una referencia son sus tallas con el mismo nombre: en los codigos de
 // Pigmalion la talla va en la mitad (PGPRBI070SFEM), no al final
@@ -42,5 +42,33 @@ describe('total de una prenda: bodega + reserva', () => {
     const l = { sku: 'PRUEBA-L', name: 'CHAQUETA PRUEBA', size: 'L', qty: 1, stock: [{ location_id: 'C-1-3', qty: 1 }] }
     expect(reserveFor(l, index)).toEqual([])
     expect(stockSplit(l)).toEqual({ bodega: 1, passing: 0, outlet: 0, reserve: 0, total: 1 })
+  })
+})
+
+// De donde sale una salida: se pregunta solo si hay que elegir, y lo elegido
+// sale primero; si ahi no alcanza, el resto sale de donde haya
+describe('de donde sale una salida', () => {
+  const outlet = new Set(['O-1-1'])
+  const p = { stock: [{ location_id: 'C-1-1', qty: 3 }, { location_id: 'C-2-4', qty: 2 }, { location_id: 'O-1-1', qty: 4 }, { location_id: 'C-9-9', qty: 0 }] }
+
+  it('lista donde hay, con el outlet al final, y pregunta si hay varias', () => {
+    expect(placesOf(p, outlet)).toEqual([
+      { id: 'C-1-1', qty: 3, outlet: false }, { id: 'C-2-4', qty: 2, outlet: false }, { id: 'O-1-1', qty: 4, outlet: true }])
+    expect(asksFrom(placesOf({ stock: [{ location_id: 'C-1-1', qty: 3 }] }, outlet))).toBe(false)
+    expect(asksFrom(placesOf({ stock: [{ location_id: 'O-1-1', qty: 3 }] }, outlet))).toBe(true)
+    expect(asksFrom(placesOf(p, outlet))).toBe(true)
+  })
+
+  it('lo del outlet solo se puede sacar eligiendolo', () => {
+    expect(outAvailable(p, outlet, '')).toBe(5)
+    expect(outAvailable(p, outlet, 'C-2-4')).toBe(5)
+    expect(outAvailable(p, outlet, 'O-1-1')).toBe(9)
+  })
+
+  it('sale primero de la elegida y el resto de donde haya', () => {
+    expect(outParts(2, 'C-2-4', p)).toEqual([{ qty: 2, loc: 'C-2-4' }])
+    expect(outParts(4, 'C-2-4', p)).toEqual([{ qty: 2, loc: 'C-2-4' }, { qty: 2, loc: '' }])
+    expect(outParts(4, '', p)).toEqual([{ qty: 4, loc: '' }])
+    expect(outParts(1, 'C-9-9', p)).toEqual([{ qty: 1, loc: '' }])
   })
 })

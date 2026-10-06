@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
-import { refreshInventory, useProducts } from '../hooks/useApi'
+import { refreshInventory, useLayout, useProducts } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { Stepper, plural } from './Bits'
 import { cleanCode, matchAll, matchLine, parseFactura } from '../lib/facturaParser'
+import { asksFrom, outAvailable, outParts, outletIdsOf, placesOf } from '../utils'
+import FromPick from './FromPick'
 import { readPhoto } from '../lib/ocr'
 
 let nextId = 1
@@ -14,9 +16,10 @@ function toRow(line, m) {
   return { id: nextId++, ...line, sku: m.sku, product: m.product, how: m.how, include: false }
 }
 
-// incluida por defecto solo si se reconocio y hay con que descontar
-function withDefault(row) {
-  return { ...row, include: !!row.product && row.product.qty >= row.qty }
+// incluida por defecto solo si se reconocio y hay con que descontar (sin
+// contar el outlet: una salida sin elegir de donde no lo toca)
+function withDefault(row, outlet) {
+  return { ...row, include: !!row.product && outAvailable(row.product, outlet, row.from) >= row.qty }
 }
 
 function PickStep({ onFile, error }) {
@@ -71,6 +74,8 @@ function Body({ onDone }) {
   const showToast = useToast()
   const { close } = useSheet()
   const { data: products } = useProducts()
+  const { data: layout } = useLayout()
+  const outlet = outletIdsOf(layout)
   const [step, setStep] = useState('pick')
   const [stage, setStage] = useState('preparing')
   const [progress, setProgress] = useState(0)
@@ -100,7 +105,7 @@ function Body({ onDone }) {
       }
       setNumber(parsed.number)
       const matches = matchAll(parsed.lines, known)
-      setRows(parsed.lines.map((l, i) => withDefault(toRow(l, matches[i]))))
+      setRows(parsed.lines.map((l, i) => withDefault(toRow(l, matches[i]), outlet)))
       setStep('review')
     } catch {
       setStep('pick')
@@ -125,18 +130,24 @@ function Body({ onDone }) {
     const line = { ...row, code: cleanCode(code) }
     const claimed = new Set(rows.filter((r) => r.id !== row.id && r.product).map((r) => r.sku))
     const m = matchLine(line, known, claimed)
-    update(row.id, { code: line.code, sku: m.sku, product: m.product, how: m.how, include: !!m.product && m.product.qty >= row.qty })
+    update(row.id, { code: line.code, sku: m.sku, product: m.product, how: m.how, from: undefined,
+                     include: !!m.product && outAvailable(m.product, outlet, undefined) >= row.qty })
   }
 
   const chosen = rows.filter((r) => r.include && r.product)
   const units = chosen.reduce((t, r) => t + r.qty, 0)
   const pending = rows.filter((r) => !r.include).length
-  const blocked = chosen.some((r) => r.product.qty < r.qty)
+  const blocked = chosen.some((r) => outAvailable(r.product, outlet, r.from) < r.qty)
+  // prendas que estan en varios lugares: hay que decir de cual salen
+  const missingFrom = chosen.filter((r) => r.from === undefined && asksFrom(placesOf(r.product, outlet))).length
 
   const confirm = async () => {
     setSaving(true)
     try {
-      await api.post('/api/documents/factura', { number: number.trim(), lines: chosen.map((r) => ({ sku: r.sku, qty: r.qty })) })
+      // primero lo que sale de una ubicacion elegida y despues lo de donde haya
+      const parts = chosen.flatMap((r) => outParts(r.qty, r.from || '', r.product).map((x) => ({ sku: r.sku, qty: x.qty, ...(x.loc ? { location_id: x.loc } : {}) })))
+      const lines = [...parts.filter((x) => x.location_id), ...parts.filter((x) => !x.location_id)]
+      await api.post('/api/documents/factura', { number: number.trim(), lines })
       refreshInventory()
       showToast(`Factura ${number.trim().toUpperCase()}: ${plural(units, 'prenda descontada', 'prendas descontadas')}`)
       onDone?.()
@@ -170,7 +181,13 @@ function Body({ onDone }) {
 
       <div className="doc-lines">
         {rows.map((r) => {
-          const short = r.product && r.product.qty < r.qty
+          const places = r.product ? placesOf(r.product, outlet) : []
+          const avail = r.product ? outAvailable(r.product, outlet, r.from) : 0
+          const inOutlet = places.filter((x) => x.outlet).reduce((t, x) => t + x.qty, 0)
+          const fromOutlet = places.find((x) => x.outlet && x.id === r.from)
+          // lo del outlet solo cuenta si se eligio que sale de ahi
+          const outletNote = !inOutlet ? '' : fromOutlet ? ` (con ${fromOutlet.qty} del outlet)` : ` · ${inOutlet} más en outlet`
+          const short = r.product && avail < r.qty
           const state = !r.product ? 'unknown' : short ? 'short' : 'ok'
           const shown = r.product ? r.sku : r.code
           return (
@@ -199,8 +216,8 @@ function Body({ onDone }) {
                 <b>{r.product ? `${r.product.name}${r.product.size ? ` · ${r.product.size}` : ''}` : r.description}</b>
                 <small>
                   {state === 'unknown' && 'No está en la bodega. Corrige el código o déjala por fuera.'}
-                  {state === 'short' && `Solo hay ${r.product.qty} en la bodega.`}
-                  {state === 'ok' && `Hay ${r.product.qty}${r.how === 'fixed' && r.read.replace(/\s/g, '') !== r.sku ? ` · se leyó ${r.read}` : ''}`}
+                  {state === 'short' && `Solo hay ${avail} para sacar${inOutlet && !fromOutlet ? ` (y ${inOutlet} en outlet: elígelo abajo si salen de ahí)` : ''}.`}
+                  {state === 'ok' && `Hay ${avail}${outletNote}${r.how === 'fixed' && r.read.replace(/\s/g, '') !== r.sku ? ` · se leyó ${r.read}` : ''}`}
                 </small>
               </div>
               <Stepper
@@ -209,14 +226,22 @@ function Body({ onDone }) {
                 onPlus={() => update(r.id, { qty: r.qty + 1 })}
                 disabledMinus={r.qty <= 1}
               />
+              {r.include && asksFrom(places) && (
+                <FromPick places={places} value={r.from} qty={r.qty} onChange={(v) => update(r.id, { from: v })} />
+              )}
             </div>
           )
         })}
       </div>
 
       <div className="doc-footer">
+        {missingFrom > 0 && (
+          <p className="to-confirm-ask">
+            {missingFrom === 1 ? 'Falta elegir de dónde sale una prenda' : `Falta elegir de dónde salen ${missingFrom} prendas`}: está en varios lugares
+          </p>
+        )}
         <p className="mode-hint">Se descuenta todo junto: si algo falla, no se descuenta nada.</p>
-        <button className="btn btn-lime btn-lg btn-block" disabled={!chosen.length || !number.trim() || !!dup || blocked || saving} onClick={confirm}>
+        <button className="btn btn-lime btn-lg btn-block" disabled={!chosen.length || !number.trim() || !!dup || blocked || missingFrom > 0 || saving} onClick={confirm}>
           {saving ? 'Descontando…' : `Descontar ${plural(units, 'prenda', 'prendas')}`}
         </button>
         <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={() => { setRows([]); setStep('pick') }}>

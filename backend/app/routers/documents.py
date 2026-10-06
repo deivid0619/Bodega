@@ -68,7 +68,9 @@ def apply_factura(payload: schemas.FacturaIn, background: BackgroundTasks, db: S
     touched: list[str] = []
     first_before: dict[str, int] = {}
     try:
-        for (sku, loc), qty in merged.items():
+        # primero lo que sale de una ubicacion elegida; despues lo de "donde
+        # haya", para que no se lleve lo de la canasta que se eligio
+        for (sku, loc), qty in sorted(merged.items(), key=lambda kv: kv[0][1] is None):
             _, movs = inv.apply_movement(db, sku, "out", qty, user, location_id=loc, note=note, commit=False)
             first_before.setdefault(sku, movs[0].before)
             touched.append(sku)

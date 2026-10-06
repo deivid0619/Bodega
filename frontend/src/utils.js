@@ -68,6 +68,37 @@ export function outletIdsOf(layout) {
   return new Set((layout?.elements || []).flatMap((e) => (e.locations || []).filter((l) => l.outlet).map((l) => l.id)))
 }
 
+// ---- de donde sale una salida ----
+// Donde hay de un codigo: [{ id, qty, outlet }], lo del outlet al final
+export function placesOf(p, outlet) {
+  return (p?.stock || []).filter((s) => s.qty > 0)
+    .map((s) => ({ id: s.location_id, qty: s.qty, outlet: !!outlet?.has(s.location_id) }))
+    .sort((a, b) => a.outlet - b.outlet || b.qty - a.qty)
+}
+
+// Se pregunta de donde sale solo si hay que elegir: esta en varios lugares,
+// o lo que hay esta en el outlet (que una salida automatica no toca)
+export function asksFrom(places) {
+  return places.length > 1 || places.some((x) => x.outlet)
+}
+
+const qtyAt = (p, id) => (p?.stock || []).find((s) => s.location_id === id)?.qty || 0
+
+// Cuanto se puede sacar: sin elegir, todo menos el outlet; eligiendo una
+// ubicacion del outlet, tambien lo que hay ahi
+export function outAvailable(p, outlet, from) {
+  const usable = (p?.stock || []).reduce((t, s) => t + (outlet?.has(s.location_id) ? 0 : s.qty), 0)
+  return from && outlet?.has(from) ? usable + qtyAt(p, from) : usable
+}
+
+// La salida en partes: primero de la ubicacion elegida (lo que haya ahi) y,
+// si no alcanza, el resto de donde haya. [{ qty, loc }] (loc '' = donde haya)
+export function outParts(qty, from, p) {
+  if (!from) return [{ qty, loc: '' }]
+  const first = Math.min(qty, qtyAt(p, from))
+  return [first > 0 && { qty: first, loc: from }, qty - first > 0 && { qty: qty - first, loc: '' }].filter(Boolean)
+}
+
 // Cuanto hay de un codigo: en la bodega (sin lo de paso ni el outlet), de
 // paso, en el outlet y en la reserva. El total es bodega + reserva: lo de
 // paso no es de la empresa y el outlet no se entrega normalmente.

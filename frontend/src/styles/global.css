@@ -376,6 +376,24 @@ button.code:active{transform:scale(.95)}
 .to-confirm-x{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:var(--r-xs);color:var(--muted)}
 .to-confirm-x:active{background:var(--fog-2)}
 .to-confirm-discard{margin:4px 0 6px;color:var(--muted)}
+.to-confirm-row{flex-wrap:wrap}
+.to-confirm-ask{margin:0;padding:8px 11px;border-radius:var(--r-xs);background:var(--amber-soft);color:#A9480A;font-size:13px;font-weight:700}
+.doc-footer .to-confirm-ask{margin-bottom:10px}
+/* de donde sale una salida: la prenda esta en varios lugares */
+.from-pick{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:2px}
+.from-pick > span{margin-right:2px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.from-pick > span.ask{color:#A9480A}
+.from-pick button{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:var(--r-xs);background:var(--fog-2);color:var(--ink);font:600 12.5px/1 var(--mono);transition:background-color 120ms ease}
+.from-pick button b{font:800 italic 13px/1 var(--font)}
+.from-pick button em{font:700 10px/1 var(--font);font-style:normal;text-transform:uppercase;letter-spacing:.05em;color:#A9480A}
+.from-pick button.outlet{background:var(--amber-soft)}
+.from-pick button.any{font-family:var(--font)}
+.from-pick button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.from-pick button[aria-pressed="true"] b{color:var(--lime)}
+.from-pick button[aria-pressed="true"] em{color:#FFB37A}
+.from-pick small{flex-basis:100%;font-size:12px;color:var(--muted)}
+.doc-line{flex-wrap:wrap}
+.doc-line .from-pick{padding-left:38px}
 .manual{display:flex;gap:8px;margin-top:12px}
 .manual .input{flex:1;min-width:0}
 .result{position:relative;overflow:hidden;margin-top:18px;padding:18px;border-radius:var(--r-lg);background:var(--ink);color:#fff;box-shadow:var(--sh-2)}
