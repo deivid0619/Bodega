@@ -301,6 +301,13 @@ class ReserveItemUpdateIn(BaseModel):
     qty: Optional[int] = Field(default=None, ge=0)
 
 
+class ReserveReturnIn(BaseModel):
+    """Devolver a la reserva lo que esta en la bodega (o en Despacho)."""
+    sku: str = Field(min_length=1, max_length=64)
+    qty: int = Field(gt=0)
+    location_id: str = "DESPACHO"  # de donde sale
+
+
 class ReserveTransferIn(BaseModel):
     qty: int = Field(gt=0)
     location_id: str
@@ -379,6 +386,22 @@ class ValueOut(BaseModel):
     reserve_value: int
     reserve_units_priced: int
     reserve_units_total: int
+
+
+class DispatchLineIn(BaseModel):
+    sku: str = Field(min_length=1, max_length=64)
+    qty: int = Field(gt=0)
+
+
+class DispatchSendIn(BaseModel):
+    """Lo de paso que ya salio empacado: se descuenta de Despacho."""
+    lines: list[DispatchLineIn] = Field(min_length=1)
+    note: Optional[str] = Field(default=None, max_length=60)  # pedido, cliente, guia...
+
+
+class DispatchSendOut(BaseModel):
+    units: int
+    lines: int
 
 
 class DispatchOut(BaseModel):

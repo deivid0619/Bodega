@@ -33,7 +33,8 @@ def loc_names(db: Session) -> dict[str, str]:
 def out_30d_map(db: Session, skus: list[str] | None = None) -> dict[str, int]:
     since = datetime.now(timezone.utc) - timedelta(days=30)
     q = (db.query(models.Movement.sku, func.sum(models.Movement.qty))
-         .filter(models.Movement.type == "out", models.Movement.created_at >= since))
+         .filter(models.Movement.type == "out", models.Movement.created_at >= since,
+                 (models.Movement.note.is_(None)) | (models.Movement.note != "A la reserva")))
     if skus is not None:
         if not skus:
             return {}

@@ -117,7 +117,7 @@ def _item_for(db: Session, sku: str, name: str, size: str, lock: bool = False):
 
 
 NOT_FOUND = "Ese código no está en la bodega ni en la tienda: escribe la referencia."
-FROM_RESERVE = "Desde la reserva"
+FROM_RESERVE = inv.FROM_RESERVE
 
 
 @router.get("/identify/{sku}", response_model=schemas.ReserveIdentifyOut)
@@ -155,6 +155,33 @@ def scan_in(payload: schemas.ReserveScanIn, db: Session = Depends(get_db), _: mo
     db.commit()
     db.refresh(item)
     return schemas.ReserveScanOut(item=item, added=payload.qty, created=created, source=who["source"])
+
+
+@router.post("/return", response_model=schemas.ReserveItemOut)
+def return_to_reserve(payload: schemas.ReserveReturnIn, db: Session = Depends(get_db),
+                      user: models.User = Depends(get_current_user)):
+    """Devolver a la reserva: sale de esa ubicacion (por lo general Despacho)
+    y se suma a lo que haya de ese codigo en la reserva. Para cuando se llevo
+    de mas, o lo que no se despacho vuelve a guardarse."""
+    sku = _code(db, payload.sku)
+    product = db.get(models.Product, sku)
+    if not product:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese código no está registrado.")
+    try:
+        product, _ = inv.apply_movement(db, sku, "out", payload.qty, user, location_id=payload.location_id,
+                                        note=inv.TO_RESERVE, commit=False)
+    except inv.InventoryError as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    item = _item_for(db, sku, product.name, product.size, lock=True)
+    if not item:
+        item = models.ReserveItem(sku=sku, name=product.name, size=product.size, qty=0, image_url=product.image_url)
+        db.add(item)
+    item.sku = sku
+    item.qty += payload.qty
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 @router.patch("/{item_id}", response_model=schemas.ReserveItemOut)

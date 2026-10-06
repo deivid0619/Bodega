@@ -3,13 +3,13 @@ import csv
 import io
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from .. import catalog
 from .. import inventory_service as inv
-from .. import models, schemas
+from .. import models, push, schemas
 from .. import serializers as ser
 from ..database import get_db
 from ..deps import get_current_user, require_admin
@@ -72,6 +72,32 @@ def dispatch(db: Session = Depends(get_db), _: models.User = Depends(get_current
     return [schemas.DispatchOut(product=o, qty=q, since=s, doc_number=d.number if d else None,
                                 doc_supplier=d.supplier if d else None, doc_notes=d.notes if d else None)
             for o, (_, q, s, d) in zip(outs, rows)]
+
+
+@router.post("/dispatch/out", response_model=schemas.DispatchSendOut)
+def dispatch_out(payload: schemas.DispatchSendIn, background: BackgroundTasks, db: Session = Depends(get_db),
+                 user: models.User = Depends(get_current_user)):
+    """Despachar: lo que estaba de paso salio empacado. Se descuenta de
+    Despacho (todo junto: si algo no alcanza, no se descuenta nada) y sale
+    del inventario, con la nota en el historial."""
+    note = "Despacho" + (f": {payload.note.strip()}" if payload.note and payload.note.strip() else "")
+    merged: dict[str, int] = {}
+    for line in payload.lines:
+        sku = inv.resolve_sku(db, line.sku)
+        merged[sku] = merged.get(sku, 0) + line.qty
+    events = []
+    try:
+        for sku, qty in merged.items():
+            product, movs = inv.apply_movement(db, sku, "out", qty, user, location_id=inv.DISPATCH,
+                                               note=note[:80], commit=False)
+            events.extend(push.movement_events(product, "out", movs, user))
+        db.commit()
+    except inv.InventoryError as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{e} No se despachó nada.")
+    for event in events:
+        background.add_task(push.notify, *event)
+    return schemas.DispatchSendOut(units=sum(merged.values()), lines=len(merged))
 
 
 @router.get("/top", response_model=list[schemas.TopOut])

@@ -16,6 +16,14 @@ from .layout_logic import DISPATCH, all_locations
 
 # nota de los movimientos de una remision: "Remisión OPR123"
 REMISION_NOTE = "Remisión "
+# pasar entre la bodega y la reserva no es comprar ni vender: no cuenta como
+# entrada ni salida en los reportes
+FROM_RESERVE = "Desde la reserva"
+TO_RESERVE = "A la reserva"
+
+
+def _not_internal(q):
+    return q.filter((models.Movement.note.is_(None)) | (models.Movement.note.notin_((FROM_RESERVE, TO_RESERVE))))
 
 
 class InventoryError(Exception):
@@ -187,6 +195,9 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
             delta = qty - current
         _add(db, sku, rows, loc, delta)
         product.qty = _total(rows)
+        if product.location_id == DISPATCH and loc != DISPATCH:
+            # era solo de paso y ahora se guarda en la bodega: esa es su ubicacion
+            product.location_id = loc
         logged = abs(delta) if type_ == "set" else qty
         movements.append(_movement(product, user, type_, logged, before, product.qty, loc, note=note))
     elif type_ == "out":
@@ -356,6 +367,8 @@ def restock(db: Session) -> list[tuple[models.ReserveItem, models.Product, int]]
     passing = apart_qty(db)
     out = []
     for p in db.query(models.Product).all():
+        if p.location_id == DISPATCH:
+            continue  # solo esta de paso para despacharse: no es para surtir la bodega
         have = stock_qty(p, passing)
         if have > p.min_qty:
             continue
@@ -383,9 +396,9 @@ def weekly_flow(db: Session, weeks: int = 8, tz=timezone.utc) -> list[dict]:
     start = today - timedelta(days=today.weekday() + 7 * (weeks - 1))
     since = datetime.combine(start, datetime.min.time(), tzinfo=tz)
     buckets = {start + timedelta(weeks=i): {"in": 0, "out": 0} for i in range(weeks)}
-    rows = (db.query(models.Movement.type, models.Movement.qty, models.Movement.created_at)
-            .filter(models.Movement.type.in_(("in", "new", "out")), models.Movement.created_at >= since.astimezone(timezone.utc))
-            .all())
+    rows = _not_internal(db.query(models.Movement.type, models.Movement.qty, models.Movement.created_at)
+                         .filter(models.Movement.type.in_(("in", "new", "out")),
+                                 models.Movement.created_at >= since.astimezone(timezone.utc))).all()
     for type_, qty, created in rows:
         day = _aware(created).astimezone(tz).date()
         week = day - timedelta(days=day.weekday())
@@ -398,8 +411,8 @@ def dead_stock(db: Session, days: int = 60) -> list[tuple[models.Product, dateti
     """Prendas con existencias que no han salido en `days` dias (o nunca),
     registradas hace mas de esos dias. De mas a menos prendas paradas."""
     since = datetime.now(timezone.utc) - timedelta(days=days)
-    last_out = dict(db.query(models.Movement.sku, func.max(models.Movement.created_at))
-                    .filter(models.Movement.type == "out").group_by(models.Movement.sku).all())
+    last_out = dict(_not_internal(db.query(models.Movement.sku, func.max(models.Movement.created_at))
+                                  .filter(models.Movement.type == "out")).group_by(models.Movement.sku).all())
     passing = apart_qty(db)
     out = []
     for p in db.query(models.Product).filter(models.Product.qty > 0).all():
@@ -441,13 +454,12 @@ def dispatch_list(db: Session) -> list[tuple[models.Product, int, datetime | Non
 def top_movers(db: Session, days: int = 30, limit: int = 5) -> list[dict]:
     since = datetime.now(timezone.utc) - timedelta(days=days)
     rows = (
-        db.query(
+        _not_internal(db.query(
             models.Movement.sku,
             models.Movement.product_name,
             models.Movement.product_size,
             func.sum(models.Movement.qty).label("total"),
-        )
-        .filter(models.Movement.type == "out", models.Movement.created_at >= since)
+        ).filter(models.Movement.type == "out", models.Movement.created_at >= since))
         .group_by(models.Movement.sku, models.Movement.product_name, models.Movement.product_size)
         .order_by(func.sum(models.Movement.qty).desc())
         .limit(limit)
