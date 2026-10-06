@@ -52,6 +52,8 @@ def update_element(element_id: str, payload: schemas.ElementUpdateIn, db: Sessio
                     _: models.User = Depends(require_admin)):
     try:
         el = svc.update_element(db, element_id, payload.model_dump(exclude_unset=True))
+    except svc.CodeTaken as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))  # la app ofrece intercambiarlas
     except svc.LayoutError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     return svc.element_out(el)

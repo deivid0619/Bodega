@@ -24,6 +24,10 @@ class LayoutError(Exception):
     prendas que quedarian sin ubicacion)."""
 
 
+class CodeTaken(LayoutError):
+    """La letra ya la tiene otro mueble: se puede intercambiar (swap)."""
+
+
 def _el_to_dict(el: models.Element) -> dict:
     return {"id": el.id, "type": el.type, "code": el.code, "x": el.x, "z": el.z,
             "rot": el.rot, "y0": el.y0 or 0, "params": el.params or {}}
@@ -219,8 +223,16 @@ def update_element(db: Session, element_id: str, changes: dict) -> models.Elemen
         code = "".join(ch for ch in code if ch.isalnum())[:6]
         if not code:
             raise LayoutError("El código no puede quedar vacío.")
-        if any(e["id"] != element_id and e.get("code") == code for e in elements):
-            raise LayoutError(f"Ya hay un elemento con el código {code}.")
+        other = next((e for e in elements if e["id"] != element_id and e.get("code") == code), None)
+        if other:
+            # intercambiar las letras: cada mueble se queda con sus prendas
+            # (solo cambia el nombre de sus ubicaciones), sin pasar por una
+            # letra que no este para dejar la otra libre
+            if not changes.get("swap"):
+                raise CodeTaken(f"La letra {code} ya la tiene {el_name(other)}.")
+            if not target.get("code"):
+                raise LayoutError("Este mueble no tiene letra para darle al otro.")
+            other["code"] = target["code"]
         target["code"] = code
     if "params" in changes and changes["params"]:
         target["params"] = validate_params(target["type"], {**target["params"], **changes["params"]})

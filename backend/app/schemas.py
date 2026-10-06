@@ -86,6 +86,7 @@ class ElementCreateIn(BaseModel):
 class ElementUpdateIn(BaseModel):
     type: Optional[Literal["bins", "boxes"]] = None  # canastas <-> cajas
     code: Optional[str] = None
+    swap: bool = False  # si la letra ya la tiene otro mueble, intercambiarlas
     x: Optional[float] = None
     z: Optional[float] = None
     rot: Optional[int] = None

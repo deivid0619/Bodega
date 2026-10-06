@@ -156,7 +156,29 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
       await api.patch(`/api/layout/elements/${element.id}`, { code })
       onChanged()
       showToast(`Código cambiado a ${code}. Las prendas se movieron con él.`)
-    } catch (e) { fail(e, 'No se pudo cambiar el código.'); setCodeInput(element.code) }
+    } catch (e) {
+      // la letra ya la tiene otro mueble: se ofrece intercambiarlas de una vez
+      if (e instanceof ApiError && e.status === 409) {
+        const ok = await confirm({
+          title: `¿Intercambiar ${element.code} ↔ ${code}?`,
+          body: `${e.message} Este mueble queda como ${code} y el otro como ${element.code}. Cada uno se queda con sus prendas: solo cambia el nombre de sus ubicaciones.`,
+          confirmLabel: 'Intercambiar',
+          danger: false,
+        })
+        if (ok) {
+          try {
+            await api.patch(`/api/layout/elements/${element.id}`, { code, swap: true })
+            onChanged()
+            showToast(`Letras intercambiadas: ${element.code} ↔ ${code}`)
+            return
+          } catch (e2) { fail(e2, 'No se pudieron intercambiar.') }
+        }
+        setCodeInput(element.code)
+        return
+      }
+      fail(e, 'No se pudo cambiar el código.')
+      setCodeInput(element.code)
+    }
   }
 
   // canastas <-> cajas: el segundo toque confirma, porque mueve lo que tenga guardado
