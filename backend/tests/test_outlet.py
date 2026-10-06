@@ -63,3 +63,67 @@ def test_outlet_garments_are_located_but_not_counted():
 
         assert client.delete(f"/api/products/{sku}", headers=h).status_code == 204
         assert client.delete(f"/api/layout/elements/{el['id']}", headers=h).status_code == 204
+
+
+def test_single_locations_can_be_outlet():
+    with TestClient(app) as client:
+        h = _h(client)
+        sku = f"OUT1-{uuid.uuid4().hex[:5].upper()}"
+        el = client.post("/api/layout/elements", headers=h, json={"type": "bins", "x": 0, "z": 0}).json()
+        code = el["code"]
+
+        def mark(loc_id, on=True):
+            r = client.put(f"/api/layout/locations/{loc_id}/outlet", headers=h, json={"outlet": on})
+            assert r.status_code == 200, r.text
+            return r.json()
+
+        def locs(e):
+            return {l["id"]: l for l in e["locations"]}
+
+        # una sola canasta: solo esa es outlet, el mueble no
+        e = mark(f"{code}-1-2")
+        L = locs(e)
+        assert L[f"{code}-1-2"]["outlet"] and L[f"{code}-1-2"]["name"].endswith("(outlet)")
+        assert not L[f"{code}-1-1"]["outlet"] and not e["name"].endswith("(outlet)")
+        assert e["params"]["outlet_slots"] == ["1-2"] and "outlet" not in e["params"]
+
+        # 4 en una canasta normal y 2 en la del outlet: una salida sin ubicacion solo ve 4
+        r = client.post("/api/products", headers=h, json={"sku": sku, "name": "CHAQUETA OUTLET UNA", "size": "M",
+                                                           "location_id": f"{code}-1-1", "qty": 4})
+        assert r.status_code == 201, r.text
+        assert client.post("/api/movements", headers=h, json={"sku": sku, "type": "in", "qty": 2,
+                                                               "location_id": f"{code}-1-2"}).status_code == 200
+        r = client.post("/api/movements", headers=h, json={"sku": sku, "type": "out", "qty": 5})
+        assert r.status_code == 400 and "outlet" in r.json()["detail"]
+
+        # quitar una columna no corre la marca; la de la columna que se quita se va
+        mark(f"{code}-1-4")
+        e = client.patch(f"/api/layout/elements/{el['id']}", headers=h, json={"params": {"cols": 3}}).json()
+        assert e["params"]["outlet_slots"] == ["1-2"]
+        assert [l["id"] for l in e["locations"] if l.get("outlet")] == [f"{code}-1-2"]
+
+        # todo el mueble desde el editor y luego desmarcar solo una
+        e = client.patch(f"/api/layout/elements/{el['id']}", headers=h, json={"params": {"outlet": True}}).json()
+        assert e["params"].get("outlet") is True and "outlet_slots" not in e["params"]
+        e = mark(f"{code}-1-1", False)
+        assert "outlet" not in e["params"] and len(e["params"]["outlet_slots"]) == len(e["locations"]) - 1
+        assert not locs(e)[f"{code}-1-1"]["outlet"] and not e["name"].endswith("(outlet)")
+        # volver a marcarla: quedan todas, es todo el mueble otra vez
+        e = mark(f"{code}-1-1")
+        assert e["params"].get("outlet") is True and e["name"].endswith("(outlet)")
+
+        assert client.put("/api/layout/locations/NO-EXISTE/outlet", headers=h, json={"outlet": True}).status_code == 404
+
+        assert client.delete(f"/api/products/{sku}", headers=h).status_code == 204
+        assert client.delete(f"/api/layout/elements/{el['id']}", headers=h).status_code == 204
+
+
+def test_outlet_survives_changing_bins_to_boxes():
+    with TestClient(app) as client:
+        h = _h(client)
+        el = client.post("/api/layout/elements", headers=h, json={"type": "bins", "x": 0, "z": 0}).json()
+        client.patch(f"/api/layout/elements/{el['id']}", headers=h, json={"params": {"outlet": True}})
+        r = client.patch(f"/api/layout/elements/{el['id']}", headers=h, json={"type": "boxes"})
+        assert r.status_code == 200, r.text
+        assert r.json()["params"].get("outlet") is True and r.json()["locations"][0]["outlet"] is True
+        assert client.delete(f"/api/layout/elements/{el['id']}", headers=h).status_code == 204

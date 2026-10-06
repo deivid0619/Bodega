@@ -104,11 +104,15 @@ def locs_of_el(el: dict) -> list[dict]:
             out.append({"id": f"{code}-{level}-{pile}", "kind": "bin", "name": f"Canasta {code}-{level}-{pile}",
                         "level": level, "pile": pile, "slot": f"{level}-{pile}"})
     # Outlet: prendas que estan en la bodega pero no se entregan normalmente.
-    # Se ven y se ubican, pero no cuentan en el inventario (como lo de paso)
-    if p.get("outlet"):
-        for loc in out:
+    # Se ven y se ubican, pero no cuentan en el inventario (como lo de paso).
+    # Puede ser todo el mueble o solo algunas canastas, niveles o barras
+    # (outlet_slots: por su lugar, para que sigan siendo las mismas si el
+    # mueble cambia de tamano o de codigo)
+    whole, slots = bool(p.get("outlet")), set(p.get("outlet_slots") or [])
+    for loc in out:
+        if whole or loc["slot"] in slots:
             loc["outlet"] = True
-            if t != "boxes":  # en las cajas el nombre del mueble ya lo dice
+            if not (t == "boxes" and whole):  # ahi el nombre del mueble ya lo dice
                 loc["name"] += " (outlet)"
     return out
 
@@ -161,4 +165,24 @@ def validate_params(type_: str, params: dict) -> dict:
             val = out[key]
             val = round(clamp(float(val), lo, hi), 1)
             out[key] = int(val) if key != "w" else val
+    return normalize_outlet(type_, out)
+
+
+def normalize_outlet(type_: str, params: dict) -> dict:
+    """El outlet queda de una sola forma: todo el mueble (outlet) o solo
+    algunos lugares (outlet_slots, en el orden del mueble y solo los que
+    existen). Si quedan marcados todos, es todo el mueble."""
+    out = dict(params)
+    if not out.get("outlet"):
+        out.pop("outlet", None)
+    asked = out.pop("outlet_slots", None)
+    if out.get("outlet") or not isinstance(asked, list):
+        return out
+    asked = {s for s in asked if isinstance(s, str)}
+    all_slots = [l["slot"] for l in locs_of_el({"type": type_, "code": "X", "params": out})]
+    slots = [s for s in all_slots if s in asked]
+    if slots and len(slots) == len(all_slots):
+        out["outlet"] = True
+    elif slots:
+        out["outlet_slots"] = slots
     return out

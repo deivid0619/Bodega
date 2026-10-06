@@ -1,5 +1,5 @@
 import { forwardRef, useState } from 'react'
-import { ApiError } from '../api'
+import { api, ApiError } from '../api'
 import { bumpStock, usePolling } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader } from './Sheet'
@@ -20,10 +20,13 @@ export function itemsAt(products, locationId) {
 }
 
 const LocationSheet = forwardRef(function LocationSheet(
-  { locationId, locationName, products, locations, highlightSku, onClose, onScanHere, onCount, onOpenProduct }, ref,
+  { locationId, locationName, products, locations, highlightSku, outlet = false, canEditOutlet = false, onOutletChanged,
+    onClose, onScanHere, onCount, onOpenProduct }, ref,
 ) {
   const showToast = useToast()
   const [moving, setMoving] = useState(null)
+  const [outletNow, setOutletNow] = useState(null) // lo que se acaba de tocar, mientras llega el plano nuevo
+  const isOutlet = outletNow ?? outlet
   const [parcelOpen, setParcelOpen] = useState(null) // 'new' o lo anotado que se esta viendo
   const { data: parcels } = usePolling('/api/parcels', { interval: 20000 })
   const here = (parcels || []).filter((x) => x.location_id === locationId)
@@ -32,6 +35,22 @@ const LocationSheet = forwardRef(function LocationSheet(
   const units = items.reduce((t, i) => t + i.here, 0)
   const isLow = (p) => p.min_qty > 0 && p.qty <= p.min_qty
   const lowCount = items.filter((i) => isLow(i.p)).length
+
+  // una sola canasta, nivel o barra como outlet: lo que hay aqui no cuenta
+  const setOutlet = async (on, undo = false) => {
+    setOutletNow(on)
+    try {
+      await api.put(`/api/layout/locations/${encodeURIComponent(locationId)}/outlet`, { outlet: on })
+      await onOutletChanged?.()
+      if (!undo) {
+        showToast(on ? `${locationId} es outlet: lo que hay aquí no cuenta` : `${locationId} vuelve a contar en el inventario`, 'ok',
+          { label: 'Deshacer', onClick: () => setOutlet(!on, true) })
+      }
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No se pudo cambiar. Intenta otra vez.', 'err')
+    }
+    setOutletNow(null)
+  }
 
   const bump = async (sku, type) => {
     try {
@@ -47,6 +66,7 @@ const LocationSheet = forwardRef(function LocationSheet(
         eyebrow={
           <div className="sheet-eyebrow">
             <span className="code lime"><Icon name="pin" size={13} stroke={2.2} />{locationId}</span>
+            {isOutlet && <span className="tag tag-outlet">Outlet</span>}
             {lowCount > 0 && <span className="tag tag-warn">{plural(lowCount, 'talla por reponer', 'tallas por reponer')}</span>}
           </div>
         }
@@ -105,6 +125,15 @@ const LocationSheet = forwardRef(function LocationSheet(
         </div>
       ) : (
         <p className="muted" style={{ padding: '6px 0 4px' }}>Escanea prendas con esta ubicación elegida y aparecen aquí.</p>
+      )}
+      {canEditOutlet ? (
+        <div className="ctl outlet-ctl loc-outlet">
+          <span>Outlet<small>Lo que haya en esta ubicación no cuenta en el inventario</small></span>
+          <button type="button" className="switch" role="switch" aria-checked={isOutlet} aria-label={`Outlet ${locationId}`}
+                  disabled={outletNow !== null} onClick={() => setOutlet(!isOutlet)} />
+        </div>
+      ) : isOutlet && (
+        <p className="loc-outlet-note">Outlet: lo que hay aquí no cuenta en el inventario.</p>
       )}
       <button type="button" className="link-btn loc-note" onClick={() => setParcelOpen('new')}>
         <Icon name="plus" size={14} stroke={2.4} />Anotar algo de paso aquí

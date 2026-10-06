@@ -205,6 +205,8 @@ def update_element(db: Session, element_id: str, changes: dict) -> models.Elemen
             count, levels = int(p.get("count", 3)), int(p.get("levels", 2))
             levels = max(1, min(levels, count))
             params = {"cols": -(-count // levels), "rows": levels}
+        if p.get("outlet"):
+            params["outlet"] = True  # si todo era outlet, lo sigue siendo
         target["type"] = new_type
         target["params"] = validate_params(new_type, params)
         new_locs = locs_of_el(target)
@@ -239,6 +241,26 @@ def update_element(db: Session, element_id: str, changes: dict) -> models.Elemen
         return row
     _replace_all(db, elements, moves=moves)
     return db.get(models.Element, element_id)
+
+
+def set_location_outlet(db: Session, location_id: str, outlet: bool) -> models.Element:
+    """Marca o desmarca como outlet una sola ubicacion (una canasta, un nivel,
+    una barra). Sus ubicaciones no cambian: solo se guarda ese mueble."""
+    for row in db.query(models.Element).all():
+        d = _el_to_dict(row)
+        locs = locs_of_el(d)
+        loc = next((l for l in locs if l["id"] == location_id), None)
+        if not loc:
+            continue
+        p = dict(d["params"])
+        marked = {l["slot"] for l in locs if l.get("outlet")}
+        (marked.add if outlet else marked.discard)(loc["slot"])
+        p.pop("outlet", None)
+        p["outlet_slots"] = sorted(marked)
+        row.params = validate_params(d["type"], p)
+        db.commit()
+        return row
+    raise LayoutError("Esa ubicación ya no existe.")
 
 
 def delete_element(db: Session, element_id: str) -> None:

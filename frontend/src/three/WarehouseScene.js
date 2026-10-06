@@ -666,16 +666,18 @@ export class WarehouseScene {
   _labelMesh(el, cells, w, h, grid = el.params) {
     const { cols, rows } = grid
     const cw = 128, chh = 44
+    // las canastas del outlet llevan la etiqueta naranja: lo de ahi no cuenta
+    const out = new Set(cells.filter((c) => c.out).map((c) => `${c.r}-${c.c}`))
     const tex = this._canvasTex(cols * cw, rows * chh, (x) => {
       x.font = '600 25px ui-monospace, "SF Mono", Menlo, Consolas, monospace'
       x.textAlign = 'center'
       x.textBaseline = 'middle'
       for (let r = 1; r <= rows; r++) for (let c = 1; c <= cols; c++) {
-        const px = (c - 1) * cw, py = (r - 1) * chh
-        x.fillStyle = '#ffffff'
+        const px = (c - 1) * cw, py = (r - 1) * chh, o = out.has(`${r}-${c}`)
+        x.fillStyle = o ? '#E5690F' : '#ffffff'
         roundRectPath(x, px + 3, py + 3, cw - 6, chh - 6, 6)
         x.fill()
-        x.fillStyle = '#121212'
+        x.fillStyle = o ? '#ffffff' : '#121212'
         x.fillText(`${el.code}-${r}-${c}`, px + cw / 2, py + chh / 2 + 1)
       }
     })
@@ -740,8 +742,8 @@ export class WarehouseScene {
           this._hide(folds, i * 4 + l)
           folds.setColorAt(i * 4 + l, this._col.setHex(0x222326))
         }
-        cells.push({ x, y: y + (crate ? BH * 0.5 : BH * 0.21), z: crate ? BD * 0.44 + 0.004 : BD / 2 + 0.003, r, c })
         const loc = el.locations[i]
+        cells.push({ x, y: y + (crate ? BH * 0.5 : BH * 0.21), z: crate ? BD * 0.44 + 0.004 : BD / 2 + 0.003, r, c, out: !!loc?.outlet })
         if (loc) {
           this._locHit(g, loc.id, BW, BH, BD, x, y + BH / 2, 0)
           locs.push({ id: loc.id, kind: 'bin', c: new THREE.Vector3(x, y + BH / 2, 0), s: new THREE.Vector3(BW, BH, BD), i, x, y, crate, folds })
@@ -767,8 +769,11 @@ export class WarehouseScene {
     const locs = []
     for (let i = 1; i <= L; i++) {
       const y = 0.1 + (i - 1) * sp
-      this._mk(beam, mat.rack, 0, y, D / 2, g)
-      this._mk(beam, mat.rack, 0, y, -D / 2, g)
+      const loc = el.locations[i - 1]
+      // el nivel del outlet va en naranja (las canastas, con la etiqueta naranja)
+      const bm = loc?.outlet ? mat.amber : mat.rack
+      this._mk(beam, bm, 0, y, D / 2, g)
+      this._mk(beam, bm, 0, y, -D / 2, g)
       this._mk(deck, mat.panel, 0, y + 0.045, 0, g)
       for (let j = 0; j < n; j++) {
         const k = (i - 1) * n + j, x = -((n - 1) / 2) * 0.5 + j * 0.5
@@ -778,7 +783,6 @@ export class WarehouseScene {
       }
       const marker = this._mk(new THREE.SphereGeometry(0.035, 14, 10), mat.amber, -W / 2 - 0.06, y + 0.12, D / 2, g)
       marker.visible = false
-      const loc = el.locations[i - 1]
       if (loc) {
         this._locHit(g, loc.id, W, sp * 0.9, D, 0, y + sp * 0.45, 0)
         locs.push({ id: loc.id, kind: 'shelf', c: new THREE.Vector3(0, y + sp * 0.45, 0), s: new THREE.Vector3(W, sp * 0.9, D), folds, start: (i - 1) * n, n, y, marker })
@@ -804,14 +808,16 @@ export class WarehouseScene {
     const locs = []
     for (let i = 1; i <= bars; i++) {
       const y = 2.7 - (i - 1) * sp
-      this._mk(rodG, mat.rack, 0, y, 0, g)
-      for (const sx of [-1, 1]) this._mk(br, mat.rack, sx * (W / 2 + 0.05), y, 0, g)
+      const loc = el.locations[i - 1]
+      // la barra del outlet va en naranja
+      const bm = loc?.outlet ? mat.amber : mat.rack
+      this._mk(rodG, bm, 0, y, 0, g)
+      for (const sx of [-1, 1]) this._mk(br, bm, sx * (W / 2 + 0.05), y, 0, g)
       const jk = this._inst(this.geo.jacket, mat.garment, cap, g)
       const hg = this._inst(this.geo.hanger, mat.hanger, cap, g)
       jk.count = hg.count = 0
       const marker = this._mk(new THREE.SphereGeometry(0.035, 14, 10), mat.amber, -W / 2 - 0.16, y, 0, g)
       marker.visible = false
-      const loc = el.locations[i - 1]
       if (loc) {
         this._locHit(g, loc.id, W, 0.66, 0.5, 0, y - 0.34, 0)
         locs.push({ id: loc.id, kind: 'rod', c: new THREE.Vector3(0, y - 0.34, 0), s: new THREE.Vector3(W, 0.66, 0.5), jk, hg, cap, x0: -W / 2, y, marker })
@@ -902,7 +908,7 @@ export class WarehouseScene {
         folds.setColorAt(i * 4 + l, this._col.setHex(0x222326))
       }
       // la etiqueta va en la cara que se ve: adelante o atras
-      cells.push({ x, y: y + BH * 0.5, z: isBack ? z - BD * 0.44 - 0.004 : z + BD * 0.44 + 0.004, r: level, c: pile, back: isBack })
+      cells.push({ x, y: y + BH * 0.5, z: isBack ? z - BD * 0.44 - 0.004 : z + BD * 0.44 + 0.004, r: level, c: pile, back: isBack, out: !!loc.outlet })
       this._locHit(g, loc.id, BW, BH, BD, x, y + BH / 2, z)
       locs.push({ id: loc.id, kind: 'bin', c: new THREE.Vector3(x, y + BH / 2, z), s: new THREE.Vector3(BW, BH, BD), i, x, y, z, crate: true, folds })
     })
@@ -1177,10 +1183,13 @@ export class WarehouseScene {
     div.className = 'el-tag solo'
     div.setAttribute('aria-label', members.map((m) => m.name).join(', '))
     div.innerHTML = `${members.map((m) => `<b>${m.code}</b>`).join('')}<span></span>`
-    // el mueble del outlet se distingue: lo que hay ahi no cuenta
-    if (members.some((m) => m.params?.outlet)) {
+    // el mueble del outlet se distingue: lo que hay ahi no cuenta. Si solo
+    // son algunas de sus ubicaciones, dice cuantas
+    const all = members.flatMap((m) => m.locations || [])
+    const nOut = all.filter((l) => l.outlet).length
+    if (nOut) {
       div.classList.add('outlet')
-      div.insertAdjacentHTML('beforeend', '<em>Outlet</em>')
+      div.insertAdjacentHTML('beforeend', `<em>${nOut === all.length ? 'Outlet' : `${nOut} outlet`}</em>`)
     }
     div.addEventListener('click', (e) => {
       e.stopPropagation()

@@ -47,6 +47,15 @@ const HINTS = {
   balloons: 'Solo de referencia.',
 }
 
+// el outlet puede ser todo el mueble o solo algunas ubicaciones (esas se
+// marcan tocandolas en la bodega, fuera del editor)
+function outletHint(element) {
+  if (element.params.outlet) return 'Todo el mueble: lo que haya aquí no cuenta en el inventario'
+  const some = (element.locations || []).filter((l) => l.outlet).map((l) => l.id)
+  if (some.length) return `Solo ${some.slice(0, 4).join(', ')}${some.length > 4 ? '…' : ''}. Actívalo para todo el mueble`
+  return 'Todo el mueble. Para una sola ubicación, tócala en la bodega fuera del editor'
+}
+
 function Mini({ value, onMinus, onPlus }) {
   return (
     <div className="mini">
@@ -286,7 +295,7 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
         ))}
         {storage && (
           <div className="ctl outlet-ctl">
-            <span>Outlet<small>Lo que haya aquí no cuenta en el inventario</small></span>
+            <span>Outlet<small>{outletHint(element)}</small></span>
             <button type="button" className="switch" role="switch" aria-checked={!!element.params.outlet} aria-label="Outlet"
                     onClick={() => queue({ params: { outlet: !element.params.outlet } })} />
           </div>

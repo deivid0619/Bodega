@@ -93,6 +93,10 @@ class ElementUpdateIn(BaseModel):
     params: Optional[dict[str, Any]] = None
 
 
+class LocationOutletIn(BaseModel):
+    outlet: bool  # una sola canasta, nivel o barra: lo que hay ahi no cuenta
+
+
 class LayoutOut(BaseModel):
     room: RoomOut
     elements: list[ElementOut]

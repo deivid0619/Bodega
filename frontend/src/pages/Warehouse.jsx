@@ -390,6 +390,9 @@ export default function Warehouse() {
           products={products || []}
           highlightSku={highlightSku}
           locations={groupsLoc}
+          outlet={!!locIndex.get(selLoc)?.outlet}
+          canEditOutlet={isAdmin}
+          onOutletChanged={reloadLayout}
           onClose={closeLocation}
           onScanHere={() => navigate(`/scan?loc=${encodeURIComponent(selLoc)}`)}
           onCount={() => navigate(`/count?loc=${encodeURIComponent(selLoc)}`)}

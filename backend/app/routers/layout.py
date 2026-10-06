@@ -57,6 +57,16 @@ def update_element(element_id: str, payload: schemas.ElementUpdateIn, db: Sessio
     return svc.element_out(el)
 
 
+@router.put("/locations/{location_id}/outlet", response_model=schemas.ElementOut)
+def set_location_outlet(location_id: str, payload: schemas.LocationOutletIn, db: Session = Depends(get_db),
+                        _: models.User = Depends(require_admin)):
+    try:
+        el = svc.set_location_outlet(db, location_id, payload.outlet)
+    except svc.LayoutError as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(e))
+    return svc.element_out(el)
+
+
 @router.post("/elements/{element_id}/duplicate", response_model=schemas.ElementOut)
 def duplicate_element(element_id: str, db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
     try:
