@@ -11,7 +11,7 @@ from . import models
 _NEW_COLUMNS = {
     "movements": [("to_location_id", "VARCHAR(32)"), ("note", "VARCHAR(80)")],
     "documents": [("pending", "INTEGER NOT NULL DEFAULT 0"), ("supplier", "VARCHAR(120)"), ("doc_date", "VARCHAR(10)"),
-                  ("notes", "VARCHAR(500)")],
+                  ("notes", "VARCHAR(500)"), ("photos", "JSON")],
     "reserve_items": [("image_url", "VARCHAR(500)")],
 }
 
@@ -24,6 +24,31 @@ def ensure_columns(engine: Engine) -> None:
             for name, ddl in columns:
                 if name not in have:
                     conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}"))
+
+
+def purge_old_photos(db: Session) -> int:
+    """Las fotos de remisiones y facturas se guardan un mes: las de documentos
+    mas viejos se borran (del almacenamiento y del documento). Devuelve
+    cuantas se borraron. El documento se queda."""
+    from datetime import datetime, timedelta, timezone
+
+    from . import photo_store
+    from .config import settings
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.photo_days)
+    removed = 0
+    for doc in db.query(models.Document).filter(models.Document.photos.isnot(None)).all():
+        created = doc.created_at if doc.created_at.tzinfo else doc.created_at.replace(tzinfo=timezone.utc)
+        if created >= cutoff:
+            continue
+        paths = [p["path"] for p in doc.photos or []]
+        try:
+            photo_store.delete(paths)
+        except Exception:  # sin conexion con el almacenamiento: se intenta la proxima vez
+            continue
+        doc.photos = None
+        removed += len(paths)
+    db.commit()
+    return removed
 
 
 def table_bins(db: Session) -> None:

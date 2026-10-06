@@ -8,5 +8,8 @@ dist/
 venv/
 .claude/
 
+# fotos de remisiones y facturas en el computador (nunca al repositorio: es publico)
+fotos-documentos/
+
 # graphify: mapa del codigo, se genera en cada maquina
 graphify-out/

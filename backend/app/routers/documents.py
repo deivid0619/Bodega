@@ -5,12 +5,18 @@ se puede aplicar dos veces."""
 from datetime import datetime
 from typing import Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+import threading
+import uuid
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .. import catalog
+from .. import catalog, photo_store
+from ..database import SessionLocal
+from ..migrations import purge_old_photos
 from ..layout_logic import DISPATCH
 from .. import inventory_service as inv
 from .. import models, push, schemas
@@ -27,6 +33,66 @@ def _norm_number(number: str) -> str:
 
 def _already(db: Session, kind: str, number: str) -> Optional[models.Document]:
     return db.query(models.Document).filter_by(kind=kind, number=number).first()
+
+
+# ---- fotos del papel: la prueba de lo que llego y lo que salio ----
+def _purge_in_background() -> None:
+    def run():
+        db = SessionLocal()
+        try:
+            purge_old_photos(db)
+        finally:
+            db.close()
+    threading.Thread(target=run, daemon=True).start()
+
+
+@router.post("/{doc_id}/photos", response_model=schemas.DocumentOut)
+async def add_photo(doc_id: int, request: Request, db: Session = Depends(get_db),
+                    _: models.User = Depends(get_current_user)):
+    """Guarda la foto de la remision o la factura (la app la manda ya
+    achicada, como JPG). Se guarda un mes y despues se borra sola."""
+    doc = db.get(models.Document, doc_id)
+    if not doc or doc.kind not in ("factura", "remision"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese documento no existe.")
+    ctype = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if ctype not in photo_store.TYPES:
+        raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Solo fotos (JPG, PNG o WebP).")
+    data = await request.body()
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La foto llegó vacía. Intenta otra vez.")
+    if len(data) > photo_store.MAX_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "La foto es muy grande.")
+    photos = list(doc.photos or [])
+    if len(photos) >= photo_store.MAX_PER_DOC:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Ya tiene {photo_store.MAX_PER_DOC} fotos.")
+    path = f"{doc.kind}/{doc.id}-{uuid.uuid4().hex[:12]}.{photo_store.TYPES[ctype]}"
+    try:
+        await run_in_threadpool(photo_store.put, path, data, ctype)
+    except Exception:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "No se pudo guardar la foto. Intenta otra vez.")
+    doc.photos = photos + [{"path": path, "type": ctype, "size": len(data)}]
+    db.commit()
+    db.refresh(doc)
+    _purge_in_background()  # de paso, las de hace mas de un mes
+    return doc
+
+
+@router.get("/{doc_id}/photos/{index}")
+def get_photo(doc_id: int, index: int, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """La foto (para verla o descargarla). Solo con sesion: nunca es publica."""
+    doc = db.get(models.Document, doc_id)
+    photos = (doc.photos or []) if doc else []
+    if not 0 <= index < len(photos):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Esa foto ya no está: se guardan un mes.")
+    p = photos[index]
+    try:
+        data = photo_store.get(p["path"])
+    except Exception:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "No se pudo traer la foto. Intenta otra vez.")
+    if data is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Esa foto ya no está: se guardan un mes.")
+    return Response(content=data, media_type=p.get("type") or "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.get("", response_model=list[schemas.DocumentOut])

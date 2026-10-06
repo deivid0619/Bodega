@@ -26,6 +26,11 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
+      # fotos de remisiones y facturas (un mes): Supabase Storage
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
 
   - type: web
     name: bodega-frontend

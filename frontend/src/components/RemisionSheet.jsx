@@ -5,6 +5,7 @@ import { refreshInventory, revalidate, useLayout, usePolling, useProducts, useRe
 import { locationGroups } from '../locationGroups'
 import { cleanCode } from '../lib/facturaParser'
 import { sizeRank } from '../utils'
+import { saveDocPhoto } from '../lib/docPhotos'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
@@ -56,7 +57,7 @@ function PickStep({ onFile, onSkip }) {
       <SheetHeader
         eyebrow={<div className="sheet-eyebrow"><span className="tag tag-in">Entrada de mercancía</span></div>}
         title="Recibir una remisión"
-        subtitle="Toma la foto de la orden de remisión para tenerla a la vista mientras cuentas lo que llegó."
+        subtitle="Toma la foto de la orden de remisión: la tienes a la vista mientras cuentas y queda guardada un mes como prueba de lo que llegó."
       />
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
       <input ref={gallery} type="file" accept="image/*" hidden onChange={pick} />
@@ -72,7 +73,7 @@ function PickStep({ onFile, onSkip }) {
         <ul>
           <li>Cuenta lo que llegó: entra lo que cuentes, no lo que diga el papel.</li>
           <li>Si el proveedor quedó debiendo algo, anótalo como pendiente.</li>
-          <li>La foto es solo para tenerla a la vista: no se guarda ni sale de tu celular.</li>
+          <li>La foto queda guardada un mes con la remisión (se puede ver y descargar en Resumen) y después se borra sola. Lo que registras se queda siempre.</li>
         </ul>
       </details>
     </>
@@ -80,7 +81,7 @@ function PickStep({ onFile, onSkip }) {
 }
 
 // la foto en grande: tocar acerca o aleja, y con el dedo se recorre
-function PhotoZoom({ src, onClose }) {
+export function PhotoZoom({ src, onClose, label = 'Foto de la remisión' }) {
   const [big, setBig] = useState(true)
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -88,9 +89,9 @@ function PhotoZoom({ src, onClose }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
   return createPortal(
-    <div className="zoom" role="dialog" aria-modal="true" aria-label="Foto de la remisión">
+    <div className="zoom" role="dialog" aria-modal="true" aria-label={label}>
       <div className="zoom-scroll" onClick={() => setBig((b) => !b)}>
-        <img src={src} alt="Remisión" style={{ width: big ? '230%' : '100%' }} />
+        <img src={src} alt={label} style={{ width: big ? '230%' : '100%' }} />
       </div>
       <button className="zoom-close" onClick={onClose} aria-label="Cerrar la foto"><Icon name="x" size={22} stroke={2.2} /></button>
       <p className="zoom-hint">Toca para acercar o alejar · desliza para recorrerla</p>
@@ -252,6 +253,7 @@ function Body() {
 
   const [step, setStep] = useState('pick')
   const [photo, setPhoto] = useState(null)
+  const [photoFile, setPhotoFile] = useState(null) // se guarda como prueba al confirmar
   const [zoom, setZoom] = useState(false)
   const [number, setNumber] = useState('')
   const [supplier, setSupplier] = useState('')
@@ -350,9 +352,20 @@ function Body() {
         lines: lines.map(({ name, size, sku, qty, pending }) => ({ name, size, sku: sku || undefined, qty, pending })),
       })
       refreshInventory()
-      revalidate('/api/documents')
       const d = res.document
-      showToast(`Remisión ${d.number.startsWith('SN-') ? 'sin número' : d.number}: ${plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}`)
+      // la foto queda como prueba (un mes); si no sube, la remision igual entro
+      let kept = false
+      if (photoFile) {
+        try {
+          await saveDocPhoto(d.id, photoFile)
+          kept = true
+        } catch {
+          kept = false
+        }
+      }
+      revalidate('/api/documents')
+      showToast(`Remisión ${d.number.startsWith('SN-') ? 'sin número' : d.number}: ${plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}${
+        photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}`, kept || !photoFile ? 'ok' : 'err')
       close()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No hay conexión. No entró nada; intenta de nuevo.', 'err')
@@ -364,7 +377,7 @@ function Body() {
   if (step === 'pick') {
     return (
       <PickStep
-        onFile={(f) => { setPhoto(URL.createObjectURL(f)); setStep('form') }}
+        onFile={(f) => { setPhoto(URL.createObjectURL(f)); setPhotoFile(f); setStep('form') }}
         onSkip={() => setStep('form')}
       />
     )

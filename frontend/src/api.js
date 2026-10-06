@@ -49,6 +49,29 @@ async function request(path, { method = 'GET', body, isForm } = {}) {
   return res.json()
 }
 
+// Archivos (las fotos de remisiones y facturas): se suben tal cual y se
+// traen como Blob, siempre con la sesion (nunca son publicas)
+async function raw(path, { method = 'GET', body, type } = {}) {
+  const headers = {}
+  if (type) headers['Content-Type'] = type
+  if (authToken) headers['Authorization'] = `Bearer ${authToken}`
+  const res = await fetch(`${BASE}${path}`, { method, headers, body })
+  if (res.status === 401 && onUnauthorized) onUnauthorized()
+  if (!res.ok) {
+    let detail = `Error ${res.status}`
+    try {
+      detail = (await res.json()).detail || detail
+    } catch {
+      // no era JSON
+    }
+    throw new ApiError(detail, res.status)
+  }
+  return res
+}
+
+export const apiUpload = async (path, blob) => (await raw(path, { method: 'POST', body: blob, type: blob.type || 'image/jpeg' })).json()
+export const apiBlob = async (path) => (await raw(path)).blob()
+
 export const api = {
   get: (path) => request(path),
   post: (path, body) => request(path, { method: 'POST', body: body ?? {} }),

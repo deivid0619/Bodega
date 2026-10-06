@@ -1,5 +1,5 @@
 """Modelos de la base de datos."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import (
     Boolean, Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
@@ -119,6 +119,9 @@ class Document(Base):
     supplier = Column(String(120), nullable=True)  # remision: quien la entrega
     doc_date = Column(String(10), nullable=True)  # fecha escrita en el papel (AAAA-MM-DD)
     notes = Column(String(500), nullable=True)  # lo demas que diga el papel (completa/parcial, observaciones)
+    # fotos del papel como prueba ([{path, type, size}]); se borran solas al
+    # mes (photo_store) y aqui queda en NULL
+    photos = Column(JSON(none_as_null=True), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user_name = Column(String(120), nullable=False, default="")
     created_at = Column(DateTime(timezone=True), default=now, index=True)
@@ -158,6 +161,18 @@ class ReserveItem(Base):
     image_url = Column(String(500), nullable=True)  # la foto de la tienda (o de la bodega)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+def _photos_until(doc: "Document"):
+    from .config import settings
+    if not doc.photos or not doc.created_at:
+        return None
+    created = doc.created_at if doc.created_at.tzinfo else doc.created_at.replace(tzinfo=timezone.utc)
+    return created + timedelta(days=settings.photo_days)
+
+
+Document.photo_count = property(lambda self: len(self.photos or []))
+Document.photos_until = property(_photos_until)
 
 
 class CodeAlias(Base):

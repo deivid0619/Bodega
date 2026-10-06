@@ -15,6 +15,15 @@ class Settings(BaseSettings):
     # listado publico de la tienda (Shopify) para llenar nombre, talla, foto y
     # precio de un codigo nuevo. Vacio: sin catalogo.
     catalog_url: str = "https://pigmalionmoto.com/products.json"
+    # fotos de remisiones y facturas (la prueba de lo que llego y salio):
+    # Supabase Storage si estan la URL del proyecto y la llave service_role
+    # (solo en Render, nunca en el repositorio); si no, una carpeta local.
+    # Se borran solas a los photo_days dias.
+    supabase_url: str = ""
+    supabase_service_key: str = ""
+    photos_bucket: str = "documentos"
+    photo_days: int = 30
+    photos_dir: str = "fotos-documentos"
     # quien manda los avisos al celular (lo piden Google y Apple)
     vapid_subject: str = "https://pigmalionmoto.com"
     # SOLO DESARROLLO: si es true, todas las rutas se tratan como si hubiera

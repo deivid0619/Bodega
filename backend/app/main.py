@@ -13,7 +13,7 @@ from . import models
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .catalog import warm as warm_catalog
-from .migrations import backfill_stock, ensure_columns, remove_sample_product, table_bins
+from .migrations import backfill_stock, ensure_columns, purge_old_photos, remove_sample_product, table_bins
 from .routers import auth, catalog, documents, layout, movements, parcels, products, push, reports, reserve
 from .seed import seed
 
@@ -51,6 +51,10 @@ async def lifespan(app: FastAPI):
         backfill_stock(db)
         table_bins(db)
         remove_sample_product(db)
+        try:
+            purge_old_photos(db)  # las fotos de mas de un mes
+        except Exception:
+            pass
     finally:
         db.close()
     warm_catalog()

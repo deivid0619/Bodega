@@ -6,6 +6,7 @@ import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { Stepper, plural } from './Bits'
 import { cleanCode, matchAll, matchLine, parseFactura } from '../lib/facturaParser'
+import { saveDocPhoto } from '../lib/docPhotos'
 import { asksFrom, outAvailable, outParts, outletIdsOf, placesOf } from '../utils'
 import FromPick from './FromPick'
 import { readPhoto } from '../lib/ocr'
@@ -47,7 +48,7 @@ function PickStep({ onFile, error }) {
         <ul>
           <li>Que se vea toda la tabla de productos, derecha, con buena luz y sin sombras.</li>
           <li>Revisa cada línea antes de confirmar: si un código o una cantidad no se leyó bien, corrígelo.</li>
-          <li>La foto se lee en tu celular: no se guarda ni sale de él.</li>
+          <li>La foto se lee en tu celular y, al confirmar, se guarda un mes como prueba de lo que salió (se puede ver y descargar en Resumen). Después se borra sola.</li>
         </ul>
       </details>
     </>
@@ -80,6 +81,7 @@ function Body({ onDone }) {
   const [stage, setStage] = useState('preparing')
   const [progress, setProgress] = useState(0)
   const [preview, setPreview] = useState(null)
+  const [photoFile, setPhotoFile] = useState(null) // la foto, para guardarla como prueba al confirmar
   const [error, setError] = useState('')
   const [number, setNumber] = useState('')
   const [rows, setRows] = useState([])
@@ -92,6 +94,7 @@ function Body({ onDone }) {
   const onFile = async (file) => {
     setError('')
     setPreview(URL.createObjectURL(file))
+    setPhotoFile(file)
     setProgress(0)
     setStage('preparing')
     setStep('reading')
@@ -147,9 +150,20 @@ function Body({ onDone }) {
       // primero lo que sale de una ubicacion elegida y despues lo de donde haya
       const parts = chosen.flatMap((r) => outParts(r.qty, r.from || '', r.product).map((x) => ({ sku: r.sku, qty: x.qty, ...(x.loc ? { location_id: x.loc } : {}) })))
       const lines = [...parts.filter((x) => x.location_id), ...parts.filter((x) => !x.location_id)]
-      await api.post('/api/documents/factura', { number: number.trim(), lines })
+      const res = await api.post('/api/documents/factura', { number: number.trim(), lines })
       refreshInventory()
-      showToast(`Factura ${number.trim().toUpperCase()}: ${plural(units, 'prenda descontada', 'prendas descontadas')}`)
+      // la foto queda como prueba (un mes); si no sube, la factura igual quedo descontada
+      let kept = false
+      if (photoFile) {
+        try {
+          await saveDocPhoto(res.document.id, photoFile)
+          kept = true
+        } catch {
+          kept = false
+        }
+      }
+      showToast(`Factura ${number.trim().toUpperCase()}: ${plural(units, 'prenda descontada', 'prendas descontadas')}${
+        photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}`, kept || !photoFile ? 'ok' : 'err')
       onDone?.()
       close()
     } catch (e) {

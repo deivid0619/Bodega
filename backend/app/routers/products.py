@@ -183,6 +183,14 @@ def reset_inventory(confirm: str = "", db: Session = Depends(get_db), _: models.
     db.query(models.Movement).delete()
     db.query(models.Product).delete()
     db.query(models.ReserveItem).delete()
+    # las fotos de los documentos tambien (no quedan sueltas en el almacenamiento)
+    from .. import photo_store
+    paths = [p["path"] for d in db.query(models.Document).filter(models.Document.photos.isnot(None)).all()
+             for p in d.photos or []]
+    try:
+        photo_store.delete(paths)
+    except Exception:
+        pass  # si el almacenamiento no responde, se borran los documentos igual
     db.query(models.Document).delete()
     db.query(models.Parcel).delete()
     db.commit()

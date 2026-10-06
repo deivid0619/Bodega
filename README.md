@@ -259,6 +259,8 @@ GitHub.
 | `CORS_ORIGINS` | Dominios del frontend que pueden llamar a la API, separados por coma |
 | `CATALOG_URL` | Opcional. Catálogo público de la tienda (por defecto el de pigmalionmoto.com); vacío lo apaga |
 | `VAPID_SUBJECT` | Opcional. Quién firma los avisos al celular (por defecto https://pigmalionmoto.com) |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` | Opcional. Donde se guardan un mes las fotos de remisiones y facturas (Supabase Storage, bucket privado `documentos` que se crea solo). La URL del proyecto y la llave `service_role` (Supabase → Project Settings → API). Solo en Render, nunca en el repositorio. Sin ellas, las fotos van a la carpeta local `backend/fotos-documentos` |
+| `PHOTO_DAYS` | Opcional. Cuántos días se guardan esas fotos (por defecto 30); después se borran solas |
 | `SKIP_AUTH` | Solo desarrollo: `true` entra sin iniciar sesión. Nunca en producción |
 
 En producción, `ADMIN_PASSWORD` y `REGISTRATION_CODE` deben ser distintos a

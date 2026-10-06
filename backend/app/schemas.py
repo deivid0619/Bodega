@@ -244,6 +244,8 @@ class DocumentOut(BaseModel):
     lines: list[dict[str, Any]]
     user_name: str
     created_at: UtcDatetime
+    photo_count: int = 0  # fotos del papel guardadas (prueba)
+    photos_until: Optional[UtcDatetime] = None  # hasta cuando se guardan
 
 
 class DocumentResult(BaseModel):
