@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLayout, useProducts, useReserve } from '../hooks/useApi'
 import { locationGroups } from '../locationGroups'
-import { refCode, refKey, reserveFor, reserveIndex, stockSplit } from '../utils'
+import { outletIdsOf, refCode, refKey, reserveFor, reserveIndex, stockSplit } from '../utils'
 import ProductModal from '../components/ProductModal'
 import Icon from '../components/Icon'
 import { Count, Empty, PageHead, ProductThumb, SearchField, plural } from '../components/Bits'
@@ -14,17 +14,18 @@ const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toU
 
 // Una tarjeta por referencia: cada talla con lo que hay en la bodega (sin lo
 // de paso) y lo que hay guardado en la reserva; el total suma las dos.
-function groupProducts(list, index, reserveOnly) {
+function groupProducts(list, index, reserveOnly, outlet) {
   const map = new Map()
   for (const p of [...list].sort((a, b) => a.name.localeCompare(b.name) || sizeIdx(a.size) - sizeIdx(b.size))) {
     const key = refKey(p.name)
-    if (!map.has(key)) map.set(key, { base: key, name: p.name, image: null, items: [], bodega: 0, reserve: 0, passing: 0, locs: new Map() })
+    if (!map.has(key)) map.set(key, { base: key, name: p.name, image: null, items: [], bodega: 0, reserve: 0, passing: 0, outlet: 0, locs: new Map() })
     const g = map.get(key)
-    const split = stockSplit(p, index)
+    const split = stockSplit(p, index, outlet)
     g.items.push({ key: p.sku, size: p.size, p, ...split })
     g.bodega += split.bodega
     g.reserve += split.reserve
     g.passing += split.passing
+    g.outlet += split.outlet
     if (!g.image && p.image_url) g.image = p.image_url
     for (const st of p.stock || []) g.locs.set(st.location_id, (g.locs.get(st.location_id) || 0) + st.qty)
   }
@@ -36,7 +37,7 @@ function groupProducts(list, index, reserveOnly) {
   for (const it of reserveOnly) {
     let g = byName.get(norm(it.name))
     if (!g) {
-      g = { base: `reserva-${it.id}`, name: it.name, image: null, items: [], bodega: 0, reserve: 0, passing: 0, locs: new Map(), onlyReserve: true }
+      g = { base: `reserva-${it.id}`, name: it.name, image: null, items: [], bodega: 0, reserve: 0, passing: 0, outlet: 0, locs: new Map(), onlyReserve: true }
       byName.set(norm(it.name), g)
       groups.push(g)
     }
@@ -68,18 +69,19 @@ export default function Inventory() {
     const q = norm(search)
     return reserve.filter((it) => it.qty > 0 && !used.has(it.id) && (!q || norm(`${it.name} ${it.sku || ''} ${it.size}`).includes(q)))
   }, [all, reserve, index, filter, search])
-  const groups = useMemo(() => groupProducts(products || [], index, reserveOnly), [products, index, reserveOnly])
+  const outlet = useMemo(() => outletIdsOf(layout), [layout])
+  const groups = useMemo(() => groupProducts(products || [], index, reserveOnly, outlet), [products, index, reserveOnly, outlet])
   const groupsLoc = useMemo(() => locationGroups(layout?.elements), [layout])
   const totals = useMemo(() => {
     const list = all || []
     return {
-      units: list.reduce((s, p) => s + stockSplit(p).bodega, 0),
+      units: list.reduce((s, p) => s + stockSplit(p, null, outlet).bodega, 0),
       reserve: (reserve || []).reduce((s, i) => s + i.qty, 0),
       refs: new Set(list.map((p) => refKey(p.name))).size,
       low: list.filter((p) => isLow(p)).length,
       zero: list.filter((p) => p.qty === 0).length,
     }
-  }, [all, reserve])
+  }, [all, reserve, outlet])
 
   return (
     <section className="page" aria-label="Inventario">
@@ -116,13 +118,14 @@ export default function Inventory() {
                   <b><Count value={g.bodega + g.reserve} /></b>
                   <span>{g.reserve > 0 ? 'en total' : g.bodega === 1 ? 'prenda' : 'prendas'}</span>
                 </div>
-                {(g.reserve > 0 || g.passing > 0) && (
+                {(g.reserve > 0 || g.passing > 0 || g.outlet > 0) && (
                   <p className="ref-split">
                     <span><b>{g.bodega}</b> en la bodega</span>
                     {g.reserve > 0 && (
                       <button type="button" className="res" onClick={() => navigate('/reserve')}><b>+{g.reserve}</b> en la reserva</button>
                     )}
                     {g.passing > 0 && <span><b>{g.passing}</b> de paso</span>}
+                    {g.outlet > 0 && <span className="outlet"><b>{g.outlet}</b> en outlet</span>}
                   </p>
                 )}
                 <div className="ref-sizes">
@@ -144,7 +147,8 @@ export default function Inventory() {
                 {g.locs.size > 0 && (
                   <div className="ref-locs">
                     {[...g.locs].sort((a, b) => b[1] - a[1]).map(([id, n]) => (
-                      <button key={id} className="code dark" onClick={() => navigate(`/?loc=${encodeURIComponent(id)}`)} aria-label={`Ver ${id} en 3D, ${n} prendas`}>
+                      <button key={id} className={`code dark${outlet.has(id) ? ' outlet' : ''}`} onClick={() => navigate(`/?loc=${encodeURIComponent(id)}`)}
+                              aria-label={`Ver ${id} en 3D, ${n} prendas${outlet.has(id) ? ' en outlet' : ''}`}>
                         <Icon name="pin" size={13} stroke={2.2} />{id}<span className="code-n">{n}</span>
                       </button>
                     ))}

@@ -284,6 +284,13 @@ export default function EditPanel({ room, element, getTheta, onDone, onChanged, 
             <Mini value={fmtParam(key, paramOf(element, key))} onMinus={() => paramStep(key, -1)} onPlus={() => paramStep(key, 1)} />
           </div>
         ))}
+        {storage && (
+          <div className="ctl outlet-ctl">
+            <span>Outlet<small>Lo que haya aquí no cuenta en el inventario</small></span>
+            <button type="button" className="switch" role="switch" aria-checked={!!element.params.outlet} aria-label="Outlet"
+                    onClick={() => queue({ params: { outlet: !element.params.outlet } })} />
+          </div>
+        )}
         {(element.type === 'bins' || element.type === 'boxes') && (
           <div className="ctl"><span>Altura del piso</span>
             <Mini value={`${(element.y0 || 0).toFixed(1)} m`} onMinus={() => heightStep(-1)} onPlus={() => heightStep(1)} />

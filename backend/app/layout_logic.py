@@ -47,6 +47,11 @@ CODE_HINTS = {
 
 
 def el_name(el: dict) -> str:
+    name = _el_name(el)
+    return f"{name} (outlet)" if (el.get("params") or {}).get("outlet") else name
+
+
+def _el_name(el: dict) -> str:
     t, code = el["type"], el.get("code")
     if t == "bins":
         return f"Canastas {code}"
@@ -98,6 +103,13 @@ def locs_of_el(el: dict) -> list[dict]:
         for level, pile in table_slots(int(p.get("bins", 0) or 0)):
             out.append({"id": f"{code}-{level}-{pile}", "kind": "bin", "name": f"Canasta {code}-{level}-{pile}",
                         "level": level, "pile": pile, "slot": f"{level}-{pile}"})
+    # Outlet: prendas que estan en la bodega pero no se entregan normalmente.
+    # Se ven y se ubican, pero no cuentan en el inventario (como lo de paso)
+    if p.get("outlet"):
+        for loc in out:
+            loc["outlet"] = True
+            if t != "boxes":  # en las cajas el nombre del mueble ya lo dice
+                loc["name"] += " (outlet)"
     return out
 
 

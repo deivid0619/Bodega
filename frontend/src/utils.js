@@ -63,13 +63,24 @@ export function reserveFor(p, index) {
   return [...(index.bySku.get(p.sku) || []), ...(index.byRef.get(`${p.name}|${p.size || ''}`) || [])]
 }
 
-// Cuanto hay de un codigo: en la bodega (sin lo de paso), de paso y en la
-// reserva. El total es bodega + reserva: lo de paso no es de la empresa.
-export function stockSplit(p, index) {
-  const passing = (p.stock || []).reduce((t, s) => t + (s.location_id === DISPATCH ? s.qty : 0), 0)
+// Ubicaciones de muebles marcados como outlet (lo que hay ahi no cuenta)
+export function outletIdsOf(layout) {
+  return new Set((layout?.elements || []).flatMap((e) => (e.locations || []).filter((l) => l.outlet).map((l) => l.id)))
+}
+
+// Cuanto hay de un codigo: en la bodega (sin lo de paso ni el outlet), de
+// paso, en el outlet y en la reserva. El total es bodega + reserva: lo de
+// paso no es de la empresa y el outlet no se entrega normalmente.
+export function stockSplit(p, index, outlet) {
+  let passing = 0
+  let out = 0
+  for (const s of p.stock || []) {
+    if (s.location_id === DISPATCH) passing += s.qty
+    else if (outlet?.has(s.location_id)) out += s.qty
+  }
   const reserve = index ? reserveFor(p, index).reduce((t, it) => t + it.qty, 0) : 0
-  const bodega = p.qty - passing
-  return { bodega, passing, reserve, total: bodega + reserve }
+  const bodega = p.qty - passing - out
+  return { bodega, passing, outlet: out, reserve, total: bodega + reserve }
 }
 
 const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 })

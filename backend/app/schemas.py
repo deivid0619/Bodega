@@ -59,6 +59,7 @@ class LocationOut(BaseModel):
     # canastas de la mesa: nivel (1 = arriba) y pila, para que el 3D las dibuje
     level: Optional[int] = None
     pile: Optional[int] = None
+    outlet: bool = False  # lo que hay aqui no cuenta en el inventario
 
 
 class ElementOut(BaseModel):

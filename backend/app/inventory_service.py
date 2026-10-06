@@ -26,9 +26,18 @@ class UnknownSku(InventoryError):
     """El codigo escaneado no esta registrado (la app ofrece registrarlo)."""
 
 
+def _locations(db: Session) -> dict[str, dict]:
+    return all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}
+                          for e in db.query(models.Element).all()])
+
+
 def location_ids(db: Session) -> set[str]:
-    return set(all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}
-                              for e in db.query(models.Element).all()]).keys())
+    return set(_locations(db).keys())
+
+
+def outlet_ids(db: Session) -> set[str]:
+    """Ubicaciones de muebles marcados como outlet: lo que hay ahi no cuenta."""
+    return {k for k, v in _locations(db).items() if v.get("outlet")}
 
 
 def _lock(db: Session, sku: str) -> tuple[models.Product, dict[str, models.Stock]]:
@@ -128,7 +137,9 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
     """
     product, rows = _lock(db, sku)
     before = product.qty
-    valid = location_ids(db)
+    locs = _locations(db)
+    valid = set(locs)
+    outlet = {k for k, v in locs.items() if v.get("outlet")}
     if location_id and location_id not in valid:
         raise InventoryError("Esa ubicación no existe.")
     label = f"{product.name} {product.size}".strip()
@@ -162,10 +173,14 @@ def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.Use
                 raise InventoryError(f"En {location_id} solo hay {have} de {label}. La salida no se registró.")
             plan = [(location_id, qty)]
         else:
-            if qty > before:
-                raise InventoryError(f"Solo hay {before} de {label}. La salida no se registró.")
-            order = sorted((r for r in rows.values() if r.qty > 0),
-                           key=lambda r: (r.location_id != DISPATCH, r.location_id != product.location_id, -r.qty))
+            # sin ubicacion nunca se saca del outlet: esas no se entregan normalmente
+            usable = [r for r in rows.values() if r.qty > 0 and r.location_id not in outlet]
+            have = sum(r.qty for r in usable)
+            if qty > have:
+                apart = before - have
+                extra = f" (las otras {apart} están en outlet: elige esa ubicación para sacarlas)" if apart else ""
+                raise InventoryError(f"Solo hay {have} de {label}{extra}. La salida no se registró.")
+            order = sorted(usable, key=lambda r: (r.location_id != DISPATCH, r.location_id != product.location_id, -r.qty))
             plan, left = [], qty
             for r in order:
                 take = min(left, r.qty)
@@ -265,22 +280,27 @@ def _reserve_for(p: models.Product, index) -> list[models.ReserveItem]:
     return by_sku.get(p.sku, []) + by_ref.get((p.name, p.size), [])
 
 
-def dispatch_qty(db: Session) -> dict[str, int]:
-    """Prendas de paso por codigo (en Despacho): no cuentan como bodega."""
-    return {sku: qty for sku, qty in db.query(models.Stock.sku, models.Stock.qty)
-            .filter(models.Stock.location_id == DISPATCH, models.Stock.qty > 0).all()}
+def apart_qty(db: Session) -> dict[str, int]:
+    """Por codigo, lo que no cuenta como bodega: lo de paso (Despacho) y lo
+    del outlet."""
+    apart = [DISPATCH, *outlet_ids(db)]
+    out: dict[str, int] = {}
+    for sku, qty in (db.query(models.Stock.sku, models.Stock.qty)
+                     .filter(models.Stock.location_id.in_(apart), models.Stock.qty > 0).all()):
+        out[sku] = out.get(sku, 0) + qty
+    return out
 
 
 def stock_qty(p: models.Product, passing: dict[str, int]) -> int:
-    """Lo que hay de un codigo en la bodega, sin lo que esta de paso."""
+    """Lo que hay de un codigo en la bodega, sin lo de paso ni lo del outlet."""
     return p.qty - passing.get(p.sku, 0)
 
 
 def needs(db: Session) -> list[tuple[models.Product, int, int]]:
     """Tallas en o bajo su minimo: (prenda, cuanto pedir, cuanto hay en reserva).
     Se pide para llegar al doble del minimo, descontando lo que ya esta en la
-    reserva (eso se trae, no se compra). Lo que esta de paso no cuenta."""
-    passing = dispatch_qty(db)
+    reserva (eso se trae, no se compra). Lo de paso y el outlet no cuentan."""
+    passing = apart_qty(db)
     products = [p for p in db.query(models.Product).filter(models.Product.min_qty > 0).all()
                 if stock_qty(p, passing) <= p.min_qty]
     index = _reserve_index(db)
@@ -299,7 +319,7 @@ def restock(db: Session) -> list[tuple[models.ReserveItem, models.Product, int]]
     index = _reserve_index(db)
     if not index[0] and not index[1]:
         return []
-    passing = dispatch_qty(db)
+    passing = apart_qty(db)
     out = []
     for p in db.query(models.Product).all():
         have = stock_qty(p, passing)
@@ -346,11 +366,11 @@ def dead_stock(db: Session, days: int = 60) -> list[tuple[models.Product, dateti
     since = datetime.now(timezone.utc) - timedelta(days=days)
     last_out = dict(db.query(models.Movement.sku, func.max(models.Movement.created_at))
                     .filter(models.Movement.type == "out").group_by(models.Movement.sku).all())
-    passing = dispatch_qty(db)
+    passing = apart_qty(db)
     out = []
     for p in db.query(models.Product).filter(models.Product.qty > 0).all():
         if stock_qty(p, passing) <= 0:
-            continue  # solo esta de paso
+            continue  # solo esta de paso o en el outlet
         last = last_out.get(p.sku)
         if last is not None and _aware(last) >= since:
             continue

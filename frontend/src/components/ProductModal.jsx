@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ToastContext'
-import { applyLocally, bumpStock, useReserve } from '../hooks/useApi'
-import { reserveIndex, stockSplit } from '../utils'
+import { applyLocally, bumpStock, useLayout, useReserve } from '../hooks/useApi'
+import { outletIdsOf, reserveIndex, stockSplit } from '../utils'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import MoveSheet from './MoveSheet'
 import Icon from './Icon'
@@ -29,6 +29,7 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
   const { close } = useSheet()
   const navigate = useNavigate()
   const { data: reserve } = useReserve()
+  const { data: layout } = useLayout()
   const [product, setProduct] = useState(null)
   const [form, setForm] = useState(null)
   const [armed, setArmed] = useState(false)
@@ -105,7 +106,7 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
     )
   }
 
-  const split = stockSplit(product, reserveIndex(reserve))
+  const split = stockSplit(product, reserveIndex(reserve), outletIdsOf(layout))
   const low = product.min_qty > 0 && split.bodega <= product.min_qty
   const places = product.stock?.some((s) => s.location_id === product.location_id)
     ? product.stock
@@ -131,6 +132,7 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
           <div><span>En la reserva</span><b>0</b></div>
         )}
         {split.passing > 0 && <div><span>De paso</span><b>{split.passing}</b></div>}
+        {split.outlet > 0 && <div className="outlet"><span>Outlet</span><b>{split.outlet}</b></div>}
       </div>
       <div className="prod-note">
         <span>{product.out_30d} {product.out_30d === 1 ? 'salió' : 'salieron'} en los últimos 30 días</span>

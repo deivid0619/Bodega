@@ -10,6 +10,7 @@ import ProductModal from '../components/ProductModal'
 import Icon from '../components/Icon'
 import { Count, ProductThumb, SearchField, plural } from '../components/Bits'
 import { locationGroups } from '../locationGroups'
+import { outletIdsOf, stockSplit } from '../utils'
 
 const STORAGE = ['bins', 'shelf', 'rack', 'boxes', 'table']
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
@@ -58,8 +59,9 @@ export default function Warehouse() {
   const [params, setParams] = useSearchParams()
   const navigate = useNavigate()
 
-  // en el 3D solo cuenta lo que esta en la bodega, no lo de paso (Despacho)
-  const units = useMemo(() => (products || []).reduce((s, p) => s + (p.stock || []).reduce((t, r) => t + (r.location_id === 'DESPACHO' ? 0 : r.qty), 0), 0), [products])
+  // en el 3D solo cuenta lo que esta en la bodega: no lo de paso (Despacho) ni el outlet
+  const outlet = useMemo(() => outletIdsOf(layout), [layout])
+  const units = useMemo(() => (products || []).reduce((s, p) => s + stockSplit(p, null, outlet).bodega, 0), [products, outlet])
   const withStock = useMemo(() => (products || []).filter((p) => p.qty > 0).length, [products])
   const needCount = useMemo(() => (products || []).filter((p) => p.min_qty > 0 && p.qty <= p.min_qty).length, [products])
   const groupsLoc = useMemo(() => locationGroups(layout?.elements), [layout])
@@ -141,6 +143,7 @@ export default function Warehouse() {
   // Todas las ubicaciones de una prenda marcadas en verde a la vez (no solo
   // una): "donde esta la XL", con cuantas hay en cada lugar
   const [marked, setMarked] = useState(null) // { sku, name, size, places: [{ id, qty }] }
+  const markedOutlet = (marked?.places || []).reduce((t, x) => t + (outlet.has(x.id) ? x.qty : 0), 0)
   const placesOf = (p) => (p.stock || []).filter((s) => s.qty > 0 && locIndex.has(s.location_id)).map((s) => ({ id: s.location_id, qty: s.qty }))
   const markProduct = (sku) => {
     const p = (products || []).find((x) => x.sku === sku)
@@ -335,7 +338,10 @@ export default function Warehouse() {
               <span className="wh-mark-ico"><Icon name="pin" size={16} stroke={2.2} /></span>
               <span className="wh-mark-t">
                 <b>{marked.name}{marked.size ? ` · ${marked.size}` : ''}</b>
-                <small>En {plural(marked.places.length, 'ubicación', 'ubicaciones')} · {plural(marked.places.reduce((t, x) => t + x.qty, 0), 'prenda', 'prendas')} · toca una para ver qué hay</small>
+                <small>
+                  En {plural(marked.places.length, 'ubicación', 'ubicaciones')} · {plural(marked.places.reduce((t, x) => t + x.qty, 0), 'prenda', 'prendas')}
+                  {markedOutlet > 0 && ` (${markedOutlet} en outlet)`} · toca una para ver qué hay
+                </small>
               </span>
               <button type="button" className="wh-mark-x" onClick={clearMarks} aria-label="Quitar las marcas"><Icon name="x" size={18} stroke={2.2} /></button>
             </div>

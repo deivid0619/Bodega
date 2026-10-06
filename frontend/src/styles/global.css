@@ -484,6 +484,14 @@ button.pill:active{transform:scale(.95)}
 .wh-mark-x{flex:none;width:36px;height:36px;border-radius:var(--r-xs);display:grid;place-items:center;color:#fff;background:rgba(255,255,255,.1)}
 .wh-result.all{background:var(--lime-soft)}
 .el-tag.under-mark{opacity:0;pointer-events:none}
+/* outlet: esta en la bodega pero no cuenta */
+.el-tag.outlet em{font:800 9.5px/1 var(--font);font-style:normal;letter-spacing:.06em;text-transform:uppercase;padding:3px 5px;margin-left:3px;border-radius:2px;background:var(--amber);color:#fff}
+.ref-split .outlet b,.ref-split .outlet{color:#A9480A}
+.code.dark.outlet{background:var(--amber-soft);color:#A9480A;box-shadow:inset 0 0 0 1px #F3C6A0}
+.code.dark.outlet svg{color:var(--amber)}
+.code.dark.outlet .code-n{color:#A9480A;border-left-color:#F3C6A0}
+.prod-split > .outlet b{color:#A9480A}
+.outlet-ctl > span small{display:block;margin-top:2px;font-size:12px;font-weight:500;color:var(--muted)}
 .loc-pin{pointer-events:none;display:flex;flex-direction:column;align-items:center;transform:translateY(-50%)}
 .loc-pin span{display:flex;align-items:center;gap:7px;height:32px;padding:0 13px 0 6px;border-radius:var(--r-xs);background:var(--lime);color:var(--ink);font:500 13px/1 var(--mono);box-shadow:0 10px 24px -8px rgba(0,0,0,.6),0 0 0 2px var(--ink);white-space:nowrap}
 .loc-pin span i{width:20px;height:20px;border-radius:2px;background:var(--ink);display:grid;place-items:center}

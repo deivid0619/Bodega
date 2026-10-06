@@ -43,7 +43,7 @@ def value(db: Session = Depends(get_db), _: models.User = Depends(get_current_us
     """Cuanto vale lo que hay, a precio de la tienda (solo los codigos que
     estan en la tienda; el resto se cuenta aparte)."""
     cat = catalog.items()
-    passing = inv.dispatch_qty(db)
+    passing = inv.apart_qty(db)  # lo de paso y el outlet no se cuentan
     out = {"available": bool(cat), "value": 0, "units_priced": 0, "units_total": 0,
            "reserve_value": 0, "reserve_units_priced": 0, "reserve_units_total": 0}
     for p in db.query(models.Product).filter(models.Product.qty > 0).all():

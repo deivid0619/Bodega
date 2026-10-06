@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { refreshInventory, useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../hooks/useApi'
+import { refreshInventory, useLayout, useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { api, ApiError } from '../api'
-import { downloadCsv, fmtTime, refKey } from '../utils'
+import { downloadCsv, fmtTime, outletIdsOf, refKey, stockSplit } from '../utils'
 import Icon from '../components/Icon'
 import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
@@ -23,6 +23,7 @@ export default function Summary() {
   const { data: top } = useTop()
   const { data: products } = useProducts()
   const { data: reserve } = useReserve()
+  const { data: layout } = useLayout()
   const { data: facturas } = usePolling('/api/documents?kind=factura&limit=5', { interval: 30000 })
   const { data: remisiones } = usePolling('/api/documents?kind=remision&limit=5', { interval: 30000 })
   const { data: passing } = usePolling('/api/reports/dispatch', { interval: 20000 })
@@ -34,13 +35,13 @@ export default function Summary() {
   const [demoOn, setDemoOn] = useState(null)
 
   const kpi = useMemo(() => ({
-    // lo que esta de paso (Despacho) no es de la bodega
-    units: (products || []).reduce((s, p) => s + p.qty, 0) - (passing || []).reduce((s, d) => s + d.qty, 0),
+    // lo de paso (Despacho) y el outlet no son de la bodega
+    units: (products || []).reduce((s, p) => s + stockSplit(p, null, outletIdsOf(layout)).bodega, 0),
     refs: new Set((products || []).map((p) => refKey(p.name))).size,
     reserve: (reserve || []).reduce((s, i) => s + i.qty, 0),
     needs: needs?.length || 0,
     toOrder: (needs || []).filter((n) => n.order_qty > 0).length,
-  }), [products, reserve, needs, passing])
+  }), [products, reserve, needs, layout])
   const maxTop = Math.max(1, ...(top || []).map((t) => t.qty_out))
   const date = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })
 

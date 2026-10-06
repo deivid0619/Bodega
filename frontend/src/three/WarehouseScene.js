@@ -1177,6 +1177,11 @@ export class WarehouseScene {
     div.className = 'el-tag solo'
     div.setAttribute('aria-label', members.map((m) => m.name).join(', '))
     div.innerHTML = `${members.map((m) => `<b>${m.code}</b>`).join('')}<span></span>`
+    // el mueble del outlet se distingue: lo que hay ahi no cuenta
+    if (members.some((m) => m.params?.outlet)) {
+      div.classList.add('outlet')
+      div.insertAdjacentHTML('beforeend', '<em>Outlet</em>')
+    }
     div.addEventListener('click', (e) => {
       e.stopPropagation()
       this.cb.onTapTag?.(el.id)
