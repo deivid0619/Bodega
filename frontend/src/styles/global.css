@@ -729,6 +729,15 @@ button.pill:active{transform:scale(.95)}
 button.doc-item{width:100%;text-align:left;transition:background-color 120ms ease}
 button.doc-item:active{background:var(--fog)}
 .see-all{margin:10px 4px 0}
+/* secciones plegables del resumen (movimientos) */
+.fold-btn{flex:1;display:flex;align-items:center;gap:10px;font:inherit;letter-spacing:inherit;color:inherit;text-align:left}
+.fold-btn small{margin-left:auto;font:600 12.5px var(--font);color:var(--muted);letter-spacing:0}
+.fold-btn > svg{flex:none;color:var(--muted);transition:transform 200ms var(--ease-out)}
+.fold-btn[aria-expanded="true"] > svg{transform:rotate(90deg)}
+@media (prefers-reduced-motion:reduce){.fold-btn > svg{transition:none}}
+.move-last{width:100%;display:flex;flex-direction:column;gap:3px;margin-top:-4px;padding:12px 14px;border-radius:var(--r-md);background:var(--paper);box-shadow:var(--sh-1);text-align:left;font-size:13.5px;color:var(--graphite)}
+.move-last b{color:var(--ink)}
+.move-last small{font-size:12px;color:var(--muted)}
 .doc-meta{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
 .doc-meta > div{padding:10px 12px;border-radius:var(--r-sm);background:var(--fog);min-width:0}
 .doc-meta span{display:block;font-size:12px;color:var(--muted);font-weight:600}
