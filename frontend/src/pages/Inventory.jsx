@@ -2,14 +2,13 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useLayout, useProducts, useReserve } from '../hooks/useApi'
 import { locationGroups } from '../locationGroups'
-import { reserveFor, reserveIndex, stockSplit } from '../utils'
+import { refCode, refKey, reserveFor, reserveIndex, stockSplit } from '../utils'
 import ProductModal from '../components/ProductModal'
 import Icon from '../components/Icon'
 import { Count, Empty, PageHead, ProductThumb, SearchField, plural } from '../components/Bits'
 
 const SIZE_ORDER = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', 'XXXL', '4XL']
 const sizeIdx = (s) => { const i = SIZE_ORDER.indexOf(s); return i < 0 ? 99 : i }
-const baseOf = (p) => (p.size && p.sku.endsWith(p.size) ? p.sku.slice(0, -p.size.length) : p.sku)
 const isLow = (p, qty = p.qty) => p.min_qty > 0 && qty <= p.min_qty
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim()
 
@@ -17,10 +16,10 @@ const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toU
 // de paso) y lo que hay guardado en la reserva; el total suma las dos.
 function groupProducts(list, index, reserveOnly) {
   const map = new Map()
-  for (const p of [...list].sort((a, b) => a.name.localeCompare(b.name) || baseOf(a).localeCompare(baseOf(b)) || sizeIdx(a.size) - sizeIdx(b.size))) {
-    const base = baseOf(p)
-    if (!map.has(base)) map.set(base, { base, name: p.name, image: null, items: [], bodega: 0, reserve: 0, passing: 0, locs: new Map() })
-    const g = map.get(base)
+  for (const p of [...list].sort((a, b) => a.name.localeCompare(b.name) || sizeIdx(a.size) - sizeIdx(b.size))) {
+    const key = refKey(p.name)
+    if (!map.has(key)) map.set(key, { base: key, name: p.name, image: null, items: [], bodega: 0, reserve: 0, passing: 0, locs: new Map() })
+    const g = map.get(key)
     const split = stockSplit(p, index)
     g.items.push({ key: p.sku, size: p.size, p, ...split })
     g.bodega += split.bodega
@@ -30,6 +29,7 @@ function groupProducts(list, index, reserveOnly) {
     for (const st of p.stock || []) g.locs.set(st.location_id, (g.locs.get(st.location_id) || 0) + st.qty)
   }
   const groups = [...map.values()]
+  for (const g of groups) g.code = refCode(g.items.map((x) => x.p.sku))
   // lo que solo esta en la reserva (ningun codigo de la bodega lo tiene) se
   // suma a la tarjeta de su referencia, o tiene una propia
   const byName = new Map(groups.map((g) => [norm(g.name), g]))
@@ -75,7 +75,7 @@ export default function Inventory() {
     return {
       units: list.reduce((s, p) => s + stockSplit(p).bodega, 0),
       reserve: (reserve || []).reduce((s, i) => s + i.qty, 0),
-      refs: new Set(list.map(baseOf)).size,
+      refs: new Set(list.map((p) => refKey(p.name))).size,
       low: list.filter((p) => isLow(p)).length,
       zero: list.filter((p) => p.qty === 0).length,
     }
@@ -110,7 +110,7 @@ export default function Inventory() {
                 <ProductThumb src={g.image} alt={g.name} />
                 <div style={{ minWidth: 0 }}>
                   <h3 className="ref-name">{g.name}</h3>
-                  <div className="ref-code">{g.onlyReserve ? <span className="tag tag-warn">Solo en la reserva</span> : <span className="code">{g.base}</span>}</div>
+                  <div className="ref-code">{g.onlyReserve ? <span className="tag tag-warn">Solo en la reserva</span> : <span className="code">{g.code}</span>}</div>
                 </div>
                 <div className="ref-total">
                   <b><Count value={g.bodega + g.reserve} /></b>

@@ -52,7 +52,7 @@ function FlowChart({ weeks }) {
       </div>
       <p className="flow-readout" aria-live="polite">
         <span>Semana del {weekLabel(a.week)}</span>
-        <b>{a.in}</b> entraron · <b>{a.out}</b> salieron
+        <b>{a.in}</b> {a.in === 1 ? 'entró' : 'entraron'} · <b>{a.out}</b> {a.out === 1 ? 'salió' : 'salieron'}
       </p>
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} className="flow-svg" role="img" aria-label="Prendas que entraron y salieron por semana">
         <line x1="0" x2={W} y1={base} y2={base} className="flow-base" />
@@ -128,7 +128,7 @@ export default function Reports() {
         ) : totals.in + totals.out > 0 ? (
           <div className="card panel-pad">
             <FlowChart weeks={weeks} />
-            <p className="flow-total">En 8 semanas entraron <b>{totals.in}</b> y salieron <b>{totals.out}</b> prendas.</p>
+            <p className="flow-total">En 8 semanas {totals.in === 1 ? 'entró' : 'entraron'} <b>{totals.in}</b> {totals.in === 1 ? 'prenda' : 'prendas'} y {totals.out === 1 ? 'salió' : 'salieron'} <b>{totals.out}</b>.</p>
           </div>
         ) : (
           <Empty icon="summary" title="Sin movimientos todavía">Cuando entren y salgan prendas, aquí verás cada semana.</Empty>

@@ -34,6 +34,13 @@ function placesText(res) {
   return `${verb} ${where}`
 }
 
+// donde quedo lo que se escaneo (no la ubicacion principal del codigo):
+// "C-1-2", o "C-1-1 +1" si salio de varias
+function movedAt(res) {
+  const where = [...new Set((res.movements?.length ? res.movements : [res.movement]).map((m) => m.location_id))]
+  return where.length > 1 ? `${where[0]} +${where.length - 1}` : where[0]
+}
+
 export default function Scan() {
   const { data: layout } = useLayout()
   const showToast = useToast()
@@ -249,7 +256,7 @@ export default function Scan() {
               <span className={`tag ${mv.type === 'out' ? 'tag-set' : 'tag-in'}`}>
                 {mv.type === 'in' ? `Entrada +${mv.qty}` : mv.type === 'out' ? `Salida −${mv.qty}` : mv.type === 'new' ? `Nuevo +${mv.qty}` : `Conteo ${lastMove.product.qty}`}
               </span>
-              <span className="code dark" style={{ background: 'rgba(255,255,255,.1)' }}><Icon name="pin" size={13} stroke={2.2} />{lastMove.product.location_id}</span>
+              <span className="code dark" style={{ background: 'rgba(255,255,255,.1)' }}><Icon name="pin" size={13} stroke={2.2} />{movedAt(lastMove)}</span>
             </div>
             <h3 className="result-name">{lastMove.product.name}</h3>
             <div className="result-code mono">{lastMove.product.sku}</div>

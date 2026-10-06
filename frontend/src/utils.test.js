@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { reserveFor, reserveIndex, stockSplit } from './utils'
+import { refCode, refKey, reserveFor, reserveIndex, stockSplit } from './utils'
+
+// Una referencia son sus tallas con el mismo nombre: en los codigos de
+// Pigmalion la talla va en la mitad (PGPRBI070SFEM), no al final
+describe('referencia y su codigo comun', () => {
+  it('agrupa por nombre aunque cambien tildes, mayusculas o espacios', () => {
+    expect(refKey('Chaqueta  Moto Fénix Mujer')).toBe(refKey('CHAQUETA MOTO FENIX MUJER'))
+  })
+  it('muestra la parte comun de los codigos de sus tallas', () => {
+    expect(refCode(['PGPRBI070SFEM', 'PGPRBI070MFEM', 'PGPRBI070XLFEM'])).toBe('PGPRBI070')
+    expect(refCode(['CORT-ESS-S', 'CORT-ESS-M'])).toBe('CORT-ESS')
+    expect(refCode(['PGPRBI070SFEM'])).toBe('PGPRBI070SFEM')
+    expect(refCode(['AB1', 'XY2'])).toBe('AB1') // nada en comun: el primero
+  })
+})
 
 // Cuanto hay de una prenda: bodega (sin lo de paso) + reserva = total.
 // La reserva se cruza por codigo o, si se guardo sin codigo, por referencia

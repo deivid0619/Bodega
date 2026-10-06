@@ -31,6 +31,21 @@ export function fmtTime(iso) {
   return dt.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '')
 }
 
+// Una referencia son todas las tallas con el mismo nombre. No se saca del
+// codigo: en los de Pigmalion la talla va en la mitad (PGPRBI070SFEM), no
+// al final, y agrupar por codigo dejaba cada talla como otra referencia.
+export const refKey = (name) => String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim()
+
+// La parte comun de los codigos de una referencia (PGPRBI070SFEM y
+// PGPRBI070MFEM -> PGPRBI070), para mostrarla en la tarjeta
+export function refCode(skus) {
+  if (skus.length < 2) return skus[0] || ''
+  let pre = skus[0]
+  for (const s of skus) while (!s.startsWith(pre)) pre = pre.slice(0, -1)
+  pre = pre.replace(/[-_. ]+$/, '')
+  return pre.length >= 4 ? pre : skus[0]
+}
+
 // Lo que hay de un codigo en la reserva: con su codigo o, si se guardo sin
 // codigo, con la misma referencia y talla (igual que en el servidor).
 export function reserveIndex(items) {

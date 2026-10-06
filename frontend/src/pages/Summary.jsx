@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import { refreshInventory, useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { api, ApiError } from '../api'
-import { downloadCsv, fmtTime } from '../utils'
+import { downloadCsv, fmtTime, refKey } from '../utils'
 import Icon from '../components/Icon'
 import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
@@ -14,7 +14,6 @@ import { Count, Empty, PageHead, plural } from '../components/Bits'
 const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
 const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
 const today = () => new Date().toISOString().slice(0, 10)
-const baseOf = (p) => (p.size && p.sku.endsWith(p.size) ? p.sku.slice(0, -p.size.length) : p.sku)
 
 export default function Summary() {
   const { isAdmin } = useAuth()
@@ -37,7 +36,7 @@ export default function Summary() {
   const kpi = useMemo(() => ({
     // lo que esta de paso (Despacho) no es de la bodega
     units: (products || []).reduce((s, p) => s + p.qty, 0) - (passing || []).reduce((s, d) => s + d.qty, 0),
-    refs: new Set((products || []).map(baseOf)).size,
+    refs: new Set((products || []).map((p) => refKey(p.name))).size,
     reserve: (reserve || []).reduce((s, i) => s + i.qty, 0),
     needs: needs?.length || 0,
     toOrder: (needs || []).filter((n) => n.order_qty > 0).length,
@@ -99,7 +98,7 @@ export default function Summary() {
 
         <div className="kpis">
           <div className="kpi dark"><b>{products ? <Count value={kpi.units} /> : '–'}</b><span>prendas en bodega</span></div>
-          <div className="kpi"><b>{products ? <Count value={kpi.refs} /> : '–'}</b><span>referencias</span></div>
+          <div className="kpi"><b>{products ? <Count value={kpi.refs} /> : '–'}</b><span>{kpi.refs === 1 ? 'referencia' : 'referencias'}</span></div>
           <button className="kpi" onClick={() => navigate('/reserve')}><b>{reserve ? <Count value={kpi.reserve} /> : '–'}</b><span>en reserva</span></button>
           <a className={`kpi ${kpi.needs ? 'warn' : ''}`} href="#reponer" style={{ textDecoration: 'none', color: 'inherit' }}>
             <b>{needs ? <Count value={kpi.needs} /> : '–'}</b><span>por reponer</span>
@@ -179,7 +178,7 @@ export default function Summary() {
                       )}
                       {r.notes && <small className="note">{r.notes}</small>}
                     </span>
-                    <span className="need-q"><b>{r.units}</b><span>entraron</span></span>
+                    <span className="need-q"><b>{r.units}</b><span>{r.units === 1 ? 'entró' : 'entraron'}</span></span>
                   </button>
                 )
               })}
@@ -200,7 +199,7 @@ export default function Summary() {
                     <b className="mono">{f.number}</b>
                     <small>{plural(f.lines.length, 'referencia', 'referencias')} · {f.user_name} · {fmtTime(f.created_at)}</small>
                   </span>
-                  <span className="need-q dark"><b>{f.units}</b><span>salieron</span></span>
+                  <span className="need-q dark"><b>{f.units}</b><span>{f.units === 1 ? 'salió' : 'salieron'}</span></span>
                 </button>
               ))}
             </div>
