@@ -5,6 +5,7 @@ enviando la misma referencia al tiempo no se pisen)."""
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from .. import catalog
 from .. import inventory_service as inv
 from .. import models, push, schemas
 from .. import serializers as ser
@@ -40,6 +41,75 @@ def create_reserve(payload: schemas.ReserveItemCreateIn, db: Session = Depends(g
     db.commit()
     db.refresh(item)
     return item
+
+
+# ---- escanear para la reserva: igual que una entrada, pero sin ubicacion ----
+def _norm_sku(sku: str) -> str:
+    return "".join(str(sku or "").upper().split())
+
+
+def _identify(db: Session, sku: str) -> dict | None:
+    """Nombre y talla de un codigo: el de la bodega y, si todavia no esta
+    registrado, el de la tienda (el codigo de la etiqueta es el mismo)."""
+    p = db.get(models.Product, sku)
+    if p:
+        return {"name": p.name, "size": p.size or "", "image": p.image_url, "source": "bodega"}
+    hit = catalog.lookup(sku)
+    if hit:
+        return {"name": hit["name"].strip().upper(), "size": (hit.get("size") or "").strip().upper(),
+                "image": hit.get("image"), "source": "tienda"}
+    # un codigo que solo existe en la reserva (se escribio a mano la primera vez)
+    item = db.query(models.ReserveItem).filter(models.ReserveItem.sku == sku).order_by(models.ReserveItem.id).first()
+    if item:
+        return {"name": item.name, "size": item.size or "", "image": None, "source": "reserva"}
+    return None
+
+
+def _item_for(db: Session, sku: str, name: str, size: str, lock: bool = False):
+    """Lo que ya hay en la reserva de ese codigo; o lo que se guardo a mano sin
+    codigo con la misma referencia y talla (asi no queda repetido)."""
+    q = db.query(models.ReserveItem)
+    if lock:
+        q = q.with_for_update()
+    item = q.filter(models.ReserveItem.sku == sku).order_by(models.ReserveItem.id).first()
+    if not item:
+        item = q.filter(models.ReserveItem.sku.is_(None), models.ReserveItem.name == name,
+                        models.ReserveItem.size == size).order_by(models.ReserveItem.id).first()
+    return item
+
+
+NOT_FOUND = "Ese código no está en la bodega ni en la tienda: escribe la referencia."
+
+
+@router.get("/identify/{sku}", response_model=schemas.ReserveIdentifyOut)
+def identify(sku: str, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Que prenda es (sin guardar nada), para la lista "Por confirmar"."""
+    sku = _norm_sku(sku)
+    who = _identify(db, sku)
+    if not who:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
+    item = _item_for(db, sku, who["name"], who["size"])
+    return schemas.ReserveIdentifyOut(sku=sku, in_reserve=item.qty if item else 0, **who)
+
+
+@router.post("/scan", response_model=schemas.ReserveScanOut)
+def scan_in(payload: schemas.ReserveScanIn, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Suma a la reserva lo escaneado: a lo que ya habia de ese codigo, o
+    nuevo con el nombre y la talla de la bodega o de la tienda."""
+    sku = _norm_sku(payload.sku)
+    who = _identify(db, sku)  # puede ir a la tienda: antes de bloquear nada
+    if not who:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, NOT_FOUND)
+    item = _item_for(db, sku, who["name"], who["size"], lock=True)
+    created = item is None
+    if created:
+        item = models.ReserveItem(sku=sku, name=who["name"], size=who["size"], qty=0)
+        db.add(item)
+    item.sku = sku
+    item.qty += payload.qty
+    db.commit()
+    db.refresh(item)
+    return schemas.ReserveScanOut(item=item, added=payload.qty, created=created, source=who["source"])
 
 
 @router.patch("/{item_id}", response_model=schemas.ReserveItemOut)

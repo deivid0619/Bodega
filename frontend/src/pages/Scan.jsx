@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api'
-import { moveStock, refreshInventory, useLayout } from '../hooks/useApi'
+import { moveStock, refreshInventory, setReserveQty, useLayout } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { locationGroups } from '../locationGroups'
 import NewProductModal from '../components/NewProductModal'
+import NewReserveModal from '../components/NewReserveModal'
 import FacturaSheet from '../components/FacturaSheet'
 import RemisionSheet from '../components/RemisionSheet'
 import ParcelSheet from '../components/ParcelSheet'
@@ -20,8 +21,9 @@ const MODES = [
   { m: 'in', label: 'Entrada', icon: 'boxIn', hint: 'Cada código suma prendas a su ubicación.' },
   { m: 'out', label: 'Salida', icon: 'boxOut', hint: 'Cada código descuenta prendas: ventas y despachos.' },
   { m: 'set', label: 'Conteo', icon: 'equals', hint: 'Cada código reemplaza el total por lo que contaste.' },
+  { m: 'reserve', label: 'Reserva', icon: 'reserve', hint: 'Cada código se guarda en la reserva, aparte y sin ubicación. Se identifica solo, aunque no esté registrado en la bodega.' },
 ]
-const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
+const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado', reserve: 'A la reserva' }
 
 const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
 const signed = (n) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0')
@@ -87,7 +89,12 @@ function ScanHit({ hit, tally, onUndo }) {
         <span className="vf-hit-t">
           <b>{hit.name}{hit.size ? ` · ${hit.size}` : ''}</b>
           {hit.pending ? (
-            <small>Por confirmar · llevas {signed(hit.type === 'out' ? -hit.lineQty : hit.lineQty)}{hit.n > 1 ? ` (${hit.n} lecturas)` : ''}</small>
+            <small>
+              Por confirmar · llevas {signed(hit.type === 'out' ? -hit.lineQty : hit.lineQty)}{hit.n > 1 ? ` (${hit.n} lecturas)` : ''}
+              {hit.type === 'reserve' && (hit.inReserve ? ` · en la reserva hay ${hit.inReserve}` : ' · nueva en la reserva')}
+            </small>
+          ) : hit.type === 'reserve' ? (
+            <small>Guardada en la reserva · ahí hay {hit.total}{hit.created ? ' (nueva)' : ''}</small>
           ) : (
             <small>
               {tally && `${tally.n === 1 ? '1 vez' : `${tally.n} veces`} en esta sesión · llevas ${signed(tally.net)} · `}hay {hit.total}
@@ -105,10 +112,12 @@ function ScanHit({ hit, tally, onUndo }) {
 export default function Scan() {
   const { data: layout } = useLayout()
   const showToast = useToast()
-  const [mode, setMode] = useState('in')
+  // desde la reserva se llega con ?modo=reserva
+  const [mode, setMode] = useState(() => (new URLSearchParams(window.location.search).get('modo') === 'reserva' ? 'reserve' : 'in'))
   const [qty, setQty] = useState(1)
   const [manual, setManual] = useState('')
   const [pendingSku, setPendingSku] = useState(null)
+  const [newReserve, setNewReserve] = useState(null) // { sku, qty }: no esta en la bodega ni en la tienda
   const [lastMove, setLastMove] = useState(null)
   const [factura, setFactura] = useState(false)
   const [remision, setRemision] = useState(false)
@@ -188,7 +197,7 @@ export default function Scan() {
   const firstLoc = groups[0]?.options[0]?.id || ''
 
   const pendingRef = useRef(null)
-  pendingRef.current = pendingSku
+  pendingRef.current = pendingSku || newReserve?.sku || null
 
   // un solo viaje al servidor por codigo: si no existe, responde 404 y se
   // ofrece registrarlo
@@ -196,6 +205,17 @@ export default function Scan() {
     const sku = String(raw || '').trim().toUpperCase().replace(/\s+/g, '')
     if (!sku || pendingRef.current || savingRef.current) return
     try {
+      if (mode === 'reserve') {
+        // se identifica sola: de la bodega o, si no esta registrada, de la tienda
+        if (staged) {
+          stageReserve(await api.get(`/api/reserve/identify/${encodeURIComponent(sku)}`))
+        } else {
+          recordReserve(await api.post('/api/reserve/scan', { sku, qty }), true)
+        }
+        beep(true)
+        afterRead()
+        return
+      }
       if (staged) {
         // no se guarda nada todavia: solo se busca la prenda para la lista
         const p = await api.get(`/api/products/${encodeURIComponent(sku)}`)
@@ -213,7 +233,8 @@ export default function Scan() {
       if (e instanceof ApiError && e.status === 404) {
         beep(true)
         pendingRef.current = sku
-        setPendingSku(sku)
+        if (mode === 'reserve') setNewReserve({ sku, qty })
+        else setPendingSku(sku)
         return
       }
       beep(false)
@@ -232,6 +253,49 @@ export default function Scan() {
     const parts = res.movements?.length ? [...res.movements].reverse() : [res.movement]
     setSession((s) => [...parts, ...s].slice(0, 25))
     count(res.movements?.length ? res.movements : [res.movement])
+  }
+
+  // lo guardado en la reserva, en "En esta sesion" (y encima de la camara)
+  const recordReserve = (res, show = false) => {
+    const it = res.item
+    const at = Date.now()
+    const id = `r${it.id}-${at}`
+    setSession((s) => [{ id, type: 'reserve', qty: res.added, product_name: it.name, product_size: it.size,
+                         location_id: 'reserva', after: it.qty, created_at: new Date(at).toISOString() }, ...s].slice(0, 25))
+    if (show) {
+      setHit((prev) => ({
+        id, reserveId: it.id, type: 'reserve', qty: res.added, sku: it.sku, name: it.name, size: it.size, total: it.qty,
+        created: res.created, at, repeat: !!prev && !prev.err && prev.sku === it.sku && at - prev.at < 8000,
+      }))
+    }
+    refreshInventory()
+  }
+
+  // "Deshacer" de algo guardado en la reserva: se le quita lo que se sumo
+  const undoReserve = async (h) => {
+    try {
+      await setReserveQty({ id: h.reserveId }, Math.max(0, h.total - h.qty))
+      setSession((s) => s.filter((m) => m.id !== h.id))
+      setHit(null)
+      showToast('Deshecho: se quitó de la reserva')
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No se pudo deshacer.', 'err')
+    }
+  }
+
+  // una lectura para la reserva a la lista "Por confirmar"
+  const stageReserve = (who) => {
+    const key = `reserve|${who.sku}|`
+    const list = toConfirmRef.current
+    const old = list.find((l) => l.key === key)
+    const line = { key, type: 'reserve', sku: who.sku, name: who.name, size: who.size, loc: '', inReserve: who.in_reserve,
+                   qty: (old?.qty || 0) + qty, n: (old?.n || 0) + 1, edited: old?.edited }
+    setToConfirm([line, ...list.filter((l) => l.key !== key)])
+    const at = Date.now()
+    setHit((prev) => ({
+      pending: true, key, type: 'reserve', qty, sku: who.sku, name: who.name, size: who.size, lineQty: line.qty, n: line.n,
+      inReserve: who.in_reserve, at, repeat: !!prev && !prev.err && prev.sku === who.sku && at - prev.at < 8000,
+    }))
   }
 
   // una lectura a la lista: el mismo codigo (y tipo y lugar) se va sumando
@@ -288,7 +352,10 @@ export default function Scan() {
       const parts = l.type === 'out' ? outParts(l.qty, l.loc || l.from || '', l) : [{ qty: l.qty, loc: l.loc }]
       let done = 0
       try {
-        for (const part of parts) {
+        if (l.type === 'reserve') {
+          recordReserve(await api.post('/api/reserve/scan', { sku: l.sku, qty: l.qty }))
+          done = l.qty
+        } else for (const part of parts) {
           record(await moveStock(l.sku, l.type, part.qty, part.loc || undefined))
           done += part.qty
         }
@@ -338,10 +405,10 @@ export default function Scan() {
   // con un formulario encima (prenda nueva, factura, remision, algo de paso) la camara y
   // la linterna se apagan; al cerrar la prenda nueva, se vuelve a abrir
   const resumeRef = useRef(false)
-  const covered = !!pendingSku || factura || remision || parcel
+  const covered = !!pendingSku || !!newReserve || factura || remision || parcel
   useEffect(() => {
     if (covered && camOn) {
-      resumeRef.current = !!pendingSku
+      resumeRef.current = !!pendingSku || !!newReserve
       stop()
     } else if (!covered && resumeRef.current) {
       resumeRef.current = false
@@ -396,7 +463,7 @@ export default function Scan() {
           </button>
         </div>
 
-        <div className="seg" role="toolbar" aria-label="Tipo de movimiento">
+        <div className="seg four" role="toolbar" aria-label="Tipo de movimiento">
           {MODES.map((x) => (
             <button key={x.m} data-m={x.m} aria-pressed={mode === x.m} onClick={() => { setMode(x.m); if (x.m !== 'set' && qty < 1) setQty(1) }}>
               <Icon name={x.icon} size={18} stroke={2.1} />{x.label}
@@ -430,7 +497,10 @@ export default function Scan() {
 
         <Viewfinder
           scanner={scanner}
-          overlay={hit && <ScanHit hit={hit} tally={hit.sku && tally[hit.sku]} onUndo={() => (hit.pending ? unstage(hit.key, hit.qty) : undo(hit.id))} />}
+          overlay={hit && (
+            <ScanHit hit={hit} tally={hit.sku && tally[hit.sku]}
+                     onUndo={() => (hit.pending ? unstage(hit.key, hit.qty) : hit.type === 'reserve' ? undoReserve(hit) : undo(hit.id))} />
+          )}
         />
         <button className={`btn btn-lg btn-block ${camOn ? 'btn-ink' : 'btn-lime'}`} style={{ marginTop: 12 }} onClick={() => (camOn ? stop() : start())}>
           <Icon name={camOn ? 'x' : 'camera'} size={20} />{camOn ? 'Cerrar cámara' : 'Escanear con la cámara'}
@@ -451,7 +521,8 @@ export default function Scan() {
               )}
               <button type="button" className="btn btn-lime" onClick={confirmAll} disabled={saving || missingFrom > 0}>
                 <Icon name="check" size={18} stroke={2.4} />
-                {saving ? 'Guardando…' : toConfirmTypes.size > 1 ? 'Confirmar' : toConfirmTypes.has('out') ? 'Confirmar salida' : 'Confirmar entrada'}
+                {saving ? 'Guardando…' : toConfirmTypes.size > 1 ? 'Confirmar'
+                  : toConfirmTypes.has('out') ? 'Confirmar salida' : toConfirmTypes.has('reserve') ? 'Guardar en la reserva' : 'Confirmar entrada'}
               </button>
             </div>
             {toConfirm.map((l) => {
@@ -462,8 +533,11 @@ export default function Scan() {
                 <div className="need-t">
                   <b>{l.name}{l.size ? ` · ${l.size}` : ''}</b>
                   <small>
-                    <span className={`to-confirm-type ${l.type}`}>{l.type === 'out' ? 'Salida' : 'Entrada'}</span>
-                    {l.type === 'out' ? ' de ' : ' en '}{l.loc || (l.type === 'out' ? (l.from || 'donde haya') : l.main)} · {l.edited ? 'cantidad ajustada' : plural(l.n, 'lectura', 'lecturas')}
+                    <span className={`to-confirm-type ${l.type}`}>{l.type === 'out' ? 'Salida' : l.type === 'reserve' ? 'Reserva' : 'Entrada'}</span>
+                    {l.type === 'reserve'
+                      ? (l.inReserve ? ` · ya hay ${l.inReserve}` : ' · nueva')
+                      : <>{l.type === 'out' ? ' de ' : ' en '}{l.loc || (l.type === 'out' ? (l.from || 'donde haya') : l.main)}</>}
+                    {' · '}{l.edited ? 'cantidad ajustada' : plural(l.n, 'lectura', 'lecturas')}
                   </small>
                   {l.err ? <small className="to-confirm-msg">{l.err}</small>
                     : have != null && l.qty > have && <small className="to-confirm-msg">Solo hay {have}</small>}
@@ -511,7 +585,7 @@ export default function Scan() {
           </Stepper>
         </div>
 
-        <label className="field">
+        {mode !== 'reserve' && <label className="field">
           <span className="field-label">¿Dónde?</span>
           <select className="input" value={place || ''} onChange={(e) => setPlace(e.target.value)}>
             <option value="">Automática: la ubicación principal de cada código</option>
@@ -528,7 +602,7 @@ export default function Scan() {
                 : staged ? 'Si la prenda está en varios lugares, en la lista eliges de cuál salió.' : 'Sale primero de la ubicación principal y, si no alcanza, de donde haya.'
               : place ? `Lo que escanees ${mode === 'set' ? 'se cuenta' : 'entra'} en ${place}.` : `Cada código ${mode === 'set' ? 'se cuenta' : 'entra'} en su ubicación principal.`}
           </span>
-        </label>
+        </label>}
 
         <div className="manual">
           <input
@@ -589,7 +663,7 @@ export default function Scan() {
                 <div className="move-q">{qtyText(m)}</div>
                 <div className="move-t">
                   <b>{m.product_name}{m.product_size ? ` · ${m.product_size}` : ''}</b>
-                  <small>{LABEL[m.type]} en {m.location_id} · quedan {m.after}</small>
+                  <small>{m.type === 'reserve' ? `A la reserva · ahí hay ${m.after}` : `${LABEL[m.type]} en ${m.location_id} · quedan ${m.after}`}</small>
                 </div>
                 <time dateTime={m.created_at} title={new Date(m.created_at).toLocaleString('es-CO')}>{fmtTime(m.created_at)}</time>
               </li>
@@ -603,6 +677,14 @@ export default function Scan() {
       {factura && <FacturaSheet onClose={() => setFactura(false)} />}
       {remision && <RemisionSheet onClose={() => setRemision(false)} />}
       {parcel && <ParcelSheet defaultLocation={place || undefined} onClose={() => setParcel(false)} />}
+      {newReserve && (
+        <NewReserveModal
+          sku={newReserve.sku}
+          defaultQty={newReserve.qty}
+          onClose={() => setNewReserve(null)}
+          onCreated={(item) => recordReserve({ item, added: item.qty, created: true }, true)}
+        />
+      )}
       {pendingSku && (
         <NewProductModal
           sku={pendingSku}

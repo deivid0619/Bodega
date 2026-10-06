@@ -263,6 +263,28 @@ class ReserveItemCreateIn(BaseModel):
     qty: int = Field(ge=0, default=0)
 
 
+class ReserveScanIn(BaseModel):
+    """Una etiqueta escaneada para la reserva: se identifica sola."""
+    sku: str = Field(min_length=1, max_length=64)
+    qty: int = Field(gt=0, le=9999, default=1)
+
+
+class ReserveIdentifyOut(BaseModel):
+    sku: str
+    name: str
+    size: str
+    image: Optional[str] = None
+    source: Literal["bodega", "tienda", "reserva"]  # de donde salio el nombre
+    in_reserve: int = 0  # cuantas hay ya guardadas de ese codigo
+
+
+class ReserveScanOut(BaseModel):
+    item: ReserveItemOut
+    added: int
+    created: bool  # el codigo no estaba en la reserva
+    source: Literal["bodega", "tienda", "reserva"]
+
+
 class ReserveItemUpdateIn(BaseModel):
     sku: Optional[str] = None
     name: Optional[str] = None

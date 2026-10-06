@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { refreshInventory, setReserveQty, useLayout, useReserve, useRestock } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
@@ -61,6 +62,7 @@ export default function Reserve() {
   const { data: restock } = useRestock()
   const { data: layout } = useLayout()
   const showToast = useToast()
+  const navigate = useNavigate()
   const [adding, setAdding] = useState(false)
   const [sending, setSending] = useState(null)
   const [done, setDone] = useState(() => new Set())
@@ -105,8 +107,12 @@ export default function Reserve() {
           </>
         )}
 
-        <button className="btn btn-lime btn-lg btn-block" style={{ marginTop: 16 }} onClick={() => setAdding(true)}>
-          <Icon name="plus" size={20} stroke={2.4} />Agregar a la reserva
+        {/* como una entrada: se escanea y la prenda se identifica sola */}
+        <button className="btn btn-lime btn-lg btn-block" style={{ marginTop: 16 }} onClick={() => navigate('/scan?modo=reserva')}>
+          <Icon name="scan" size={20} stroke={2.2} />Escanear para la reserva
+        </button>
+        <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={() => setAdding(true)}>
+          <Icon name="plus" size={18} stroke={2.4} />Agregar a mano (sin etiqueta)
         </button>
 
         <h2 className="h-sec">Lo que hay guardado</h2>

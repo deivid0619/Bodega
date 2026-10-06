@@ -3,25 +3,45 @@ import { api, ApiError } from '../api'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 
-function Form({ onCreated }) {
+// sku: un codigo escaneado que no esta en la bodega ni en la tienda (hay
+// que escribir la referencia). Sin sku: agregar a mano; si se escribe un
+// codigo, se busca solo como al escanear.
+function Form({ sku: scanned = '', defaultQty = 1, onCreated }) {
   const showToast = useToast()
   const { close } = useSheet()
   const [name, setName] = useState('')
   const [size, setSize] = useState('')
-  const [qty, setQty] = useState(1)
-  const [sku, setSku] = useState('')
+  const [qty, setQty] = useState(defaultQty)
+  const [sku, setSku] = useState(scanned)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [found, setFound] = useState(null)
+
+  const identify = async () => {
+    const code = sku.trim().toUpperCase()
+    if (!code || code === scanned) return
+    try {
+      const who = await api.get(`/api/reserve/identify/${encodeURIComponent(code)}`)
+      setFound(who)
+      setName(who.name)
+      setSize(who.size)
+    } catch {
+      setFound(null)
+    }
+  }
 
   const submit = async (e) => {
     e.preventDefault()
     if (!name.trim()) return setError('Escribe la referencia.')
     setBusy(true)
     try {
-      const item = await api.post('/api/reserve', {
-        name: name.trim().toUpperCase(), size: size.trim().toUpperCase(),
-        qty: Number(qty), sku: sku.trim().toUpperCase() || undefined,
-      })
+      // un codigo conocido se suma a lo que ya haya en la reserva (no se repite)
+      const item = found && Number(qty) > 0
+        ? (await api.post('/api/reserve/scan', { sku: found.sku, qty: Number(qty) })).item
+        : await api.post('/api/reserve', {
+          name: name.trim().toUpperCase(), size: size.trim().toUpperCase(),
+          qty: Number(qty), sku: sku.trim().toUpperCase() || undefined,
+        })
       showToast(`${item.name} ${item.size} guardada en la reserva`)
       onCreated(item)
       close()
@@ -34,11 +54,30 @@ function Form({ onCreated }) {
 
   return (
     <>
-      <SheetHeader title="Agregar a la reserva" subtitle="Mercancía guardada aparte, sin ubicación todavía. Después la envías a un perchero o canasta." />
+      <SheetHeader
+        eyebrow={scanned ? <div className="sheet-eyebrow"><span className="tag tag-in">Código nuevo</span><span className="code">{scanned}</span></div> : null}
+        title="Agregar a la reserva"
+        subtitle={scanned
+          ? 'Este código no está en la bodega ni en la tienda: escribe la referencia y la talla.'
+          : 'Mercancía guardada aparte, sin ubicación todavía. Después la envías a un perchero o canasta.'}
+      />
       <form onSubmit={submit}>
-        <label className="field" style={{ marginTop: 0 }}>
+        {!scanned && (
+          <label className="field" style={{ marginTop: 0 }}>
+            <span className="field-label">Código (si tiene etiqueta)</span>
+            <input className="input mono" value={sku} onChange={(e) => { setSku(e.target.value); setFound(null) }} onBlur={identify}
+                   placeholder="Escríbelo y se busca solo" autoCapitalize="characters" />
+            {found && (
+              <span className="field-hint">
+                {found.source === 'reserva' ? 'Ya está en la reserva' : `Encontrada en la ${found.source}`}
+                {found.in_reserve ? ` · ya hay ${found.in_reserve} guardadas: se suman` : ''}
+              </span>
+            )}
+          </label>
+        )}
+        <label className="field" style={scanned ? { marginTop: 0 } : undefined}>
           <span className="field-label">Referencia</span>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Chaqueta Fenix Black Fem" autoFocus />
+          <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ej. Chaqueta Fenix Black Fem" autoFocus={!!scanned} />
         </label>
         <div className="grid-2">
           <label className="field">
@@ -50,10 +89,6 @@ function Form({ onCreated }) {
             <input className="input" type="number" min="0" inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} />
           </label>
         </div>
-        <label className="field">
-          <span className="field-label">Código (opcional)</span>
-          <input className="input mono" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="Si ya lo sabes" autoCapitalize="characters" />
-        </label>
         {error && <p className="form-err" role="alert">{error}</p>}
         <div className="btn-row">
           <button type="button" className="btn btn-ghost" onClick={() => close()}>Cancelar</button>
@@ -64,10 +99,10 @@ function Form({ onCreated }) {
   )
 }
 
-export default function NewReserveModal({ onClose, onCreated }) {
+export default function NewReserveModal({ onClose, ...props }) {
   return (
     <Sheet modal onClose={onClose} label="Agregar a la reserva">
-      <Form onCreated={onCreated} />
+      <Form {...props} />
     </Sheet>
   )
 }
