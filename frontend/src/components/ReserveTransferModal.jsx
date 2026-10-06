@@ -3,7 +3,7 @@ import { api, ApiError } from '../api'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import { LocationSelect } from './ProductModal'
-import { Stepper } from './Bits'
+import { ProductThumb, Stepper } from './Bits'
 
 function Form({ item, locations, onDone }) {
   const showToast = useToast()
@@ -40,6 +40,9 @@ function Form({ item, locations, onDone }) {
         title="Enviar a la bodega"
         subtitle={`${item.name}${item.size ? ` · talla ${item.size}` : ''} · hay ${item.qty} en reserva`}
       />
+      {item.image_url && (
+        <div className="transfer-photo"><ProductThumb src={item.image_url} alt={item.name} size="lg" /></div>
+      )}
       <form onSubmit={submit}>
         {!item.sku && (
           <label className="field" style={{ marginTop: 0 }}>

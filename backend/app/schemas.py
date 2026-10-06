@@ -252,6 +252,7 @@ class ReserveItemOut(BaseModel):
     name: str
     size: str
     qty: int
+    image_url: Optional[str] = None
     created_at: UtcDatetime
     updated_at: UtcDatetime
 

@@ -155,6 +155,7 @@ class ReserveItem(Base):
     name = Column(String(200), nullable=False)
     size = Column(String(20), nullable=False, default="")
     qty = Column(Integer, nullable=False, default=0)
+    image_url = Column(String(500), nullable=True)  # la foto de la tienda (o de la bodega)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 

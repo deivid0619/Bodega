@@ -47,7 +47,8 @@ def test_a_code_only_in_the_store_and_a_manual_item_without_code(monkeypatch):
         h = _h(client)
         sku = f"TIENDA{uuid.uuid4().hex[:6].upper()}"
         name = f"PANTALON TIENDA {sku[-6:]}"
-        store = {sku: {"sku": sku, "name": name, "size": "M", "price": 1, "image": None}}
+        photo = "https://cdn.example.com/pantalon.jpg"
+        store = {sku: {"sku": sku, "name": name, "size": "M", "price": 1, "image": photo}}
         monkeypatch.setattr(catalog, "lookup", lambda code, fetch=True: store.get(code))
 
         # lo que se guardo a mano sin codigo, con la misma referencia y talla
@@ -55,6 +56,12 @@ def test_a_code_only_in_the_store_and_a_manual_item_without_code(monkeypatch):
         r = client.post("/api/reserve/scan", headers=h, json={"sku": sku}).json()
         assert r["source"] == "tienda" and not r["created"]
         assert r["item"]["id"] == manual["id"] and r["item"]["qty"] == 5 and r["item"]["sku"] == sku
+        # con la foto de la tienda, y al enviarla a la bodega llega con su foto
+        assert r["item"]["image_url"] == photo
+        t = client.post(f"/api/reserve/{manual['id']}/transfer", headers=h, json={"qty": 1, "location_id": "C-1-1"})
+        assert t.status_code == 200, t.text
+        assert t.json()["product"]["image_url"] == photo
+        assert client.delete(f"/api/products/{sku}", headers=h).status_code == 204
 
         # solo en la reserva (escrito a mano con su codigo): se reconoce, no se repite
         only = client.post("/api/reserve", headers=h, json={"sku": f"SOLO{sku}", "name": "GUANTE SOLO RESERVA", "qty": 1}).json()
@@ -68,3 +75,17 @@ def test_a_code_only_in_the_store_and_a_manual_item_without_code(monkeypatch):
         assert client.get("/api/reserve/identify/NOEXISTE123", headers=h).status_code == 404
 
         _cleanup(client, h, [manual["id"]])
+
+
+def test_old_reserve_items_get_their_photo(monkeypatch):
+    with TestClient(app) as client:
+        h = _h(client)
+        sku = f"VIEJA{uuid.uuid4().hex[:6].upper()}"
+        photo = "https://cdn.example.com/vieja.jpg"
+        # guardada antes, sin foto
+        item = client.post("/api/reserve", headers=h, json={"sku": sku, "name": "CHAQUETA VIEJA", "size": "S", "qty": 1}).json()
+        assert item["image_url"] is None
+        monkeypatch.setattr(catalog, "lookup", lambda code, fetch=True: {"image": photo} if code == sku else None)
+        listed = next(i for i in client.get("/api/reserve", headers=h).json() if i["id"] == item["id"])
+        assert listed["image_url"] == photo
+        _cleanup(client, h, [item["id"]])

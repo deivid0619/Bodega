@@ -61,6 +61,16 @@ function Form({ sku: scanned = '', defaultQty = 1, onCreated }) {
           ? 'Este código no está en la bodega ni en la tienda: escribe la referencia y la talla.'
           : 'Mercancía guardada aparte, sin ubicación todavía. Después la envías a un perchero o canasta.'}
       />
+      {/* como al registrar una prenda: la foto y el nombre de la tienda */}
+      {found && (
+        <div className="shop-hit" style={{ marginBottom: 14 }}>
+          {found.image ? <img src={found.image} alt="" /> : <span className="shop-noimg" />}
+          <div>
+            <span className="tag tag-in">{found.source === 'tienda' ? 'Encontrada en la tienda' : found.source === 'bodega' ? 'Está en la bodega' : 'Ya está en la reserva'}</span>
+            <b>{found.name}{found.size ? ` · ${found.size}` : ''}</b>
+          </div>
+        </div>
+      )}
       <form onSubmit={submit}>
         {!scanned && (
           <label className="field" style={{ marginTop: 0 }}>

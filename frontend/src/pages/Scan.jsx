@@ -86,6 +86,8 @@ function ScanHit({ hit, tally, onUndo }) {
       <span key={hit.at} className="vf-pulse" aria-hidden="true" />
       <div key={`h${hit.at}`} className={`vf-hit ${hit.pending ? 'pending' : ''}`} role="status" aria-live="polite">
         <b className={`vf-hit-q ${hit.type === 'out' ? 'out' : ''}`}>{sign}</b>
+        {/* la foto de la prenda (de la bodega o de la tienda): se ve que es esa */}
+        {hit.image && <img className="vf-hit-img" src={hit.image} alt="" />}
         <span className="vf-hit-t">
           <b>{hit.name}{hit.size ? ` · ${hit.size}` : ''}</b>
           {hit.pending ? (
@@ -129,7 +131,7 @@ export default function Scan() {
     const parts = res.movements?.length ? res.movements : [res.movement]
     const at = Date.now()
     setHit((prev) => ({
-      id: res.movement.id, type: res.movement.type, qty: parts.reduce((s, m) => s + m.qty, 0),
+      id: res.movement.id, type: res.movement.type, qty: parts.reduce((s, m) => s + m.qty, 0), image: res.product.image_url,
       sku: res.product.sku, name: res.product.name, size: res.product.size, total: res.product.qty, at,
       repeat: !!prev && !prev.err && prev.sku === res.product.sku && at - prev.at < 8000,
     }))
@@ -264,7 +266,7 @@ export default function Scan() {
                          location_id: 'reserva', after: it.qty, created_at: new Date(at).toISOString() }, ...s].slice(0, 25))
     if (show) {
       setHit((prev) => ({
-        id, reserveId: it.id, type: 'reserve', qty: res.added, sku: it.sku, name: it.name, size: it.size, total: it.qty,
+        id, reserveId: it.id, type: 'reserve', qty: res.added, sku: it.sku, name: it.name, size: it.size, total: it.qty, image: it.image_url,
         created: res.created, at, repeat: !!prev && !prev.err && prev.sku === it.sku && at - prev.at < 8000,
       }))
     }
@@ -293,7 +295,7 @@ export default function Scan() {
     setToConfirm([line, ...list.filter((l) => l.key !== key)])
     const at = Date.now()
     setHit((prev) => ({
-      pending: true, key, type: 'reserve', qty, sku: who.sku, name: who.name, size: who.size, lineQty: line.qty, n: line.n,
+      pending: true, key, type: 'reserve', qty, sku: who.sku, name: who.name, size: who.size, lineQty: line.qty, n: line.n, image: who.image,
       inReserve: who.in_reserve, at, repeat: !!prev && !prev.err && prev.sku === who.sku && at - prev.at < 8000,
     }))
   }
@@ -313,7 +315,7 @@ export default function Scan() {
     setToConfirm([line, ...list.filter((l) => l.key !== key)])
     const at = Date.now()
     setHit((prev) => ({
-      pending: true, key, type: mode, qty, sku: p.sku, name: p.name, size: p.size, lineQty: line.qty, n: line.n,
+      pending: true, key, type: mode, qty, sku: p.sku, name: p.name, size: p.size, lineQty: line.qty, n: line.n, image: p.image_url,
       have, short: have != null && line.qty > have, at,
       repeat: !!prev && !prev.err && prev.sku === p.sku && at - prev.at < 8000,
     }))

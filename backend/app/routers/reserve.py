@@ -19,6 +19,15 @@ router = APIRouter(prefix="/api/reserve", tags=["bodega de reserva"])
 @router.get("", response_model=list[schemas.ReserveItemOut])
 def list_reserve(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     items = db.query(models.ReserveItem).order_by(models.ReserveItem.name, models.ReserveItem.size).all()
+    # lo que se guardo sin foto (antes no se guardaba): la de la bodega o la
+    # de la tienda, una sola vez
+    found = False
+    for it in items:
+        if it.sku and not it.image_url:
+            it.image_url = _photo(db, it.sku)
+            found = found or bool(it.image_url)
+    if found:
+        db.commit()
     return items
 
 
@@ -48,6 +57,16 @@ def _norm_sku(sku: str) -> str:
     return "".join(str(sku or "").upper().split())
 
 
+def _photo(db: Session, sku: str, fetch: bool = True) -> str | None:
+    """La foto de un codigo: la de la bodega o la de la tienda. fetch=False
+    no sale a internet (dentro de una transaccion con bloqueo)."""
+    p = db.get(models.Product, sku)
+    if p and p.image_url:
+        return p.image_url
+    hit = catalog.lookup(sku, fetch=fetch)
+    return (hit or {}).get("image") or None
+
+
 def _identify(db: Session, sku: str) -> dict | None:
     """Nombre y talla de un codigo: el de la bodega y, si todavia no esta
     registrado, el de la tienda (el codigo de la etiqueta es el mismo)."""
@@ -61,7 +80,7 @@ def _identify(db: Session, sku: str) -> dict | None:
     # un codigo que solo existe en la reserva (se escribio a mano la primera vez)
     item = db.query(models.ReserveItem).filter(models.ReserveItem.sku == sku).order_by(models.ReserveItem.id).first()
     if item:
-        return {"name": item.name, "size": item.size or "", "image": None, "source": "reserva"}
+        return {"name": item.name, "size": item.size or "", "image": item.image_url, "source": "reserva"}
     return None
 
 
@@ -106,6 +125,7 @@ def scan_in(payload: schemas.ReserveScanIn, db: Session = Depends(get_db), _: mo
         item = models.ReserveItem(sku=sku, name=who["name"], size=who["size"], qty=0)
         db.add(item)
     item.sku = sku
+    item.image_url = item.image_url or who.get("image")
     item.qty += payload.qty
     db.commit()
     db.refresh(item)
@@ -159,13 +179,17 @@ def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, back
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta el código (SKU) para enviarlo a la bodega.")
 
     existing = db.get(models.Product, sku)
+    # la prenda llega a la bodega con su foto
+    photo = item.image_url or (None if existing and existing.image_url else _photo(db, sku, fetch=False))
     try:
         if existing:
             # entra a la ubicacion elegida, aunque el codigo ya tenga otra principal
             product, movs = inv.apply_movement(db, sku, "in", payload.qty, user, location_id=payload.location_id)
+            if not product.image_url and photo:
+                product.image_url = photo
         else:
             product, movement = inv.register_product(
-                db, sku, item.name, item.size, payload.location_id, payload.qty, 0, user,
+                db, sku, item.name, item.size, payload.location_id, payload.qty, 0, user, image_url=photo,
             )
             movs = [movement]
     except inv.InventoryError as e:

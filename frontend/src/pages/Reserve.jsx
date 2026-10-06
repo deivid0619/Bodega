@@ -122,7 +122,7 @@ export default function Reserve() {
           ) : items.length ? (
             items.map((item) => (
               <article className="card res-card" key={item.id}>
-                <ProductThumb size="sm" />
+                <ProductThumb size="sm" src={item.image_url} alt={item.name} />
                 <div style={{ minWidth: 0 }}>
                   <h3 className="res-name">{item.name}</h3>
                   <div className="res-meta">

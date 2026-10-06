@@ -333,6 +333,8 @@ button.code:active{transform:scale(.95)}
 @keyframes vf-hit-in{from{opacity:0;transform:translateY(8px) scale(.97)}}
 .vf-hit-q{flex:none;min-width:58px;padding:9px 10px;border-radius:var(--r-sm);background:var(--lime);color:var(--ink);text-align:center;font:800 italic 26px/1 var(--font);letter-spacing:-.04em}
 .vf-hit-q.out{background:#fff}
+.transfer-photo{margin:-4px 0 12px}
+.vf-hit-img{flex:none;width:48px;height:48px;border-radius:var(--r-sm);object-fit:contain;background:#fff}
 .vf-hit-t{flex:1;min-width:0}
 .vf-hit-t b{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:700;font-size:14px;line-height:1.2}
 /* con la camara cerrada, el "toca para abrir" sube para no quedar detras del aviso */
