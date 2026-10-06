@@ -2,11 +2,12 @@ import { useRef, useState } from 'react'
 import Icon from './Icon'
 
 // El visor de la camara para escanear etiquetas (lo maneja useBarcodeScanner).
-export default function Viewfinder({ scanner, className = '' }) {
+// "overlay": lo ultimo que se registro, encima de la camara (ver Scan).
+export default function Viewfinder({ scanner, overlay = null, className = '' }) {
   const { status, message, note, videoRef, start, torch, toggleTorch } = scanner
   const camOn = status === 'on'
   return (
-    <div className={`viewfinder ${className}`}>
+    <div className={`viewfinder ${overlay ? 'has-hit' : ''} ${className}`}>
       <video ref={videoRef} playsInline muted style={{ display: camOn ? 'block' : 'none' }} />
       {status === 'off' && (
         <button className="vf-idle" onClick={start}>
@@ -27,7 +28,9 @@ export default function Viewfinder({ scanner, className = '' }) {
           <div className="vf-laser" aria-hidden="true" />
         </>
       )}
-      {camOn && message && <p className="vf-msg">{message}</p>}
+      {camOn && message && !overlay && <p className="vf-msg">{message}</p>}
+      {/* tambien con la camara cerrada: con lector USB o a mano el aviso queda en el mismo sitio */}
+      {status !== 'fail' && overlay}
       {camOn && torch !== 'none' && (
         <button type="button" className="vf-torch" aria-pressed={torch === 'on'} onClick={toggleTorch} aria-label={torch === 'on' ? 'Apagar la linterna' : 'Prender la linterna'}>
           <Icon name="flash" size={20} stroke={2} />

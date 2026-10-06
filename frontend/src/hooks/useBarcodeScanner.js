@@ -8,6 +8,7 @@
 // permite, asi no hay que acercarlo tanto (de muy cerca no enfoca).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { centerBand, getDetector, readCodeFromFile } from '../lib/barcode'
+import { unlockAudio } from '../lib/feedback'
 
 const VIDEO = { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }
 const ZOOM = 1.8
@@ -85,6 +86,7 @@ export function useBarcodeScanner(onCode) {
   }, [])
 
   const start = useCallback(async () => {
+    unlockAudio() // en el mismo toque que abre la camara: asi el pitido suena en iPhone
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('fail')
       setMessage('Este navegador no deja usar la cámara aquí. Lee el código con una foto, escríbelo abajo o usa un lector USB o Bluetooth.')

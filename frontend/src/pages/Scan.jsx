@@ -41,6 +41,40 @@ function movedAt(res) {
   return where.length > 1 ? `${where[0]} +${where.length - 1}` : where[0]
 }
 
+// Lo que se acaba de registrar, encima de la camara: se ve sin dejar de
+// apuntar. Antes el aviso quedaba debajo, fuera de la vista, y no se sabia
+// si la lectura habia contado (o si conto dos veces)
+function ScanHit({ hit, tally, onUndo }) {
+  if (hit.err) {
+    return (
+      <>
+        <span key={hit.at} className="vf-pulse err" aria-hidden="true" />
+        <div key={`h${hit.at}`} className="vf-hit err" role="status" aria-live="assertive">
+          <Icon name="alert" size={22} />
+          <span className="vf-hit-t"><b>No se registró</b><small>{hit.err}</small></span>
+        </div>
+      </>
+    )
+  }
+  const sign = hit.type === 'out' ? `−${hit.qty}` : hit.type === 'set' ? `=${hit.total}` : `+${hit.qty}`
+  return (
+    <>
+      <span key={hit.at} className="vf-pulse" aria-hidden="true" />
+      <div key={`h${hit.at}`} className="vf-hit" role="status" aria-live="polite">
+        <b className={`vf-hit-q ${hit.type === 'out' ? 'out' : ''}`}>{sign}</b>
+        <span className="vf-hit-t">
+          <b>{hit.name}{hit.size ? ` · ${hit.size}` : ''}</b>
+          <small>
+            {tally && `${tally.n === 1 ? '1 vez' : `${tally.n} veces`} en esta sesión · llevas ${signed(tally.net)} · `}hay {hit.total}
+          </small>
+          {hit.repeat && <small className="vf-hit-warn">Otra vez la misma prenda: ¿la contaste dos veces?</small>}
+        </span>
+        <button type="button" className="vf-hit-undo" onClick={onUndo}>Deshacer</button>
+      </div>
+    </>
+  )
+}
+
 export default function Scan() {
   const { data: layout } = useLayout()
   const showToast = useToast()
@@ -53,6 +87,17 @@ export default function Scan() {
   const [remision, setRemision] = useState(false)
   const [parcel, setParcel] = useState(false)
   const [session, setSession] = useState([])
+  const [hit, setHit] = useState(null) // lo ultimo registrado, para mostrarlo encima de la camara
+  // la misma prenda otra vez en pocos segundos: puede ser la misma etiqueta contada dos veces
+  const showHit = (res) => {
+    const parts = res.movements?.length ? res.movements : [res.movement]
+    const at = Date.now()
+    setHit((prev) => ({
+      id: res.movement.id, type: res.movement.type, qty: parts.reduce((s, m) => s + m.qty, 0),
+      sku: res.product.sku, name: res.product.name, size: res.product.size, total: res.product.qty, at,
+      repeat: !!prev && !prev.err && prev.sku === res.product.sku && at - prev.at < 8000,
+    }))
+  }
   // lo que llevas registrado en esta sesion, por codigo (la lista de abajo
   // solo muestra lo ultimo; esto no se corta): asi no se pierde la cuenta
   const [tally, setTally] = useState({})
@@ -101,6 +146,7 @@ export default function Scan() {
       const parts = res.movements?.length ? [...res.movements].reverse() : [res.movement]
       setSession((s) => [...parts, ...s].slice(0, 25))
       count(res.movements?.length ? res.movements : [res.movement])
+      showHit(res)
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         beep(true)
@@ -109,7 +155,9 @@ export default function Scan() {
         return
       }
       beep(false)
-      showToast(e instanceof ApiError ? e.message : 'No hay conexión con el servidor. Intenta otra vez.', 'err')
+      const msg = e instanceof ApiError ? e.message : 'No hay conexión con el servidor. Intenta otra vez.'
+      setHit({ err: msg, at: Date.now() })
+      showToast(msg, 'err')
     }
   }
 
@@ -147,6 +195,7 @@ export default function Scan() {
       if (undone) count([undone], -1, product.qty)
       setSession((s) => s.filter((m) => m.id !== id))
       if (lastMove?.movement?.id === id) setLastMove(null)
+      if (hit?.id === id) setHit(null)
       showToast('Movimiento deshecho')
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'Solo se puede deshacer el último movimiento.', 'err')
@@ -191,7 +240,7 @@ export default function Scan() {
           </button>
         )}
 
-        <Viewfinder scanner={scanner} />
+        <Viewfinder scanner={scanner} overlay={hit && <ScanHit hit={hit} tally={hit.sku && tally[hit.sku]} onUndo={() => undo(hit.id)} />} />
         <button className={`btn btn-lg btn-block ${camOn ? 'btn-ink' : 'btn-lime'}`} style={{ marginTop: 12 }} onClick={() => (camOn ? stop() : start())}>
           <Icon name={camOn ? 'x' : 'camera'} size={20} />{camOn ? 'Cerrar cámara' : 'Escanear con la cámara'}
         </button>
@@ -317,6 +366,7 @@ export default function Scan() {
             setLastMove(res)
             setSession((s) => [res.movement, ...s].slice(0, 25))
             count([res.movement])
+            showHit(res)
           }}
         />
       )}
