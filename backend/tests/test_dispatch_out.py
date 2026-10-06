@@ -67,3 +67,25 @@ def test_from_reserve_to_dispatch_and_out():
             client.delete(f"/api/reserve/{it['id']}", headers=h)
         for size in ("32", "34"):
             client.delete(f"/api/products/PANT-{tag}-{size}", headers=h)
+
+
+def test_dispatch_straight_from_the_reserve():
+    with TestClient(app) as client:
+        h = _h(client)
+        tag = uuid.uuid4().hex[:5].upper()
+        it = client.post("/api/reserve", headers=h, json={"sku": f"DIR-{tag}", "name": "PANTALON DIRECTO", "size": "32", "qty": 10}).json()
+        r = client.post(f"/api/reserve/{it['id']}/dispatch", headers=h, json={"qty": 2, "note": "pedido Ana"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["reserve"]["qty"] == 8 and body["product"]["qty"] == 0
+        assert body["movement"]["type"] == "out" and body["movement"]["note"] == "Despacho: pedido Ana"
+        # no queda nada esperando en Despacho ni sale en "llevar a la bodega"
+        assert not any(d["product"]["sku"] == f"DIR-{tag}" for d in client.get("/api/reports/dispatch", headers=h).json())
+        assert not any(t["product"]["sku"] == f"DIR-{tag}" for t in client.get("/api/reserve/restock", headers=h).json())
+        # cuenta como lo que sale; mas de lo que hay: no se descuenta nada
+        assert next(t for t in client.get("/api/reports/top", headers=h).json() if t["sku"] == f"DIR-{tag}")["qty_out"] == 2
+        assert client.post(f"/api/reserve/{it['id']}/dispatch", headers=h, json={"qty": 9}).status_code == 400
+        # todo lo que queda: sale sola de la reserva
+        assert client.post(f"/api/reserve/{it['id']}/dispatch", headers=h, json={"qty": 8}).json()["reserve"]["qty"] == 0
+        assert all(i["id"] != it["id"] for i in client.get("/api/reserve", headers=h).json())
+        client.delete(f"/api/products/DIR-{tag}", headers=h)

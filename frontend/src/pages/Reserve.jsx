@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
-import { mutate, refreshInventory, revalidate, setReserveQty, useLayout, useReserve, useRestock } from '../hooks/useApi'
+import { mutate, refreshInventory, revalidate, setReserveQty, useLayout, usePolling, useReserve, useRestock } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
 import { useConfirm } from '../components/ConfirmContext'
 import { locationGroups } from '../locationGroups'
@@ -61,6 +61,9 @@ function RestockCard({ task, onDone }) {
 export default function Reserve() {
   const { data: items } = useReserve()
   const { data: restock } = useRestock()
+  // lo que se mando a Despacho y espera salir: se ve aqui mismo, no solo en Resumen
+  const { data: passing } = usePolling('/api/reports/dispatch', { interval: 20000 })
+  const passingUnits = (passing || []).reduce((t, d) => t + d.qty, 0)
   const { data: layout } = useLayout()
   const showToast = useToast()
   const confirm = useConfirm()
@@ -173,6 +176,17 @@ export default function Reserve() {
           <Icon name="plus" size={18} stroke={2.4} />Agregar a mano (sin etiqueta)
         </button>
 
+        {passingUnits > 0 && (
+          <button type="button" className="res-passing" onClick={() => navigate('/summary#despacho')}>
+            <Icon name="boxOut" size={20} />
+            <span>
+              <b>{plural(passingUnits, 'prenda', 'prendas')} en Despacho esperando salir</b>
+              <small>Cuando salgan, despáchalas en Resumen › Por despachar (o devuélvelas a la reserva)</small>
+            </span>
+            <Icon name="arrowRight" size={18} />
+          </button>
+        )}
+
         <h2 className="h-sec">Lo que hay guardado</h2>
         {zeros.length > 1 && (
           <div className="res-zeros">
@@ -204,7 +218,7 @@ export default function Reserve() {
                   <Stepper value={item.qty} onMinus={() => bump(item, -1)} onPlus={() => bump(item, 1)} disabledMinus={item.qty === 0} />
                   {item.qty > 0 ? (
                     <button className="btn btn-ink btn-sm" onClick={() => setSending(item)}>
-                      Enviar a bodega<Icon name="arrowRight" size={17} stroke={2.2} />
+                      Sacar<Icon name="arrowRight" size={17} stroke={2.2} />
                     </button>
                   ) : (
                     <button className="btn btn-ghost btn-sm" onClick={() => remove(item)}>

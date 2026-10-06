@@ -308,6 +308,13 @@ class ReserveReturnIn(BaseModel):
     location_id: str = "DESPACHO"  # de donde sale
 
 
+class ReserveDispatchIn(BaseModel):
+    """Despachar desde la reserva: sale empacado sin pasar por la bodega."""
+    qty: int = Field(gt=0)
+    note: Optional[str] = Field(default=None, max_length=60)  # pedido, cliente, guia...
+    sku: Optional[str] = None  # solo si la referencia todavia no tiene codigo
+
+
 class ReserveTransferIn(BaseModel):
     qty: int = Field(gt=0)
     location_id: str

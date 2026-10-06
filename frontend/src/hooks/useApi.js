@@ -281,4 +281,5 @@ export function refreshInventory() {
   revalidate('/api/reports/needs')
   revalidate('/api/movements')
   revalidate('/api/reserve')
+  revalidate('/api/reports/dispatch') // lo que esta en Despacho esperando salir
 }

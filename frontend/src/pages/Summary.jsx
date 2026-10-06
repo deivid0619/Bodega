@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { refreshInventory, useLayout, useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../hooks/useApi'
 import { useToast } from '../components/ToastContext'
@@ -30,6 +30,13 @@ export default function Summary() {
   const { data: facturas } = usePolling('/api/documents?kind=factura&limit=5', { interval: 30000 })
   const { data: remisiones } = usePolling('/api/documents?kind=remision&limit=5', { interval: 30000 })
   const { data: passing } = usePolling('/api/reports/dispatch', { interval: 20000 })
+  // desde otra pagina se llega a una seccion (/summary#despacho)
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (!hash) return undefined
+    const t = setTimeout(() => document.querySelector(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
+    return () => clearTimeout(t)
+  }, [hash])
   const [filter, setFilter] = useState('all')
   const { data: moves } = useMovements(filter)
   // los movimientos van plegados: se abren cuando se quieren ver (y se

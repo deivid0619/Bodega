@@ -221,6 +221,55 @@ def delete_reserve(item_id: int, db: Session = Depends(get_db), _: models.User =
     db.commit()
 
 
+@router.post("/{item_id}/dispatch", response_model=schemas.ReserveTransferResult)
+def dispatch_from_reserve(item_id: int, payload: schemas.ReserveDispatchIn, background: BackgroundTasks,
+                          db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """Despachar desde la reserva: lo que sale empacado directo de la reserva,
+    sin quedar en ninguna canasta. Se descuenta de la reserva y queda en el
+    historial como una salida "Despacho" (cuenta en lo que mas sale). Todo
+    junto: si algo falla, no se descuenta nada."""
+    item = db.query(models.ReserveItem).filter(models.ReserveItem.id == item_id).with_for_update().first()
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese ítem de reserva ya no existe.")
+    if payload.qty > item.qty:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Solo hay {item.qty} en reserva.")
+    sku = inv.resolve_sku(db, payload.sku or item.sku or "")
+    if not sku:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta el código (SKU) de la etiqueta para despacharla.")
+    note = ("Despacho" + (f": {payload.note.strip()}" if payload.note and payload.note.strip() else ""))[:80]
+    existing = db.get(models.Product, sku)
+    photo = item.image_url or (None if existing and existing.image_url else _photo(db, sku, fetch=False))
+    try:
+        # pasa por Despacho solo para quedar en el historial con su codigo
+        if existing:
+            inv.apply_movement(db, sku, "in", payload.qty, user, location_id=inv.DISPATCH, note=FROM_RESERVE, commit=False)
+            if not existing.image_url and photo:
+                existing.image_url = photo
+        else:
+            inv.register_product(db, sku, item.name, item.size, inv.DISPATCH, payload.qty, 0, user,
+                                 image_url=photo, note=FROM_RESERVE, commit=False)
+        product, movs = inv.apply_movement(db, sku, "out", payload.qty, user, location_id=inv.DISPATCH,
+                                           note=note, commit=False)
+    except inv.InventoryError as e:
+        db.rollback()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    item.sku = sku
+    item.qty -= payload.qty
+    db.flush()
+    left = schemas.ReserveItemOut.model_validate(item)
+    if item.qty <= 0:
+        db.delete(item)  # se acabo: sale sola de la reserva
+    db.commit()
+    for event in push.movement_events(product, "out", movs, user):
+        background.add_task(push.notify, *event)
+    db.refresh(product)
+    names = ser.loc_names(db)
+    return schemas.ReserveTransferResult(
+        reserve=left, product=_product_out(db, product),
+        movement=ser.movement_out(movs[-1], names), movements=[ser.movement_out(m, names) for m in movs],
+    )
+
+
 @router.post("/{item_id}/transfer", response_model=schemas.ReserveTransferResult)
 def transfer_to_warehouse(item_id: int, payload: schemas.ReserveTransferIn, background: BackgroundTasks,
                            db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
