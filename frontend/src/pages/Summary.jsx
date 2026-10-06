@@ -9,6 +9,7 @@ import { downloadCsv, fmtTime, outletIdsOf, refKey, stockSplit } from '../utils'
 import Icon from '../components/Icon'
 import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
+import MovementSheet, { pairOf } from '../components/MovementSheet'
 import PassingSection from '../components/Passing'
 import StoreStatus from '../components/StoreStatus'
 import { Count, Empty, PageHead, plural } from '../components/Bits'
@@ -53,6 +54,7 @@ export default function Summary() {
   }
   const [resetting, setResetting] = useState(false)
   const [docOpen, setDocOpen] = useState(null)
+  const [moveOpen, setMoveOpen] = useState(null) // el movimiento que se esta viendo
   const [docList, setDocList] = useState(null)
   const [demoOn, setDemoOn] = useState(null)
 
@@ -263,7 +265,8 @@ export default function Summary() {
           <>
           <ul className="moves card panel" style={{ marginTop: 8 }}>
             {moves.slice(0, movesShown).map((m) => (
-              <li key={m.id} className={`move ${m.type}`}>
+              <li key={m.id} className={`move ${m.type} openable`} role="button" tabIndex={0} aria-label={`Ver el detalle: ${m.product_name}`}
+                  onClick={() => setMoveOpen(m)} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setMoveOpen(m))}>
                 <div className="move-q">{qtyText(m)}</div>
                 <div className="move-t">
                   <b>{m.product_name}{m.product_size ? ` · ${m.product_size}` : ''}</b>
@@ -311,6 +314,7 @@ export default function Summary() {
       </div>
       {resetting && <ResetSheet onClose={() => setResetting(false)} />}
       {docOpen && <DocumentSheet doc={docOpen} onClose={() => setDocOpen(null)} />}
+      {moveOpen && <MovementSheet movement={moveOpen} pair={pairOf(moveOpen, moves)} onClose={() => setMoveOpen(null)} />}
       {docList && <DocumentsSheet kind={docList} onClose={() => setDocList(null)} />}
     </section>
   )

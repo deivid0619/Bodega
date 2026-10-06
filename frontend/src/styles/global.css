@@ -436,6 +436,26 @@ button.code:active{transform:scale(.95)}
 .move-t b{display:block;font-weight:700;font-size:14.5px;line-height:1.25;letter-spacing:-.01em;overflow-wrap:anywhere}
 .move-t small{display:block;margin-top:3px;color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .move time{flex:none;font-size:12px;color:var(--muted);text-align:right}
+/* un movimiento se abre para ver el detalle */
+.move.openable{cursor:pointer;border-radius:var(--r-xs);transition:background-color 120ms ease}
+.move.openable:active{background:var(--fog)}
+@media (hover:hover) and (pointer:fine){.move.openable:hover{background:var(--fog)}}
+.move.openable:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.move-badge{display:inline-grid;place-items:center;min-width:38px;height:26px;padding:0 8px;border-radius:var(--r-xs);font:800 italic 14px/1 var(--font)}
+.move-badge.in,.move-badge.new{background:var(--lime);color:var(--ink)}
+.move-badge.out{background:var(--ink);color:#fff}
+.move-badge.set,.move-badge.move{background:var(--fog-2);color:var(--ink)}
+.mv-what{padding:14px;border-radius:var(--r-md);background:var(--fog)}
+.mv-what > b{display:block;font:800 italic 18px/1.2 var(--font);letter-spacing:-.02em}
+.mv-what > span{display:block;margin-top:4px;font-size:14px;color:var(--graphite)}
+.mv-what .mv-note{margin:10px 0 0;padding:9px 12px;border-radius:var(--r-xs);background:var(--paper);font-size:14px;font-weight:600}
+.mv-what .link-btn{margin-top:8px}
+.mv-facts{margin:14px 0 0;display:grid;gap:0}
+.mv-facts > div{display:grid;grid-template-columns:118px 1fr;gap:10px;padding:10px 2px;border-top:1px solid var(--line)}
+.mv-facts > div:first-child{border-top:0}
+.mv-facts dt{font-size:13px;color:var(--muted)}
+.mv-facts dd{margin:0;font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.mv-facts dd .mono{margin-left:4px;font-weight:500;color:var(--muted);font-size:12.5px}
 
 /* ---------- reserva ---------- */
 .res-hero{display:flex;align-items:center;gap:16px;padding:18px;margin-top:4px;border-radius:var(--r-lg);background:var(--ink);color:#fff;position:relative;overflow:hidden}
