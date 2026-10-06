@@ -58,11 +58,6 @@ function PickStep({ onFile, onSkip }) {
         title="Recibir una remisión"
         subtitle="Toma la foto de la orden de remisión para tenerla a la vista mientras cuentas lo que llegó."
       />
-      <ul className="doc-tips">
-        <li><Icon name="check" size={16} stroke={2.4} />Entra lo que cuentes, no lo que diga el papel.</li>
-        <li><Icon name="check" size={16} stroke={2.4} />Lo que falte lo anotas como pendiente.</li>
-        <li><Icon name="check" size={16} stroke={2.4} />La foto no sale de tu celular.</li>
-      </ul>
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
       <input ref={gallery} type="file" accept="image/*" hidden onChange={pick} />
       <button className="btn btn-lime btn-lg btn-block" style={{ marginTop: 16 }} onClick={() => camera.current.click()}>
@@ -72,6 +67,14 @@ function PickStep({ onFile, onSkip }) {
         <button className="btn btn-ghost" onClick={() => gallery.current.click()}>Elegir foto</button>
         <button className="btn btn-quiet" onClick={onSkip}>Sin foto</button>
       </div>
+      <details className="doc-help">
+        <summary>Recomendaciones para usarla bien</summary>
+        <ul>
+          <li>Cuenta lo que llegó: entra lo que cuentes, no lo que diga el papel.</li>
+          <li>Si el proveedor quedó debiendo algo, anótalo como pendiente.</li>
+          <li>La foto es solo para tenerla a la vista: no se guarda ni sale de tu celular.</li>
+        </ul>
+      </details>
     </>
   )
 }

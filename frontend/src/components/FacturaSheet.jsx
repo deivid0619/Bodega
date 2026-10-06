@@ -30,11 +30,6 @@ function PickStep({ onFile, error }) {
   return (
     <>
       <SheetHeader title="Descontar una factura" subtitle="Toma una foto de la factura impresa. La app lee los códigos y las cantidades, tú revisas y confirmas." />
-      <ul className="doc-tips">
-        <li><Icon name="check" size={16} stroke={2.4} />Que se vea toda la tabla de productos.</li>
-        <li><Icon name="check" size={16} stroke={2.4} />Derecha, con buena luz y sin sombras.</li>
-        <li><Icon name="check" size={16} stroke={2.4} />La foto no sale de tu celular: se lee aquí mismo.</li>
-      </ul>
       {error && <p className="form-err" role="alert">{error}</p>}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
       <input ref={gallery} type="file" accept="image/*" hidden onChange={pick} />
@@ -44,6 +39,14 @@ function PickStep({ onFile, error }) {
       <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={() => gallery.current.click()}>
         Elegir una foto guardada
       </button>
+      <details className="doc-help">
+        <summary>Recomendaciones para usarla bien</summary>
+        <ul>
+          <li>Que se vea toda la tabla de productos, derecha, con buena luz y sin sombras.</li>
+          <li>Revisa cada línea antes de confirmar: si un código o una cantidad no se leyó bien, corrígelo.</li>
+          <li>La foto se lee en tu celular: no se guarda ni sale de él.</li>
+        </ul>
+      </details>
     </>
   )
 }
