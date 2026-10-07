@@ -1,5 +1,5 @@
 """Dependencias de FastAPI: usuario actual y control de rol."""
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,12 @@ from .security import decode_access_token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
+VIEW_ONLY = "Esta cuenta es solo para ver: aquí no se puede cambiar nada."
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
 def get_current_user(
+    request: Request,
     token: str | None = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> models.User:
@@ -39,6 +44,9 @@ def get_current_user(
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
         raise unauthorized
+    # la cuenta del enlace "solo ver": consulta todo, no cambia nada
+    if user.role == "viewer" and request.method not in SAFE_METHODS:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=VIEW_ONLY)
     return user
 
 

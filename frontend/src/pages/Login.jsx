@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../context/AuthContext'
+import { LINK_ERROR, useAuth } from '../context/AuthContext'
 import { ApiError } from '../api'
 import { BrandMark } from '../components/Icon'
 
@@ -27,7 +27,15 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [inviteCode, setInviteCode] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(() => {
+    try {
+      const e = sessionStorage.getItem(LINK_ERROR) || ''
+      sessionStorage.removeItem(LINK_ERROR)
+      return e
+    } catch {
+      return ''
+    }
+  })
   const [busy, setBusy] = useState(false)
 
   if (ready && token) return <Navigate to="/" replace />

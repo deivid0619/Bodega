@@ -21,7 +21,7 @@ class User(Base):
     email = Column(String(120), unique=True, nullable=False, index=True)
     name = Column(String(120), nullable=False)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False, default="operator")  # admin | operator
+    role = Column(String(20), nullable=False, default="operator")  # admin | operator | viewer (solo ver, del enlace)
     created_at = Column(DateTime(timezone=True), default=now)
 
 

@@ -94,6 +94,7 @@ function AccountMenu() {
 
 function Shell() {
   useMovementNotifications()
+  const { isViewer } = useAuth()
   return (
     <div className="app">
       <header className="topbar">
@@ -102,6 +103,7 @@ function Shell() {
           <span className="brand-word">bodega</span>
         </Link>
         <div className="topbar-actions">
+          {isViewer && <span className="view-chip" title="Puedes recorrer todo; los cambios no se guardan">Solo ver</span>}
           <NotificationBell />
           <AccountMenu />
         </div>

@@ -30,6 +30,16 @@ class RegisterIn(BaseModel):
     invite_code: str
 
 
+class ViewKeyIn(BaseModel):
+    key: str = Field(min_length=10, max_length=100)
+
+
+class ViewLinkOut(BaseModel):
+    """El enlace para ver sin editar: activo o no, y su llave (va en el enlace)."""
+    active: bool
+    key: Optional[str] = None
+
+
 class LoginIn(BaseModel):
     email: EmailStr
     password: str

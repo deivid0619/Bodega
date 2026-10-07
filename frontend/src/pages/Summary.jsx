@@ -11,6 +11,7 @@ import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
 import DocsSection from '../components/DocCalendar'
 import SummaryIndex from '../components/SummaryIndex'
+import ViewLink from '../components/ViewLink'
 import MovementSheet, { pairOf } from '../components/MovementSheet'
 import PassingSection from '../components/Passing'
 import StoreStatus, { PhotoStoreStatus } from '../components/StoreStatus'
@@ -268,6 +269,7 @@ export default function Summary() {
             </>
           )}
         </div>
+        {isAdmin && <ViewLink />}
       </div>
       {resetting && <ResetSheet onClose={() => setResetting(false)} />}
       {docOpen && <DocumentSheet doc={docOpen} onClose={() => setDocOpen(null)} />}

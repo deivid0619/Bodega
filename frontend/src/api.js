@@ -4,10 +4,21 @@ const BASE = import.meta.env.VITE_API_URL || ''
 
 let authToken = null
 let onUnauthorized = null
+// la cuenta del enlace "solo ver": no se manda ningun cambio (el servidor
+// igual los rechaza)
+let viewOnly = false
+export const VIEW_ONLY = 'Esta cuenta es solo para ver: aquí no se puede cambiar nada.'
 
 export function setAuthToken(token) {
   authToken = token
 }
+
+export function setViewOnly(on) {
+  viewOnly = !!on
+}
+
+export const isViewOnly = () => viewOnly
+const blocked = (method, path) => viewOnly && method !== 'GET' && !path.startsWith('/api/auth/')
 
 export function setUnauthorizedHandler(fn) {
   onUnauthorized = fn
@@ -21,6 +32,7 @@ class ApiError extends Error {
 }
 
 async function request(path, { method = 'GET', body, isForm } = {}) {
+  if (blocked(method, path)) throw new ApiError(VIEW_ONLY, 403)
   const headers = {}
   if (!isForm && body !== undefined) headers['Content-Type'] = 'application/json'
   if (authToken) headers['Authorization'] = `Bearer ${authToken}`
@@ -52,6 +64,7 @@ async function request(path, { method = 'GET', body, isForm } = {}) {
 // Archivos (las fotos de remisiones y facturas): se suben tal cual y se
 // traen como Blob, siempre con la sesion (nunca son publicas)
 async function raw(path, { method = 'GET', body, type } = {}) {
+  if (blocked(method, path)) throw new ApiError(VIEW_ONLY, 403)
   const headers = {}
   if (type) headers['Content-Type'] = type
   if (authToken) headers['Authorization'] = `Bearer ${authToken}`

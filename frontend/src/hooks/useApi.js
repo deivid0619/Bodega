@@ -7,7 +7,7 @@
 // esperar cada respuesta hacia que todo se sintiera lento en el celular.
 // Con la app en segundo plano no se consulta nada.
 import { useEffect, useReducer } from 'react'
-import { api } from '../api'
+import { api, isViewOnly } from '../api'
 import { useAuth } from '../context/AuthContext'
 
 const store = new Map()
@@ -50,6 +50,7 @@ export function revalidate(prefix) {
 
 // Cambia en el acto todas las listas cuya ruta empieza por `prefix`.
 export function mutate(prefix, updater) {
+  if (isViewOnly()) return // solo ver: la pantalla no cambia (y el cambio no se manda)
   epoch++
   for (const [path, e] of store) {
     if (path.startsWith(prefix) && Array.isArray(e.data)) set(e, updater(e.data))
