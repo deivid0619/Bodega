@@ -115,11 +115,24 @@ export function asksFrom(places) {
   return places.length > 1 || places.some((x) => x.outlet)
 }
 
+// "De donde sale" puede ser: undefined (sin elegir), '' (donde sea), el id de
+// una ubicacion (de ahi primero) o repartido: { 'C-1-1': 2, 'P-A2': 1 }
+export const isSplit = (from) => !!from && typeof from === 'object'
+export const splitTotal = (from) => Object.values(from || {}).reduce((t, n) => t + (Number(n) || 0), 0)
+
+// Falta decir de donde sale: sin elegir, o repartido sin completar
+export function fromMissing(from, qty, places) {
+  if (!asksFrom(places)) return false
+  return from === undefined || (isSplit(from) && splitTotal(from) !== qty)
+}
+
 const qtyAt = (p, id) => (p?.stock || []).find((s) => s.location_id === id)?.qty || 0
 
 // Cuanto se puede sacar: sin elegir, todo menos el outlet; eligiendo una
 // ubicacion del outlet, tambien lo que hay ahi
 export function outAvailable(p, outlet, from) {
+  // repartido: lo que hay en las ubicaciones elegidas
+  if (isSplit(from)) return Object.keys(from).reduce((t, id) => t + qtyAt(p, id), 0)
   const usable = (p?.stock || []).reduce((t, s) => t + (outlet?.has(s.location_id) ? 0 : s.qty), 0)
   return from && outlet?.has(from) ? usable + qtyAt(p, from) : usable
 }
@@ -127,6 +140,11 @@ export function outAvailable(p, outlet, from) {
 // La salida en partes: primero de la ubicacion elegida (lo que haya ahi) y,
 // si no alcanza, el resto de donde haya. [{ qty, loc }] (loc '' = donde haya)
 export function outParts(qty, from, p) {
+  if (isSplit(from)) {
+    const parts = Object.entries(from).filter(([, n]) => n > 0).map(([loc, n]) => ({ qty: n, loc }))
+    const rest = qty - splitTotal(from)
+    return rest > 0 ? [...parts, { qty: rest, loc: '' }] : parts
+  }
   if (!from) return [{ qty, loc: '' }]
   const first = Math.min(qty, qtyAt(p, from))
   return [first > 0 && { qty: first, loc: from }, qty - first > 0 && { qty: qty - first, loc: '' }].filter(Boolean)

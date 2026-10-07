@@ -15,7 +15,7 @@ import { PageHead, Stepper, plural } from '../components/Bits'
 import { useBarcodeScanner } from '../hooks/useBarcodeScanner'
 import Viewfinder, { PhotoRead } from '../components/Viewfinder'
 import { beep } from '../lib/feedback'
-import { asksFrom, fmtTime, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../utils'
+import { asksFrom, fmtTime, fromMissing, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../utils'
 import FromPick from '../components/FromPick'
 
 const MODES = [
@@ -194,7 +194,7 @@ export default function Scan() {
   const toConfirmUnits = toConfirm.reduce((t, l) => t + l.qty, 0)
   const toConfirmTypes = new Set(toConfirm.map((l) => l.type))
   // salidas de prendas que estan en varios lugares: falta decir de donde salen
-  const needsFrom = (l) => l.type === 'out' && !l.loc && l.from === undefined && asksFrom(placesOf(l, outlet))
+  const needsFrom = (l) => l.type === 'out' && !l.loc && fromMissing(l.from, l.qty, placesOf(l, outlet))
   const missingFrom = toConfirm.filter(needsFrom).length
   // entradas de algo que esta en la reserva: falta decir si viene de alla
   const needsRes = (l) => l.type === 'in' && l.res && l.fromRes === undefined

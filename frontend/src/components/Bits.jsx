@@ -31,14 +31,14 @@ export function ProductThumb({ src, alt = '', size }) {
   )
 }
 
-export function Stepper({ value, onMinus, onPlus, minusLabel = 'Restar 1', plusLabel = 'Sumar 1', disabledMinus, large, small, children }) {
+export function Stepper({ value, onMinus, onPlus, minusLabel = 'Restar 1', plusLabel = 'Sumar 1', disabledMinus, disabledPlus, large, small, children }) {
   return (
     <div className={`stepper ${large ? 'lg' : small ? 'sm' : ''}`}>
       <button type="button" onClick={onMinus} aria-label={minusLabel} disabled={disabledMinus}>
         <Icon name="minus" size={large ? 20 : small ? 15 : 17} stroke={2.4} />
       </button>
       {children || <output><Count value={value} /></output>}
-      <button type="button" onClick={onPlus} aria-label={plusLabel}>
+      <button type="button" onClick={onPlus} aria-label={plusLabel} disabled={disabledPlus}>
         <Icon name="plus" size={large ? 20 : small ? 15 : 17} stroke={2.4} />
       </button>
     </div>

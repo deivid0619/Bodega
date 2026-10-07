@@ -243,6 +243,7 @@ class RemisionLineIn(BaseModel):
     # bodega: donde se guarda esta referencia; sin elegir, la de toda la remision
     # o, si tampoco, donde ya esta cada talla
     location_id: Optional[str] = Field(default=None, max_length=32)
+    to_reserve: bool = False  # bodega: esta parte va a la reserva (repartir una talla entre las dos)
 
 
 class RemisionIn(BaseModel):

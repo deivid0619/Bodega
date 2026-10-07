@@ -118,3 +118,22 @@ def test_documents_section_counts_search_pages_and_calendar():
         assert client.get("/api/documents?kind=remision&day=2001-01-01", headers=h).json() == []
         assert client.get("/api/documents/calendar?month=2026-13", headers=h).status_code == 422
         assert client.get("/api/documents?day=2026-02-30", headers=h).status_code == 422
+
+
+def test_remision_split_between_bodega_and_reserve():
+    with TestClient(app) as client:
+        h = _h(client)
+        ref = "CHAQUETA REPARTIR PRUEBA"
+        r = client.post("/api/products", headers=h, json={"sku": "REP-M", "name": ref, "size": "M", "location_id": "F-1-1", "qty": 0})
+        assert r.status_code == 201, r.text
+        # llegaron 5 de la M: 3 a la bodega (F-2-1) y 2 a la reserva; quedaron debiendo 4 (solo se anotan)
+        r = client.post("/api/documents/remision", headers=h, json={"number": "REP 1", "lines": [
+            {"name": ref, "size": "M", "sku": "REP-M", "qty": 3, "pending": 4, "location_id": "F-2-1"},
+            {"name": ref, "size": "M", "sku": "REP-M", "qty": 2, "to_reserve": True}]})
+        assert r.status_code == 201, r.text
+        doc = r.json()["document"]
+        assert (doc["units"], doc["pending"]) == (5, 4)
+        assert sorted((l["qty"], l["dest"]) for l in doc["lines"]) == [(2, "reserva"), (3, "bodega")]
+        assert _stock(client, h, "REP-M") == {"F-2-1": 3}
+        res = [i for i in client.get("/api/reserve", headers=h).json() if i["sku"] == "REP-M"]
+        assert [i["qty"] for i in res] == [2]

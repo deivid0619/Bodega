@@ -479,11 +479,13 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
     record = payload.destination == "registro"  # solo el papel: lo que llego ya se habia entrado
     # la misma talla repetida se suma (si va al mismo lugar: una referencia se
     # puede repartir en dos ubicaciones)
-    merged: dict[tuple[str, str, Optional[str], Optional[str]], list[int]] = {}
+    merged: dict[tuple[str, str, Optional[str], Optional[str], bool], list[int]] = {}
     for line in payload.lines:
         sku = inv.resolve_sku(db, line.sku or "") or None
-        loc = ((line.location_id or payload.location_id or "").strip() or None) if to_bodega else None
-        key = (" ".join(line.name.upper().split()), line.size.strip().upper(), sku, loc)
+        # repartida: esta parte de la talla va a la reserva aunque el resto entre a la bodega
+        to_res = bool(line.to_reserve) and to_bodega
+        loc = ((line.location_id or payload.location_id or "").strip() or None) if to_bodega and not to_res else None
+        key = (" ".join(line.name.upper().split()), line.size.strip().upper(), sku, loc, to_res)
         acc = merged.setdefault(key, [0, 0])
         acc[0] += line.qty
         acc[1] += line.pending
@@ -497,7 +499,7 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
         chosen = {k[3] for k in merged if k[3]}
         if chosen - inv.location_ids(db):
             raise inv.InventoryError("Esa ubicación no existe.")
-        for (name, size, sku, loc), (qty, pending) in merged.items():
+        for (name, size, sku, loc, to_res), (qty, pending) in merged.items():
             row = {"name": name, "size": size, "sku": sku, "qty": qty, "pending": pending,
                    "dest": None, "location_id": None}
             out_lines.append(row)
@@ -519,7 +521,7 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
                 row["dest"], row["location_id"] = "despacho", DISPATCH
                 touched.append(sku)
                 continue
-            if not to_bodega or not sku:
+            if not to_bodega or not sku or to_res:
                 inv.add_to_reserve(db, product.name if product else name, product.size if product else size, sku, qty)
                 row["dest"] = "reserva"
                 continue

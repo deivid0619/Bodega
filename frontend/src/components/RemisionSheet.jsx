@@ -183,7 +183,8 @@ function RefPicker({ refs, known, onPick, onCancel }) {
   )
 }
 
-function SizeRow({ row, dest, showPending, prevPending, known, onChange }) {
+function SizeRow({ row, dest, showPending, prevPending, known, onChange, split }) {
+  const toRes = Math.min(row.toRes || 0, row.qty)
   const code = cleanCode(row.code)
   const other = code && known.get(code)
   const noCode = !row.sku && !code
@@ -230,16 +231,31 @@ function SizeRow({ row, dest, showPending, prevPending, known, onChange }) {
           {other && <small className="warn">Ese código ya es de {other.name}{other.size ? ` · ${other.size}` : ''}.</small>}
         </div>
       )}
+      {split && dest === 'bodega' && row.qty > 0 && (
+        <div className="rem-pend rem-split">
+          <span>A la reserva<small>{row.qty - toRes} a la bodega · {toRes} a la reserva</small></span>
+          <Stepper
+            value={toRes}
+            onMinus={() => onChange((r) => ({ toRes: Math.max(0, Math.min(r.toRes || 0, r.qty) - 1) }))}
+            onPlus={() => onChange((r) => ({ toRes: Math.min(r.qty, (r.toRes || 0) + 1) }))}
+            disabledMinus={toRes === 0}
+            disabledPlus={toRes >= row.qty}
+            minusLabel="Una menos a la reserva"
+            plusLabel="Una más a la reserva"
+            small
+          />
+        </div>
+      )}
       {showPending && (
         <div className="rem-pend">
-          <span>Pendientes</span>
+          <span>Faltan por llegar<small>{row.pending > 0 ? 'Solo se anotan: no se suman' : 'Lo que quedaron debiendo'}</small></span>
           <Stepper
             value={row.pending}
             onMinus={() => onChange((r) => ({ pending: Math.max(0, r.pending - 1) }))}
             onPlus={() => onChange((r) => ({ pending: r.pending + 1 }))}
             disabledMinus={row.pending === 0}
-            minusLabel="Un pendiente menos"
-            plusLabel="Un pendiente más"
+            minusLabel="Una pendiente menos"
+            plusLabel="Una pendiente más"
             small
           />
         </div>
@@ -404,6 +420,9 @@ function Body() {
     said(u.ref.name, size.trim().toUpperCase(), addScanned({ name: u.ref.name, size, sku: null, code: u.code, ref: u.ref }))
   }
 
+  // repartir: de cada talla, cuantas van a la reserva (el resto a la bodega)
+  const toggleSplit = (bid) => setBlocks((bs) => bs.map((b) => (b.id !== bid ? b
+    : { ...b, split: !b.split, rows: b.split ? b.rows.map((r) => ({ ...r, toRes: 0 })) : b.rows })))
   const removeBlock = (bid) => {
     setBlocks((bs) => {
       const left = bs.filter((b) => b.id !== bid)
@@ -414,12 +433,17 @@ function Body() {
 
   const lines = blocks.flatMap((b) => b.rows
     .filter((r) => r.qty > 0 || r.pending > 0)
-    .map((r) => ({ name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, qty: r.qty, pending: r.pending, isNew: b.isNew, place: b.place })))
+    .flatMap((r) => {
+      const base = { name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, isNew: b.isNew, place: b.place }
+      const res = dest === 'bodega' && b.split ? Math.min(r.toRes || 0, r.qty) : 0
+      const out = r.qty - res > 0 || r.pending > 0 ? [{ ...base, qty: r.qty - res, pending: r.pending }] : []
+      return res > 0 ? [...out, { ...base, qty: res, pending: 0, toReserve: true }] : out
+    }))
   const units = lines.reduce((t, l) => t + l.qty, 0)
   const pend = lines.reduce((t, l) => t + l.pending, 0)
   const passing = dest === 'despacho'
   const record = dest === 'registro' // solo el papel: no se suma nada
-  const toReserve = passing || record ? 0 : dest === 'reserva' ? units : lines.filter((l) => !l.sku).reduce((t, l) => t + l.qty, 0)
+  const toReserve = passing || record ? 0 : dest === 'reserva' ? units : lines.filter((l) => !l.sku || l.toReserve).reduce((t, l) => t + l.qty, 0)
   const toBodega = passing || record ? 0 : units - toReserve
 
   // lo que ya entro escaneando en los ultimos dias: si es lo de esta remision, va como solo registro
@@ -463,8 +487,10 @@ function Body() {
     try {
       const res = await api.post('/api/documents/remision', {
         number: effective, supplier: supplier.trim(), date: date || undefined, destination: dest, notes: notes.trim(),
-        lines: lines.map(({ name, size, sku, qty, pending, place }) => ({
-          name, size, sku: sku || undefined, qty, pending, location_id: dest === 'bodega' && place ? place : undefined,
+        lines: lines.map(({ name, size, sku, qty, pending, place, toReserve: res }) => ({
+          name, size, sku: sku || undefined, qty, pending,
+          location_id: dest === 'bodega' && place && !res ? place : undefined,
+          to_reserve: res || undefined,
         })),
       })
       refreshInventory()
@@ -584,6 +610,9 @@ function Body() {
         <section className="rem-block" key={b.id} aria-label={b.name}>
           <div className="rem-block-head">
             <b>{b.name}{b.isNew && <span className="tag tag-warn" style={{ marginLeft: 8 }}>Nueva</span>}{b.shop && <span className="tag tag-set" style={{ marginLeft: 8 }}>Tienda</span>}</b>
+            {dest === 'bodega' && (
+              <button type="button" className="link-btn" onClick={() => toggleSplit(b.id)}>{b.split ? 'No repartir' : 'Repartir con la reserva'}</button>
+            )}
             <button type="button" className="link-btn" onClick={() => removeBlock(b.id)}>Quitar</button>
           </div>
           {b.rows.map((r) => (
@@ -594,6 +623,7 @@ function Body() {
               showPending={showPending}
               prevPending={prevPending.get(`${b.name}|${r.size}`) || 0}
               known={known}
+              split={!!b.split}
               onChange={(patch) => setRow(b.id, r.size, patch)}
             />
           ))}
@@ -618,7 +648,7 @@ function Body() {
       )}
 
       <div className="menu-check rem-toggle">
-        <span>Quedaron unidades pendientes<small>Lo que el proveedor quedó debiendo</small></span>
+        <span>Quedaron unidades pendientes<small>Lo que el proveedor quedó debiendo: solo se anota en la remisión, no se suma al inventario hasta que llegue</small></span>
         <button type="button" className="switch" role="switch" aria-checked={showPending} aria-label="Anotar pendientes" onClick={() => setShowPending((v) => !v)} />
       </div>
 
@@ -696,7 +726,7 @@ function Body() {
       <div className="doc-footer">
         <p className="mode-hint">
           {problem || [toBodega && `${toBodega} a la bodega`, toReserve && `${toReserve} a la reserva`, passing && units && `${units} de paso`,
-            record && units && `${units} solo registro (no se suman)`, pend && plural(pend, 'pendiente', 'pendientes')].filter(Boolean).join(' · ')}
+            record && units && `${units} solo registro (no se suman)`, pend && `${plural(pend, 'pendiente', 'pendientes')} (solo anotadas, no se suman)`].filter(Boolean).join(' · ')}
         </p>
         <button className="btn btn-lime btn-lg btn-block" disabled={!!problem || saving} onClick={confirm}>
           {saving ? 'Guardando…' : record ? `Guardar registro de ${plural(units, 'prenda', 'prendas')}` : units ? `Confirmar entrada de ${plural(units, 'prenda', 'prendas')}` : 'Guardar remisión'}

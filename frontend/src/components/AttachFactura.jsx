@@ -6,7 +6,7 @@ import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { plural } from './Bits'
 import { saveDocPhoto } from '../lib/docPhotos'
-import { asksFrom, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../utils'
+import { asksFrom, fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../utils'
 import FromPick from './FromPick'
 import { PhotoButtons, ReadingStep, readFactura } from './FacturaParts'
 
@@ -89,7 +89,7 @@ export function AttachBody({ pedido, onDone, onBack }) {
   const less = rows.filter((r) => r.p > r.f) // se empaco mas de lo que dice la factura
   const deduct = more.filter((r) => !extra[r.sku]?.off)
   const short = deduct.find((r) => !r.product || outAvailable(r.product, outlet, extra[r.sku]?.from) < r.f - r.p)
-  const missingFrom = deduct.filter((r) => r.product && extra[r.sku]?.from === undefined && asksFrom(placesOf(r.product, outlet))).length
+  const missingFrom = deduct.filter((r) => r.product && fromMissing(extra[r.sku]?.from, r.f - r.p, placesOf(r.product, outlet))).length
   const returning = less.filter((r) => back[r.sku])
 
   const problem = !number.trim() ? 'Escribe el número de la factura.'

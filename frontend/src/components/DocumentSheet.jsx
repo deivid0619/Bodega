@@ -215,7 +215,7 @@ function Detail({ doc: initial }) {
         <p className="doc-banner">Se armó como pedido el {fmtWhen(doc.created_at)} y la factura se anexó el {fmtWhen(doc.closed_at)}</p>
       )}
 
-      {(doc.kind === 'factura' || doc.kind === 'remision') && !isWaiting && <Photos doc={doc} onChange={setDoc} />}
+      {(doc.kind === 'factura' || doc.kind === 'remision') && <Photos doc={doc} onChange={setDoc} />}
 
       <h3 className="h-sec">Prendas</h3>
       <div className="card panel">

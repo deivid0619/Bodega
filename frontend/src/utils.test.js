@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { asksFrom, outAvailable, outParts, placesOf, refCode, refKey, reserveFor, reserveIndex, similarInReserve, stockSplit } from './utils'
+import { asksFrom, fromMissing, outAvailable, outParts, placesOf, refCode, refKey, reserveFor, reserveIndex, similarInReserve, stockSplit } from './utils'
 
 // Una referencia son sus tallas con el mismo nombre: en los codigos de
 // Pigmalion la talla va en la mitad (PGPRBI070SFEM), no al final
@@ -89,5 +89,21 @@ describe('reserva con otro nombre', () => {
     ]
     expect(similarInReserve(items, 'GUANTES MOTO PROTECCIÓN VORTEX NEÓN', 'XL').map((it) => it.id)).toEqual([1])
     expect(similarInReserve(items, 'GUANTES', 'XL')).toEqual([])
+  })
+})
+
+describe('repartir de donde sale', () => {
+  const p = { stock: [{ location_id: 'C-1-1', qty: 2 }, { location_id: 'P-A2', qty: 3 }] }
+  const places = [{ id: 'P-A2', qty: 3, outlet: false }, { id: 'C-1-1', qty: 2, outlet: false }]
+  it('sale lo que se dijo de cada lugar', () => {
+    expect(outParts(4, { 'C-1-1': 2, 'P-A2': 2 }, p)).toEqual([{ qty: 2, loc: 'C-1-1' }, { qty: 2, loc: 'P-A2' }])
+    expect(outAvailable(p, new Set(), { 'C-1-1': 2, 'P-A2': 2 })).toBe(5)
+  })
+  it('falta decir de donde sale mientras no este completo', () => {
+    expect(fromMissing(undefined, 4, places)).toBe(true)
+    expect(fromMissing({ 'C-1-1': 1 }, 4, places)).toBe(true)
+    expect(fromMissing({ 'C-1-1': 2, 'P-A2': 2 }, 4, places)).toBe(false)
+    expect(fromMissing('', 4, places)).toBe(false)
+    expect(fromMissing(undefined, 4, [places[0]])).toBe(false) // un solo lugar: no se pregunta
   })
 })

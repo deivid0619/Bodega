@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { refreshInventory, revalidate, useLayout, usePolling, useProducts } from '../hooks/useApi'
 import { useToast } from './ToastContext'
@@ -8,7 +8,7 @@ import { SearchField, Stepper, plural } from './Bits'
 import { cleanCode, matchLine } from '../lib/facturaParser'
 import { saveDocPhoto } from '../lib/docPhotos'
 import { beep } from '../lib/feedback'
-import { asksFrom, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../utils'
+import { asksFrom, fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../utils'
 import FromPick from './FromPick'
 import ScanBox from './ScanBox'
 import { AttachBody } from './AttachFactura'
@@ -102,10 +102,21 @@ function PedidoStep({ onSaved, onBack }) {
   const [q, setQ] = useState('')
   const [flash, setFlash] = useState(null)
   const [saving, setSaving] = useState(false)
+  const [orderPhoto, setOrderPhoto] = useState(null) // la foto del pedido del cliente (la de la factura va despues)
+  const [orderPreview, setOrderPreview] = useState(null)
+  const orderInput = useRef(null)
 
   useEffect(() => {
     try { localStorage.setItem(PEDIDO_KEY, JSON.stringify({ lines, notes })) } catch { /* sin almacenamiento */ }
   }, [lines, notes])
+  useEffect(() => () => { if (orderPreview) URL.revokeObjectURL(orderPreview) }, [orderPreview])
+  const pickOrder = (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    setOrderPhoto(f)
+    setOrderPreview(URL.createObjectURL(f))
+  }
 
   const add = (p) => {
     const had = lines.find((l) => l.sku === p.sku)?.qty || 0
@@ -140,7 +151,7 @@ function PedidoStep({ onSaved, onBack }) {
 
   const units = lines.reduce((t, l) => t + l.qty, 0)
   const short = lines.find((l) => { const p = bySku.get(l.sku); return !p || outAvailable(p, outlet, l.from) < l.qty })
-  const missingFrom = lines.filter((l) => { const p = bySku.get(l.sku); return p && l.from === undefined && asksFrom(placesOf(p, outlet)) }).length
+  const missingFrom = lines.filter((l) => { const p = bySku.get(l.sku); return p && fromMissing(l.from, l.qty, placesOf(p, outlet)) }).length
   const problem = !lines.length ? 'Escanea o busca lo que vas empacando.'
     : short ? `No alcanza: ${bySku.get(short.sku)?.name || short.sku}${bySku.get(short.sku)?.size ? ` · ${bySku.get(short.sku).size}` : ''}.`
       : missingFrom ? (missingFrom === 1 ? 'Falta elegir de dónde sale una prenda.' : `Falta elegir de dónde salen ${missingFrom} prendas.`)
@@ -151,11 +162,22 @@ function PedidoStep({ onSaved, onBack }) {
     try {
       const parts = lines.flatMap((l) => outParts(l.qty, l.from || '', bySku.get(l.sku))
         .map((x) => ({ sku: l.sku, qty: x.qty, ...(x.loc ? { location_id: x.loc } : {}) })))
-      await api.post('/api/documents/pedido', { lines: [...parts.filter((x) => x.location_id), ...parts.filter((x) => !x.location_id)], notes: notes.trim() })
+      const res = await api.post('/api/documents/pedido', { lines: [...parts.filter((x) => x.location_id), ...parts.filter((x) => !x.location_id)], notes: notes.trim() })
       try { localStorage.removeItem(PEDIDO_KEY) } catch { /* sin almacenamiento */ }
       refreshInventory()
+      // la foto del pedido del cliente queda con el pedido; la de la factura se suma al anexarla
+      let kept = !orderPhoto
+      if (orderPhoto) {
+        try {
+          await saveDocPhoto(res.document.id, orderPhoto)
+          kept = true
+        } catch {
+          kept = false
+        }
+      }
       revalidate('/api/documents')
-      showToast(`Pedido empacado: ${plural(units, 'prenda descontada', 'prendas descontadas')}. Queda esperando la factura.`)
+      showToast(`Pedido empacado: ${plural(units, 'prenda descontada', 'prendas descontadas')}. Queda esperando la factura.${
+        orderPhoto ? (kept ? ' Foto del pedido guardada.' : ' La foto no se guardó: agrégala desde Resumen.') : ''}`, kept ? 'ok' : 'err')
       onSaved()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No hay conexión. No se descontó nada; intenta de nuevo.', 'err')
@@ -220,6 +242,22 @@ function PedidoStep({ onSaved, onBack }) {
           </div>
         </>
       )}
+
+      <div className="field">
+        <span className="field-label">Foto del pedido del cliente <small className="opt">si quieres</small></span>
+        <input ref={orderInput} type="file" accept="image/*" hidden onChange={pickOrder} />
+        {orderPreview ? (
+          <div className="order-photo">
+            <img src={orderPreview} alt="Foto del pedido del cliente" />
+            <button type="button" className="link-btn" onClick={() => { setOrderPhoto(null); setOrderPreview(null) }}>Quitar</button>
+          </div>
+        ) : (
+          <button type="button" className="btn btn-ghost btn-block" onClick={() => orderInput.current.click()}>
+            <Icon name="camera" size={18} />Tomar o elegir la foto
+          </button>
+        )}
+        <span className="field-hint">Queda con el pedido; la foto de la factura se agrega al anexarla. Las dos se guardan un mes.</span>
+      </div>
 
       <label className="field">
         <span className="field-label">Pedido o cliente <small className="opt">si quieres</small></span>
@@ -316,7 +354,7 @@ function Body({ onDone }) {
   // solo registro: no se descuenta, asi que no importa cuanto hay ni de donde sale
   const blocked = !recordOnly && chosen.some((r) => outAvailable(r.product, outlet, r.from) < r.qty)
   // prendas que estan en varios lugares: hay que decir de cual salen
-  const missingFrom = recordOnly ? 0 : chosen.filter((r) => r.from === undefined && asksFrom(placesOf(r.product, outlet))).length
+  const missingFrom = recordOnly ? 0 : chosen.filter((r) => fromMissing(r.from, r.qty, placesOf(r.product, outlet))).length
 
   const confirm = async () => {
     setSaving(true)
