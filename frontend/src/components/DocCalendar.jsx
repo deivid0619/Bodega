@@ -48,7 +48,7 @@ export default function DocsSection({ onOpen, onList }) {
 
   return (
     <>
-      <h2 className="h-sec" id="documentos">Remisiones y facturas</h2>
+      <h2 className="h-sec" id="documentos">Remisiones y facturas <small>toca un día</small></h2>
       <div className="cal card">
         <div className="cal-head">
           <button type="button" className="cal-nav prev" onClick={() => shift(-1)} aria-label="Mes anterior">
