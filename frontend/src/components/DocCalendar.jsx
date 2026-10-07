@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { usePolling } from '../hooks/useApi'
 import { DocItem } from './DocumentSheet'
 import Icon from './Icon'
+import { plural } from './Bits'
 
 const pad = (n) => String(n).padStart(2, '0')
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -51,6 +52,16 @@ export default function DocsSection({ onOpen, onList }) {
   return (
     <>
       <h2 className="h-sec" id="documentos">Remisiones y facturas <small>toca un día</small></h2>
+      {counts?.espera > 0 && (
+        <button type="button" className="doc-card wait-card" onClick={() => onList('espera')}>
+          <span className="doc-ico"><Icon name="receipt" size={22} /></span>
+          <span className="doc-card-t">
+            <b>{plural(counts.espera, 'pedido espera', 'pedidos esperan')} su factura</b>
+            <small>Ya salieron del inventario: ábrelos para anexar el número y la foto</small>
+          </span>
+          <Icon name="arrowRight" size={18} />
+        </button>
+      )}
       <div className="cal card">
         <div className="cal-head">
           <button type="button" className="cal-nav prev" onClick={() => shift(-1)} aria-label="Mes anterior">

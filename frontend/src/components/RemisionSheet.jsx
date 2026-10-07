@@ -4,12 +4,15 @@ import { api, ApiError } from '../api'
 import { refreshInventory, revalidate, useLayout, usePolling, useProducts, useReserve } from '../hooks/useApi'
 import { locationGroups } from '../locationGroups'
 import { cleanCode } from '../lib/facturaParser'
-import { sizeRank } from '../utils'
+import { guessSizeFromSku, sizeRank } from '../utils'
 import { saveDocPhoto } from '../lib/docPhotos'
+import { beep } from '../lib/feedback'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { SearchField, Stepper, plural } from './Bits'
+import ScanBox from './ScanBox'
+import NearPick from './NearPick'
 
 // la plantilla de remision de Pigmalion trae estas tallas
 const TEMPLATE = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']
@@ -43,6 +46,21 @@ function buildRefs(products, reserve) {
 
 let nextId = 1
 const newRow = (size, info) => ({ size, sku: info?.sku || null, have: info?.have || 0, inReserve: info?.reserva || 0, qty: 0, pending: 0, code: '' })
+const rowsOf = (ref) => (ref.isNew
+  ? TEMPLATE.map((s) => newRow(s))
+  : [...ref.sizes.values()].sort((a, b) => sizeRank(a.size) - sizeRank(b.size)).map((s) => newRow(s.size, s)))
+
+// una referencia de la tienda con todas sus tallas (y lo que ya hay de cada una)
+function shopRef(g, known) {
+  return {
+    name: g.name,
+    shop: true,
+    sizes: new Map(g.sizes.map((s) => {
+      const p = known.get(s.sku)
+      return [s.size, { size: s.size, sku: s.sku, have: p?.qty || 0, bodega: p?.qty || 0, reserva: 0 }]
+    })),
+  }
+}
 
 function PickStep({ onFile, onSkip }) {
   const camera = useRef(null)
@@ -114,14 +132,7 @@ function RefPicker({ refs, known, onPick, onCancel }) {
     }, 250)
     return () => clearTimeout(t)
   }, [term, known])
-  const fromShop = (g) => ({
-    name: g.name,
-    shop: true,
-    sizes: new Map(g.sizes.map((s) => {
-      const p = known.get(s.sku)
-      return [s.size, { size: s.size, sku: s.sku, have: p?.qty || 0, bodega: p?.qty || 0, reserva: 0 }]
-    })),
-  })
+  const fromShop = (g) => shopRef(g, known)
   const results = useMemo(() => {
     if (term.length < 2) return []
     const code = norm(term)
@@ -267,6 +278,10 @@ function Body() {
   const [addingSize, setAddingSize] = useState(null)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [flash, setFlash] = useState(null) // lo ultimo que se escaneo
+  const [unknown, setUnknown] = useState(null) // un codigo que no esta en ningun lado: { code, near, newRef, ref }
+  const [recentIn, setRecentIn] = useState([]) // lo que ya entro escaneando de estos codigos
 
   useEffect(() => () => { if (photo) URL.revokeObjectURL(photo) }, [photo])
 
@@ -295,11 +310,8 @@ function Body() {
   }, [history, delivery, number])
 
   const pickRef = (ref) => {
-    const rows = ref.isNew
-      ? TEMPLATE.map((s) => newRow(s))
-      : [...ref.sizes.values()].sort((a, b) => sizeRank(a.size) - sizeRank(b.size)).map((s) => newRow(s.size, s))
     // place: la ubicacion de esta referencia ('' = donde ya esta cada talla)
-    setBlocks((bs) => [...bs, { id: nextId++, name: ref.name, isNew: !!ref.isNew, shop: !!ref.shop, rows, place: '' }])
+    setBlocks((bs) => [...bs, { id: nextId++, name: ref.name, isNew: !!ref.isNew, shop: !!ref.shop, rows: rowsOf(ref), place: '' }])
     setPicking(false)
   }
   const setPlace = (bid, place) => setBlocks((bs) => bs.map((b) => (b.id === bid ? { ...b, place } : b)))
@@ -314,6 +326,84 @@ function Body() {
     if (!s) return
     setBlocks((bs) => bs.map((b) => (b.id !== bid || b.rows.some((r) => r.size === s) ? b : { ...b, rows: [...b.rows, newRow(s)] })))
   }
+  // una prenda escaneada suma 1 a su talla; si su referencia no esta en la
+  // remision, se agrega con todas sus tallas. Devuelve cuantas van.
+  const addScanned = ({ name, size, sku, code, ref }) => {
+    const s = String(size || '').trim().toUpperCase()
+    const had = blocks.find((b) => b.name === name)?.rows.find((r) => r.size === s)?.qty || 0
+    setBlocks((bs) => {
+      let b = bs.find((x) => x.name === name)
+      let list = bs
+      if (!b) {
+        b = { id: nextId++, name, isNew: ref ? !!ref.isNew : !inBodega.has(name), shop: !!ref?.shop, rows: ref ? rowsOf(ref) : [], place: '' }
+        list = [...bs, b]
+      }
+      const rows = b.rows.some((r) => r.size === s)
+        ? b.rows.map((r) => (r.size !== s ? r : {
+          ...r, sku: r.sku || sku || null, code: r.sku || sku ? r.code : (r.code || code || ''), qty: r.qty + 1,
+        }))
+        : [...b.rows, { ...newRow(s, sku ? { sku } : null), code: sku ? '' : (code || ''), qty: 1 }]
+      return list.map((x) => (x.id === b.id ? { ...b, rows } : x))
+    })
+    setPicking(false)
+    return had + 1
+  }
+  const said = (name, size, n) => setFlash({ text: `+1 · ${name}${size ? ` · ${size}` : ''}${n > 1 ? ` (van ${n})` : ''}`, at: Date.now() })
+  // de la bodega, la reserva o la tienda: la referencia completa con todas sus tallas
+  const addFound = async (who, code) => {
+    let ref = refs.find((r) => r.name === who.name) || null
+    if (!ref && who.source === 'tienda') {
+      try {
+        const g = (await api.get(`/api/catalog/search?q=${encodeURIComponent(who.name)}&limit=4`)).find((x) => x.name === who.name)
+        if (g) ref = shopRef(g, known)
+      } catch { /* solo con la talla escaneada */ }
+    }
+    beep(true)
+    said(who.name, who.size, addScanned({ name: who.name, size: who.size, sku: who.sku, code, ref }))
+  }
+  const onScan = async (raw) => {
+    const code = cleanCode(raw)
+    if (!code) return
+    // ya esta en la remision: suma una mas
+    for (const b of blocks) {
+      const r = b.rows.find((x) => x.sku === code || (x.code && cleanCode(x.code) === code))
+      if (r) {
+        beep(true)
+        setRow(b.id, r.size, (x) => ({ qty: x.qty + 1 }))
+        said(b.name, r.size, r.qty + 1)
+        return
+      }
+    }
+    try {
+      await addFound(await api.get(`/api/reserve/identify/${encodeURIComponent(code)}`), code)
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        // no esta en la bodega ni en la tienda: el parecido (etiqueta mal) o una prenda nueva
+        beep(true)
+        setUnknown({ code, near: null })
+        api.get(`/api/catalog/near/${encodeURIComponent(code)}`)
+          .then((near) => setUnknown((u) => (u?.code === code ? { ...u, near } : u)))
+          .catch(() => setUnknown((u) => (u?.code === code ? { ...u, near: [] } : u)))
+        return
+      }
+      beep(false)
+      setFlash({ err: true, at: Date.now(), text: e instanceof ApiError ? e.message : 'No hay conexión con el servidor.' })
+    }
+  }
+  // la etiqueta trae el codigo mal: se usa el bueno y queda reconocida
+  const pickNear = (o) => {
+    const code = unknown.code
+    setUnknown(null)
+    api.post('/api/catalog/alias', { code, sku: o.sku }).catch(() => {})
+    addFound({ sku: o.sku, name: o.name, size: o.size || '', source: o.in_bodega ? 'bodega' : 'tienda' }, o.sku)
+  }
+  // una prenda nueva: su referencia y su talla; se registra al confirmar la remision
+  const addNew = (size) => {
+    const u = unknown
+    setUnknown(null)
+    said(u.ref.name, size.trim().toUpperCase(), addScanned({ name: u.ref.name, size, sku: null, code: u.code, ref: u.ref }))
+  }
+
   const removeBlock = (bid) => {
     setBlocks((bs) => {
       const left = bs.filter((b) => b.id !== bid)
@@ -328,8 +418,19 @@ function Body() {
   const units = lines.reduce((t, l) => t + l.qty, 0)
   const pend = lines.reduce((t, l) => t + l.pending, 0)
   const passing = dest === 'despacho'
-  const toReserve = passing ? 0 : dest === 'reserva' ? units : lines.filter((l) => !l.sku).reduce((t, l) => t + l.qty, 0)
-  const toBodega = passing ? 0 : units - toReserve
+  const record = dest === 'registro' // solo el papel: no se suma nada
+  const toReserve = passing || record ? 0 : dest === 'reserva' ? units : lines.filter((l) => !l.sku).reduce((t, l) => t + l.qty, 0)
+  const toBodega = passing || record ? 0 : units - toReserve
+
+  // lo que ya entro escaneando en los ultimos dias: si es lo de esta remision, va como solo registro
+  const codes = [...new Set(lines.filter((l) => l.sku && l.qty > 0).map((l) => l.sku))].sort().join(',')
+  useEffect(() => {
+    if (!codes || record) { setRecentIn([]); return undefined }
+    const t = setTimeout(() => {
+      api.get(`/api/documents/recent-entries?skus=${encodeURIComponent(codes)}&days=3`).then(setRecentIn).catch(() => setRecentIn([]))
+    }, 600)
+    return () => clearTimeout(t)
+  }, [codes, record])
   // de paso se cuenta por codigo: una talla sin codigo no puede quedar en Despacho
   const noCode = passing && lines.find((l) => l.qty > 0 && !l.sku)
   const clash = lines.some((l) => l.sku && known.get(l.sku) && known.get(l.sku).name !== l.name)
@@ -379,7 +480,7 @@ function Body() {
         }
       }
       revalidate('/api/documents')
-      showToast(`Remisión ${d.number.startsWith('SN-') ? 'sin número' : d.number}: ${plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}${
+      showToast(`Remisión ${d.number.startsWith('SN-') ? 'sin número' : d.number}: ${record ? `registro de ${plural(d.units, 'prenda', 'prendas')} (no se sumaron)` : plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}${
         photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}`, kept || !photoFile ? 'ok' : 'err')
       close()
     } catch (e) {
@@ -443,6 +544,42 @@ function Body() {
       </div>
 
       <h3 className="h-sec">Lo que llegó</h3>
+      {scanning ? (
+        <div className="rem-scan">
+          <ScanBox onCode={onScan} flash={flash} hint="Cada etiqueta suma una prenda a su talla. Si el código no existe, te pregunta qué prenda es." />
+          {unknown && (
+            <div className="scan-unknown" role="dialog" aria-label="Código nuevo">
+              <div className="sheet-eyebrow"><span className="tag tag-warn">Código nuevo</span><span className="code mono">{unknown.code}</span></div>
+              <p className="mode-hint" style={{ margin: '8px 0 0' }}>No está en la bodega ni en la tienda.</p>
+              {unknown.near === null
+                ? <p className="mode-hint">Buscando uno parecido en la tienda…</p>
+                : <NearPick options={unknown.near} onPick={pickNear} />}
+              {!unknown.newRef ? (
+                <div className="btn-row" style={{ marginTop: 12 }}>
+                  <button type="button" className="btn btn-ink" onClick={() => setUnknown((u) => ({ ...u, newRef: true }))}>Es una prenda nueva</button>
+                  <button type="button" className="btn btn-ghost" onClick={() => setUnknown(null)}>No contarla</button>
+                </div>
+              ) : !unknown.ref ? (
+                <>
+                  <p className="mode-hint">¿De qué referencia es? Búscala o escribe el nombre si es nueva.</p>
+                  <RefPicker refs={refs} known={known} onPick={(ref) => setUnknown((u) => ({ ...u, ref }))} onCancel={() => setUnknown((u) => ({ ...u, newRef: false }))} />
+                </>
+              ) : (
+                <form className="rem-add" onSubmit={(e) => { e.preventDefault(); addNew(e.currentTarget.elements.size.value) }}>
+                  <span className="rem-add-ref">{unknown.ref.name}</span>
+                  <input name="size" className="rem-code" defaultValue={guessSizeFromSku(unknown.code)} placeholder="Talla" autoCapitalize="characters" aria-label="Talla" />
+                  <button className="btn btn-ink btn-sm">Agregar</button>
+                </form>
+              )}
+            </div>
+          )}
+          <button type="button" className="link-btn" style={{ marginTop: 10 }} onClick={() => { setScanning(false); setUnknown(null) }}>Cerrar el escáner</button>
+        </div>
+      ) : (
+        <button type="button" className="btn btn-ink btn-block" onClick={() => setScanning(true)}>
+          <Icon name="scan" size={18} />Escanear lo que llegó
+        </button>
+      )}
       {blocks.map((b) => (
         <section className="rem-block" key={b.id} aria-label={b.name}>
           <div className="rem-block-head">
@@ -498,7 +635,7 @@ function Body() {
       </label>
 
       <h3 className="h-sec">Dónde queda</h3>
-      <div className="seg" role="toolbar" aria-label="Dónde queda la mercancía">
+      <div className="seg four" role="toolbar" aria-label="Dónde queda la mercancía">
         <button type="button" data-m="in" aria-pressed={dest === 'bodega'} onClick={() => setDest('bodega')}>
           <Icon name="warehouse" size={18} stroke={2.1} />Bodega
         </button>
@@ -508,8 +645,25 @@ function Body() {
         <button type="button" data-m="set" aria-pressed={dest === 'despacho'} onClick={() => setDest('despacho')}>
           <Icon name="boxOut" size={18} stroke={2.1} />De paso
         </button>
+        <button type="button" data-m="reserve" aria-pressed={dest === 'registro'} onClick={() => setDest('registro')}>
+          <Icon name="pencil" size={18} stroke={2.1} />Registro
+        </button>
       </div>
-      {passing ? (
+      {recentIn.length > 0 && !record && (
+        <div className="rem-recent" role="note">
+          <b>Ojo: algunas ya entraron escaneando</b>
+          <small>
+            En los últimos 3 días entraron {recentIn.map((r) => {
+              const p = known.get(r.sku)
+              return `${p ? `${p.name}${p.size ? ` · ${p.size}` : ''}` : r.sku}: ${r.qty}`
+            }).join('; ')}. Si son las mismas de esta remisión, guárdala como solo registro para no sumarlas dos veces.
+          </small>
+          <button type="button" className="btn btn-ink btn-sm" onClick={() => setDest('registro')}>Guardar como solo registro</button>
+        </div>
+      )}
+      {record ? (
+        <p className="mode-hint">Solo se guarda el papel, la foto y lo que llegó: no suma nada al inventario. Úsalo cuando ya lo entraste escaneando.</p>
+      ) : passing ? (
         <p className="mode-hint">Se cuentan, pero no entran a la bodega: quedan en Despacho hasta que salgan con la factura o una salida. No cuentan para lo que hay que pedir.</p>
       ) : dest === 'bodega' ? (
         <div className="field" style={{ marginTop: 12 }}>
@@ -541,10 +695,11 @@ function Body() {
 
       <div className="doc-footer">
         <p className="mode-hint">
-          {problem || [toBodega && `${toBodega} a la bodega`, toReserve && `${toReserve} a la reserva`, passing && units && `${units} de paso`, pend && plural(pend, 'pendiente', 'pendientes')].filter(Boolean).join(' · ')}
+          {problem || [toBodega && `${toBodega} a la bodega`, toReserve && `${toReserve} a la reserva`, passing && units && `${units} de paso`,
+            record && units && `${units} solo registro (no se suman)`, pend && plural(pend, 'pendiente', 'pendientes')].filter(Boolean).join(' · ')}
         </p>
         <button className="btn btn-lime btn-lg btn-block" disabled={!!problem || saving} onClick={confirm}>
-          {saving ? 'Guardando…' : units ? `Confirmar entrada de ${plural(units, 'prenda', 'prendas')}` : 'Guardar remisión'}
+          {saving ? 'Guardando…' : record ? `Guardar registro de ${plural(units, 'prenda', 'prendas')}` : units ? `Confirmar entrada de ${plural(units, 'prenda', 'prendas')}` : 'Guardar remisión'}
         </button>
       </div>
       {zoom && photo && <PhotoZoom src={photo} onClose={() => setZoom(false)} />}

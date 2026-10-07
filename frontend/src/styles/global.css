@@ -1049,3 +1049,39 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 @media (min-width:1200px) and (hover:hover) and (pointer:fine){
   .sum-nav .chip:not([aria-current]):not(.go):hover{background:var(--fog-2);color:var(--ink)}
 }
+
+/* ---------- factura: pedido que espera su factura, comparar y solo registro ---------- */
+.start-cards{margin:16px 0 0}
+.doc-check.rm{color:var(--graphite)}
+.wait-go{flex:none;display:inline-flex;align-items:center;gap:4px;font:700 12.5px var(--font);color:var(--lime-deep)}
+.cmp-list{margin-top:14px;display:grid;gap:8px}
+.cmp-row{padding:10px 12px;border-radius:var(--r-md);background:var(--paper);box-shadow:inset 0 0 0 1.5px var(--line)}
+.cmp-row.more,.cmp-row.less{box-shadow:inset 0 0 0 1.5px var(--amber)}
+.cmp-row.ok{background:var(--fog);box-shadow:none}
+.cmp-t b{display:block;font-weight:700;font-size:13.5px;line-height:1.25}
+.cmp-t small{display:block;margin-top:2px;font-size:12px;color:var(--muted)}
+.cmp-ok{display:inline-flex;align-items:center;gap:5px;margin-top:6px;font:700 12.5px var(--font);color:var(--lime-deep)}
+.cmp-act{margin-top:8px;display:grid;gap:8px}
+.cmp-switch{display:flex;align-items:center;justify-content:space-between;gap:10px;font:600 13px/1.3 var(--font);color:#A9480A}
+.cmp-q{font:700 13px var(--font);color:#A9480A}
+.cmp-act small.warn{color:#A9480A;font-weight:600;font-size:12px}
+.doc-flag{display:inline-block;margin-top:4px;padding:2px 7px;border-radius:var(--r-xs);background:var(--fog-2);font:700 11px/1.4 var(--font);color:var(--graphite)}
+.doc-flag.wait{background:var(--amber-soft);color:#A9480A}
+.doc-banner{margin-top:12px;padding:12px 14px;border-radius:var(--r-md);background:var(--fog);font-size:13.5px;line-height:1.45;color:var(--graphite)}
+.doc-banner.wait{background:var(--amber-soft);color:#7A3606}
+.doc-banner.wait p{margin-bottom:10px}
+.wait-card{margin:0 0 12px;background:var(--amber-soft);color:var(--ink);box-shadow:none}
+.wait-card .doc-ico{background:var(--ink);color:var(--lime)}
+.wait-card .doc-card-t small{color:#7A3606}
+
+/* ---------- escaner dentro de una hoja (remision, pedido) ---------- */
+.scan-box .viewfinder{aspect-ratio:16/10;margin-top:0}
+.scan-flash.err{background:rgba(110,36,4,.92)}
+.rem-scan{margin-bottom:6px}
+.scan-unknown{margin-top:12px;padding:12px;border-radius:var(--r-md);background:var(--amber-soft)}
+.scan-unknown .rem-pick{margin-top:8px}
+.rem-add-ref{flex:none;max-width:45%;align-self:center;font-weight:700;font-size:13px;line-height:1.2}
+.rem-recent{margin-top:12px;padding:12px 14px;border-radius:var(--r-md);background:var(--amber-soft);display:grid;gap:6px}
+.rem-recent b{color:#7A3606;font-size:14px}
+.rem-recent small{font-size:12.5px;line-height:1.4;color:#7A3606}
+.rem-recent .btn{justify-self:start}

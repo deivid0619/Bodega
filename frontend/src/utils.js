@@ -17,6 +17,20 @@ export function guessSizeFromSku(sku) {
   return m ? m[1] : ''
 }
 
+// Un pedido que espera su factura todavia no tiene numero: se nombra por
+// cuando se empaco ("Pedido de hoy 10:30", "de ayer 4:05 p. m.", "del 5 oct")
+export function pedidoLabel(d) {
+  const t = new Date(d.created_at)
+  const hour = t.toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+  const day = t.toDateString() === today.toDateString() ? 'de hoy'
+    : t.toDateString() === yesterday.toDateString() ? 'de ayer'
+      : `del ${t.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '')}`
+  return `Pedido ${day} ${hour}`
+}
+
 export function fmtTime(iso) {
   const t = new Date(iso).getTime()
   const d = Date.now() - t

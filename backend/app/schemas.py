@@ -201,6 +201,21 @@ class DocumentLineIn(BaseModel):
 class FacturaIn(BaseModel):
     number: str = Field(min_length=1, max_length=40)
     lines: list[DocumentLineIn] = Field(min_length=1)
+    record_only: bool = False  # solo registro: ya se desconto por otro lado, no se toca el inventario
+
+
+class PedidoIn(BaseModel):
+    """Un pedido empacado antes de tener la factura: se descuenta ya."""
+    lines: list[DocumentLineIn] = Field(min_length=1)
+    notes: str = Field(default="", max_length=500)  # de quien es, el numero del pedido en la tienda...
+
+
+class AttachIn(BaseModel):
+    """La factura de un pedido: su numero, lo que trae la factura y no estaba
+    en el pedido (se descuenta ahora) y lo del pedido que no va (vuelve)."""
+    number: str = Field(min_length=1, max_length=40)
+    deduct: list[DocumentLineIn] = Field(default_factory=list)
+    returns: list[DocumentLineIn] = Field(default_factory=list)
 
 
 class RemisionLineIn(BaseModel):
@@ -218,7 +233,9 @@ class RemisionIn(BaseModel):
     number: str = Field(default="", max_length=40)  # algunas no lo traen: se le pone uno automatico
     supplier: str = Field(default="", max_length=120)
     date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
-    destination: Literal["bodega", "reserva", "despacho"] = "bodega"  # despacho: de paso, sale en unos dias
+    # despacho: de paso, sale en unos dias; registro: solo se guarda el papel
+    # (lo que llego ya se habia entrado), no se toca el inventario
+    destination: Literal["bodega", "reserva", "despacho", "registro"] = "bodega"
     location_id: Optional[str] = None  # bodega: sin elegir, la ubicacion principal de cada talla
     notes: str = Field(default="", max_length=500)  # lo demas que diga el papel
     lines: list[RemisionLineIn] = Field(min_length=1)
@@ -249,6 +266,9 @@ class DocumentOut(BaseModel):
     created_at: UtcDatetime
     photo_count: int = 0  # fotos del papel guardadas (prueba)
     photos_until: Optional[UtcDatetime] = None  # hasta cuando se guardan
+    mode: Optional[str] = None  # "registro": no movio el inventario
+    status: Optional[str] = None  # "espera": pedido esperando su factura
+    closed_at: Optional[UtcDatetime] = None  # cuando se le anexo la factura al pedido
 
 
 class PhotoStoreOut(BaseModel):
@@ -263,6 +283,14 @@ class DocumentCountsOut(BaseModel):
     """Cuantas remisiones y facturas hay guardadas, para el Resumen."""
     remision: int = 0
     factura: int = 0
+    espera: int = 0  # pedidos esperando su factura
+
+
+class RecentEntryOut(BaseModel):
+    """Lo que entro de un codigo escaneando (o a mano) en los ultimos dias."""
+    sku: str
+    qty: int
+    last_at: UtcDatetime
 
 
 class DocumentDayOut(BaseModel):

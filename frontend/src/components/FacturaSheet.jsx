@@ -1,15 +1,18 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../api'
-import { refreshInventory, useLayout, useProducts } from '../hooks/useApi'
+import { refreshInventory, revalidate, useLayout, usePolling, useProducts } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
-import { Stepper, plural } from './Bits'
-import { cleanCode, matchAll, matchLine, parseFactura } from '../lib/facturaParser'
+import { SearchField, Stepper, plural } from './Bits'
+import { cleanCode, matchLine } from '../lib/facturaParser'
 import { saveDocPhoto } from '../lib/docPhotos'
-import { asksFrom, outAvailable, outParts, outletIdsOf, placesOf } from '../utils'
+import { beep } from '../lib/feedback'
+import { asksFrom, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../utils'
 import FromPick from './FromPick'
-import { readPhoto } from '../lib/ocr'
+import ScanBox from './ScanBox'
+import { AttachBody } from './AttachFactura'
+import { PhotoButtons, ReadingStep, readFactura } from './FacturaParts'
 
 let nextId = 1
 
@@ -23,50 +26,213 @@ function withDefault(row, outlet) {
   return { ...row, include: !!row.product && outAvailable(row.product, outlet, row.from) >= row.qty }
 }
 
-function PickStep({ onFile, error }) {
-  const camera = useRef(null)
-  const gallery = useRef(null)
-  const pick = (e) => {
-    const f = e.target.files?.[0]
-    e.target.value = ''
-    if (f) onFile(f)
-  }
+// Lo primero: ¿ya esta la factura? Si no, se arma el pedido y la factura se
+// anexa despues. Abajo, los pedidos que siguen esperando la suya.
+function StartStep({ onHave, onPedido, onAttach }) {
+  const { data: waiting } = usePolling('/api/documents?kind=factura&status=espera&limit=50', { interval: 30000 })
+  return (
+    <>
+      <SheetHeader title="Descontar factura" subtitle="¿Ya tienes la factura?" />
+      <div className="doc-cards start-cards">
+        <button type="button" className="doc-card in" onClick={onHave}>
+          <span className="doc-ico"><Icon name="receipt" size={22} /></span>
+          <span className="doc-card-t"><b>Ya tengo la factura</b><small>Foto, revisas y se descuenta</small></span>
+        </button>
+        <button type="button" className="doc-card" onClick={onPedido}>
+          <span className="doc-ico"><Icon name="box" size={22} /></span>
+          <span className="doc-card-t"><b>Todavía no: armar pedido</b><small>Escaneas lo que empacas; la factura se anexa después</small></span>
+        </button>
+      </div>
+      {waiting?.length > 0 && (
+        <>
+          <h3 className="h-sec">Esperando factura <small>{waiting.length}</small></h3>
+          <div className="card panel">
+            {waiting.map((d) => (
+              <button type="button" key={d.id} className="need doc-item" onClick={() => onAttach(d)}>
+                <span className="need-t">
+                  <b>{pedidoLabel(d)}</b>
+                  <small>{[plural(d.units, 'prenda', 'prendas'), d.notes, d.user_name].filter(Boolean).join(' · ')}</small>
+                </span>
+                <span className="wait-go">Anexar factura<Icon name="arrowRight" size={15} stroke={2.4} /></span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+
+function PickStep({ onFile, error, onBack }) {
   return (
     <>
       <SheetHeader title="Descontar una factura" subtitle="Toma una foto de la factura impresa. La app lee los códigos y las cantidades, tú revisas y confirmas." />
       {error && <p className="form-err" role="alert">{error}</p>}
-      <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
-      <input ref={gallery} type="file" accept="image/*" hidden onChange={pick} />
-      <button className="btn btn-lime btn-lg btn-block" style={{ marginTop: 16 }} onClick={() => camera.current.click()}>
-        <Icon name="camera" size={20} />Tomar foto de la factura
-      </button>
-      <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={() => gallery.current.click()}>
-        Elegir una foto guardada
-      </button>
+      <PhotoButtons onFile={onFile} />
       <details className="doc-help">
         <summary>Recomendaciones para usarla bien</summary>
         <ul>
           <li>Que se vea toda la tabla de productos, derecha, con buena luz y sin sombras.</li>
           <li>Revisa cada línea antes de confirmar: si un código o una cantidad no se leyó bien, corrígelo.</li>
-          <li>La foto se lee en tu celular y, al confirmar, se guarda un mes como prueba de lo que salió (se puede ver y descargar en Resumen). Después se borra sola.</li>
+          <li>Si ya descontaste esas prendas por otro lado, al revisar marca “Solo registro”: se guarda la factura sin descontar otra vez.</li>
+          <li>La foto se guarda un mes como prueba de lo que salió (se puede ver y descargar en Resumen). Después se borra sola.</li>
         </ul>
       </details>
+      <button type="button" className="link-btn" style={{ marginTop: 14 }} onClick={onBack}>Volver</button>
     </>
   )
 }
 
-function ReadingStep({ preview, stage, progress }) {
+const PEDIDO_KEY = 'bodega_pedido_borrador'
+
+// Armar un pedido sin factura: se escanea (o se busca) lo que se va
+// empacando y, al terminar, se descuenta todo junto. Queda esperando la
+// factura. Lo armado se guarda en este celular por si se cierra la hoja.
+function PedidoStep({ onSaved, onBack }) {
+  const showToast = useToast()
+  const { data: products } = useProducts()
+  const { data: layout } = useLayout()
+  const outlet = outletIdsOf(layout)
+  const bySku = useMemo(() => new Map((products || []).map((p) => [p.sku, p])), [products])
+  const saved = useMemo(() => {
+    try { return JSON.parse(localStorage.getItem(PEDIDO_KEY) || 'null') || {} } catch { return {} }
+  }, [])
+  const [lines, setLines] = useState(saved.lines || []) // [{ sku, qty, from }]
+  const [notes, setNotes] = useState(saved.notes || '')
+  const [q, setQ] = useState('')
+  const [flash, setFlash] = useState(null)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    try { localStorage.setItem(PEDIDO_KEY, JSON.stringify({ lines, notes })) } catch { /* sin almacenamiento */ }
+  }, [lines, notes])
+
+  const add = (p) => {
+    const had = lines.find((l) => l.sku === p.sku)?.qty || 0
+    setLines((ls) => (ls.some((l) => l.sku === p.sku)
+      ? ls.map((l) => (l.sku === p.sku ? { ...l, qty: l.qty + 1 } : l))
+      : [...ls, { sku: p.sku, qty: 1, from: undefined }]))
+    setFlash({ text: `+1 · ${p.name}${p.size ? ` · ${p.size}` : ''}${had ? ` (van ${had + 1})` : ''}`, at: Date.now() })
+  }
+  const onCode = async (raw) => {
+    const code = cleanCode(raw)
+    if (!code) return
+    try {
+      // una etiqueta con el codigo mal ya corregida la resuelve el servidor
+      const p = bySku.get(code) || await api.get(`/api/products/${encodeURIComponent(code)}`)
+      beep(true)
+      add(p)
+    } catch (e) {
+      beep(false)
+      setFlash({ err: true, at: Date.now(), text: e instanceof ApiError && e.status === 404 ? `${code}: no está en la bodega` : 'No hay conexión con el servidor.' })
+    }
+  }
+  const update = (sku, patch) => setLines((ls) => ls.map((l) => (l.sku === sku ? { ...l, ...patch } : l)))
+  const remove = (sku) => setLines((ls) => ls.filter((l) => l.sku !== sku))
+
+  const term = q.trim().toUpperCase()
+  const found = useMemo(() => {
+    if (term.length < 2) return []
+    const words = term.split(/\s+/)
+    const code = term.replace(/\s+/g, '')
+    return (products || []).filter((p) => p.sku.includes(code) || words.every((w) => p.name.includes(w))).slice(0, 6)
+  }, [term, products])
+
+  const units = lines.reduce((t, l) => t + l.qty, 0)
+  const short = lines.find((l) => { const p = bySku.get(l.sku); return !p || outAvailable(p, outlet, l.from) < l.qty })
+  const missingFrom = lines.filter((l) => { const p = bySku.get(l.sku); return p && l.from === undefined && asksFrom(placesOf(p, outlet)) }).length
+  const problem = !lines.length ? 'Escanea o busca lo que vas empacando.'
+    : short ? `No alcanza: ${bySku.get(short.sku)?.name || short.sku}${bySku.get(short.sku)?.size ? ` · ${bySku.get(short.sku).size}` : ''}.`
+      : missingFrom ? (missingFrom === 1 ? 'Falta elegir de dónde sale una prenda.' : `Falta elegir de dónde salen ${missingFrom} prendas.`)
+        : ''
+
+  const confirm = async () => {
+    setSaving(true)
+    try {
+      const parts = lines.flatMap((l) => outParts(l.qty, l.from || '', bySku.get(l.sku))
+        .map((x) => ({ sku: l.sku, qty: x.qty, ...(x.loc ? { location_id: x.loc } : {}) })))
+      await api.post('/api/documents/pedido', { lines: [...parts.filter((x) => x.location_id), ...parts.filter((x) => !x.location_id)], notes: notes.trim() })
+      try { localStorage.removeItem(PEDIDO_KEY) } catch { /* sin almacenamiento */ }
+      refreshInventory()
+      revalidate('/api/documents')
+      showToast(`Pedido empacado: ${plural(units, 'prenda descontada', 'prendas descontadas')}. Queda esperando la factura.`)
+      onSaved()
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No hay conexión. No se descontó nada; intenta de nuevo.', 'err')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <>
-      <SheetHeader title="Leyendo la factura…" subtitle={stage === 'reading' ? 'Buscando códigos y cantidades.' : 'Preparando el lector (la primera vez tarda un poco más).'} />
-      <div className="doc-reading">
-        {preview && <img src={preview} alt="" />}
-        <div className="doc-scanline" aria-hidden="true" />
+      <SheetHeader
+        eyebrow={<div className="sheet-eyebrow"><span className="tag tag-warn">Sin factura todavía</span></div>}
+        title="Armar pedido"
+        subtitle="Escanea o busca lo que vas empacando. Al terminar, toca “Pedido empacado” y se descuenta todo junto."
+      />
+      <ScanBox onCode={onCode} flash={flash} hint="Cada etiqueta suma una. Con un lector USB o Bluetooth: toca el campo y escanea." />
+      <div style={{ marginTop: 14 }}>
+        <SearchField value={q} onChange={setQ} placeholder="O busca la referencia o el código" />
+        {found.length > 0 && (
+          <div className="ref-results">
+            {found.map((p) => (
+              <button key={p.sku} type="button" className="ref-result" onClick={() => { add(p); setQ('') }}>
+                {p.image_url ? <img src={p.image_url} alt="" /> : null}
+                <span className="ref-result-t">
+                  <b>{p.name}{p.size ? ` · ${p.size}` : ''}</b>
+                  <small><span className="mono">{p.sku}</span> · hay {outAvailable(p, outlet)}</small>
+                </span>
+                <Icon name="plus" size={18} stroke={2.2} />
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="doc-progress" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100}>
-        <i style={{ transform: `scaleX(${Math.max(0.04, progress)})` }} />
+
+      {lines.length > 0 && (
+        <>
+          <h3 className="h-sec">En el pedido <small>{plural(units, 'prenda', 'prendas')}</small></h3>
+          <div className="doc-lines">
+            {lines.map((l) => {
+              const p = bySku.get(l.sku)
+              const places = p ? placesOf(p, outlet) : []
+              const avail = p ? outAvailable(p, outlet, l.from) : 0
+              return (
+                <div key={l.sku} className={`doc-line ${avail < l.qty ? 'short' : 'ok'}`}>
+                  <button type="button" className="doc-check rm" aria-label="Quitar del pedido" onClick={() => remove(l.sku)}>
+                    <Icon name="x" size={14} stroke={3} />
+                  </button>
+                  <div className="doc-line-t">
+                    <b>{p ? `${p.name}${p.size ? ` · ${p.size}` : ''}` : l.sku}</b>
+                    <small><span className="mono">{l.sku}</span> · {avail < l.qty ? `solo hay ${avail}` : `hay ${avail}`}</small>
+                  </div>
+                  <Stepper
+                    value={l.qty}
+                    onMinus={() => update(l.sku, { qty: Math.max(1, l.qty - 1) })}
+                    onPlus={() => update(l.sku, { qty: l.qty + 1 })}
+                    disabledMinus={l.qty <= 1}
+                  />
+                  {asksFrom(places) && <FromPick places={places} value={l.from} qty={l.qty} onChange={(v) => update(l.sku, { from: v })} />}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+
+      <label className="field">
+        <span className="field-label">Pedido o cliente <small className="opt">si quieres</small></span>
+        <input className="input" value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={200} placeholder="Ej. pedido 1045 de la tienda, Ana Gómez" />
+      </label>
+
+      <div className="doc-footer">
+        <p className="mode-hint">{problem || 'Se descuenta todo junto y queda “Esperando factura”: cuando te la pasen, la anexas desde aquí.'}</p>
+        <button type="button" className="btn btn-lime btn-lg btn-block" disabled={!!problem || saving} onClick={confirm}>
+          {saving ? 'Guardando…' : `Pedido empacado · descontar ${plural(units, 'prenda', 'prendas')}`}
+        </button>
+        <button type="button" className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={onBack}>Volver</button>
       </div>
-      <p className="mode-hint" style={{ textAlign: 'center' }}>{Math.round(progress * 100)}%</p>
     </>
   )
 }
@@ -77,7 +243,7 @@ function Body({ onDone }) {
   const { data: products } = useProducts()
   const { data: layout } = useLayout()
   const outlet = outletIdsOf(layout)
-  const [step, setStep] = useState('pick')
+  const [step, setStep] = useState('start') // start | pick | reading | review | pedido | attach
   const [stage, setStage] = useState('preparing')
   const [progress, setProgress] = useState(0)
   const [preview, setPreview] = useState(null)
@@ -86,6 +252,8 @@ function Body({ onDone }) {
   const [number, setNumber] = useState('')
   const [rows, setRows] = useState([])
   const [dup, setDup] = useState(null)
+  const [recordOnly, setRecordOnly] = useState(false) // ya se desconto por otro lado: solo el registro
+  const [attach, setAttach] = useState(null) // el pedido al que se le anexa la factura
   const [saving, setSaving] = useState(false)
   const known = products || []
 
@@ -99,16 +267,14 @@ function Body({ onDone }) {
     setStage('preparing')
     setStep('reading')
     try {
-      const text = await readPhoto(file, { onProgress: setProgress, onStage: setStage })
-      const parsed = parseFactura(text)
-      if (!parsed.lines.length) {
+      const r = await readFactura(file, known, { onProgress: setProgress, onStage: setStage })
+      if (!r.lines.length) {
         setStep('pick')
         setError('No se encontraron líneas de productos. Toma la foto más derecha y más cerca de la tabla.')
         return
       }
-      setNumber(parsed.number)
-      const matches = matchAll(parsed.lines, known)
-      setRows(parsed.lines.map((l, i) => withDefault(toRow(l, matches[i]), outlet)))
+      setNumber(r.number)
+      setRows(r.lines.map((l, i) => withDefault(toRow(l, r.matches[i]), outlet)))
       setStep('review')
     } catch {
       setStep('pick')
@@ -116,7 +282,7 @@ function Body({ onDone }) {
     }
   }
 
-  // la misma factura no se puede descontar dos veces
+  // la misma factura no se puede registrar dos veces
   useEffect(() => {
     const n = number.trim()
     if (step !== 'review' || n.length < 4) { setDup(null); return undefined }
@@ -137,22 +303,35 @@ function Body({ onDone }) {
                      include: !!m.product && outAvailable(m.product, outlet, undefined) >= row.qty })
   }
 
+  // solo registro: van todas las reconocidas (ya se descontaron, aunque hoy no haya existencias)
+  const toggleRecord = () => {
+    const next = !recordOnly
+    setRecordOnly(next)
+    setRows((rs) => rs.map((r) => (next ? { ...r, include: !!r.product } : withDefault(r, outlet))))
+  }
+
   const chosen = rows.filter((r) => r.include && r.product)
   const units = chosen.reduce((t, r) => t + r.qty, 0)
   const pending = rows.filter((r) => !r.include).length
-  const blocked = chosen.some((r) => outAvailable(r.product, outlet, r.from) < r.qty)
+  // solo registro: no se descuenta, asi que no importa cuanto hay ni de donde sale
+  const blocked = !recordOnly && chosen.some((r) => outAvailable(r.product, outlet, r.from) < r.qty)
   // prendas que estan en varios lugares: hay que decir de cual salen
-  const missingFrom = chosen.filter((r) => r.from === undefined && asksFrom(placesOf(r.product, outlet))).length
+  const missingFrom = recordOnly ? 0 : chosen.filter((r) => r.from === undefined && asksFrom(placesOf(r.product, outlet))).length
 
   const confirm = async () => {
     setSaving(true)
     try {
-      // primero lo que sale de una ubicacion elegida y despues lo de donde haya
-      const parts = chosen.flatMap((r) => outParts(r.qty, r.from || '', r.product).map((x) => ({ sku: r.sku, qty: x.qty, ...(x.loc ? { location_id: x.loc } : {}) })))
-      const lines = [...parts.filter((x) => x.location_id), ...parts.filter((x) => !x.location_id)]
-      const res = await api.post('/api/documents/factura', { number: number.trim(), lines })
+      let lines
+      if (recordOnly) {
+        lines = chosen.map((r) => ({ sku: r.sku, qty: r.qty }))
+      } else {
+        // primero lo que sale de una ubicacion elegida y despues lo de donde haya
+        const parts = chosen.flatMap((r) => outParts(r.qty, r.from || '', r.product).map((x) => ({ sku: r.sku, qty: x.qty, ...(x.loc ? { location_id: x.loc } : {}) })))
+        lines = [...parts.filter((x) => x.location_id), ...parts.filter((x) => !x.location_id)]
+      }
+      const res = await api.post('/api/documents/factura', { number: number.trim(), lines, record_only: recordOnly })
       refreshInventory()
-      // la foto queda como prueba (un mes); si no sube, la factura igual quedo descontada
+      // la foto queda como prueba (un mes); si no sube, la factura igual quedo
       let kept = false
       if (photoFile) {
         try {
@@ -162,7 +341,8 @@ function Body({ onDone }) {
           kept = false
         }
       }
-      showToast(`Factura ${number.trim().toUpperCase()}: ${plural(units, 'prenda descontada', 'prendas descontadas')}${
+      revalidate('/api/documents')
+      showToast(`Factura ${number.trim().toUpperCase()}: ${recordOnly ? `registro de ${plural(units, 'prenda', 'prendas')} (no se descontó nada)` : plural(units, 'prenda descontada', 'prendas descontadas')}${
         photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}`, kept || !photoFile ? 'ok' : 'err')
       onDone?.()
       close()
@@ -173,14 +353,21 @@ function Body({ onDone }) {
     }
   }
 
-  if (step === 'pick') return <PickStep onFile={onFile} error={error} />
+  if (step === 'start') {
+    return <StartStep onHave={() => setStep('pick')} onPedido={() => setStep('pedido')} onAttach={(d) => { setAttach(d); setStep('attach') }} />
+  }
+  if (step === 'pedido') return <PedidoStep onSaved={() => setStep('start')} onBack={() => setStep('start')} />
+  if (step === 'attach' && attach) {
+    return <AttachBody pedido={attach} onBack={() => setStep('start')} onDone={() => { onDone?.(); close() }} />
+  }
+  if (step === 'pick') return <PickStep onFile={onFile} error={error} onBack={() => { setError(''); setStep('start') }} />
   if (step === 'reading') return <ReadingStep preview={preview} stage={stage} progress={progress} />
 
   return (
     <>
       <SheetHeader
-        eyebrow={<div className="sheet-eyebrow"><span className="tag tag-out">Salida por factura</span></div>}
-        title="Revisa antes de descontar"
+        eyebrow={<div className="sheet-eyebrow"><span className="tag tag-out">{recordOnly ? 'Solo registro' : 'Salida por factura'}</span></div>}
+        title={recordOnly ? 'Revisa antes de guardar' : 'Revisa antes de descontar'}
         subtitle={`${plural(rows.length, 'línea leída', 'líneas leídas')} · ${pending ? `${pending} sin incluir` : 'todas incluidas'}`}
       />
       <label className="field" style={{ marginTop: 0 }}>
@@ -189,9 +376,13 @@ function Body({ onDone }) {
       </label>
       {dup && (
         <p className="form-err" role="alert">
-          Esta factura ya se descontó el {new Date(dup.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} ({dup.user_name}). No se puede aplicar dos veces.
+          Esta factura ya se registró el {new Date(dup.created_at).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} ({dup.user_name}). No se puede aplicar dos veces.
         </p>
       )}
+      <div className="menu-check rem-toggle">
+        <span>Solo registro<small>Ya descontaste estas prendas por otro lado: se guarda la factura y su foto sin descontar otra vez.</small></span>
+        <button type="button" className="switch" role="switch" aria-checked={recordOnly} aria-label="Solo registro" onClick={toggleRecord} />
+      </div>
 
       <div className="doc-lines">
         {rows.map((r) => {
@@ -201,7 +392,7 @@ function Body({ onDone }) {
           const fromOutlet = places.find((x) => x.outlet && x.id === r.from)
           // lo del outlet solo cuenta si se eligio que sale de ahi
           const outletNote = !inOutlet ? '' : fromOutlet ? ` (con ${fromOutlet.qty} del outlet)` : ` · ${inOutlet} más en outlet`
-          const short = r.product && avail < r.qty
+          const short = !recordOnly && r.product && avail < r.qty
           const state = !r.product ? 'unknown' : short ? 'short' : 'ok'
           const shown = r.product ? r.sku : r.code
           return (
@@ -231,7 +422,7 @@ function Body({ onDone }) {
                 <small>
                   {state === 'unknown' && 'No está en la bodega. Corrige el código o déjala por fuera.'}
                   {state === 'short' && `Solo hay ${avail} para sacar${inOutlet && !fromOutlet ? ` (y ${inOutlet} en outlet: elígelo abajo si salen de ahí)` : ''}.`}
-                  {state === 'ok' && `Hay ${avail}${outletNote}${r.how === 'fixed' && r.read.replace(/\s/g, '') !== r.sku ? ` · se leyó ${r.read}` : ''}`}
+                  {state === 'ok' && (recordOnly ? 'Solo se anota: no se descuenta' : `Hay ${avail}${outletNote}${r.how === 'fixed' && r.read.replace(/\s/g, '') !== r.sku ? ` · se leyó ${r.read}` : ''}`)}
                 </small>
               </div>
               <Stepper
@@ -240,7 +431,7 @@ function Body({ onDone }) {
                 onPlus={() => update(r.id, { qty: r.qty + 1 })}
                 disabledMinus={r.qty <= 1}
               />
-              {r.include && asksFrom(places) && (
+              {!recordOnly && r.include && asksFrom(places) && (
                 <FromPick places={places} value={r.from} qty={r.qty} onChange={(v) => update(r.id, { from: v })} />
               )}
             </div>
@@ -254,9 +445,9 @@ function Body({ onDone }) {
             {missingFrom === 1 ? 'Falta elegir de dónde sale una prenda' : `Falta elegir de dónde salen ${missingFrom} prendas`}: está en varios lugares
           </p>
         )}
-        <p className="mode-hint">Se descuenta todo junto: si algo falla, no se descuenta nada.</p>
+        <p className="mode-hint">{recordOnly ? 'Solo se guarda el registro con su foto: el inventario no cambia.' : 'Se descuenta todo junto: si algo falla, no se descuenta nada.'}</p>
         <button className="btn btn-lime btn-lg btn-block" disabled={!chosen.length || !number.trim() || !!dup || blocked || missingFrom > 0 || saving} onClick={confirm}>
-          {saving ? 'Descontando…' : `Descontar ${plural(units, 'prenda', 'prendas')}`}
+          {saving ? 'Guardando…' : recordOnly ? `Guardar registro de ${plural(units, 'prenda', 'prendas')}` : `Descontar ${plural(units, 'prenda', 'prendas')}`}
         </button>
         <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={() => { setRows([]); setStep('pick') }}>
           Tomar otra foto

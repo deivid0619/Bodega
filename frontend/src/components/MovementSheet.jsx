@@ -34,6 +34,9 @@ function explain(m, pair) {
       : { title: 'Vino de la reserva', text: `Quedó en ${where}.` }
   }
   if (note === TO_RESERVE) return { title: 'Volvió a la reserva', text: `Salió de ${where} y se sumó a la reserva.` }
+  if (note.startsWith('Pedido PED-')) {
+    return { title: 'Salió en un pedido que espera su factura', text: `Salió de ${where}. Cuando se anexe la factura, aquí dirá su número.`, doc: ['factura', note.slice(7)] }
+  }
   if (note.startsWith('Factura ')) return { title: `Se descontó con la factura ${note.slice(8)}`, text: `Salió de ${where}.`, doc: ['factura', note.slice(8)] }
   if (note.startsWith('Remisión ')) {
     const n = note.slice(9)

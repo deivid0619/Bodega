@@ -122,6 +122,13 @@ class Document(Base):
     # fotos del papel como prueba ([{path, type, size}]); se borran solas al
     # mes (photo_store) y aqui queda en NULL
     photos = Column(JSON(none_as_null=True), nullable=True)
+    # "registro": solo se guardo el papel y lo que dice, sin mover el
+    # inventario (ya se habia entrado o descontado por otro lado)
+    mode = Column(String(12), nullable=True)
+    # factura: "espera" = un pedido ya empacado y descontado que espera el
+    # numero y la foto de su factura (mientras tanto su numero es PED-...)
+    status = Column(String(12), nullable=True)
+    closed_at = Column(DateTime(timezone=True), nullable=True)  # cuando se le anexo la factura al pedido
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     user_name = Column(String(120), nullable=False, default="")
     created_at = Column(DateTime(timezone=True), default=now, index=True)

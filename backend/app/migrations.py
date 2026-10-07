@@ -11,7 +11,8 @@ from . import models
 _NEW_COLUMNS = {
     "movements": [("to_location_id", "VARCHAR(32)"), ("note", "VARCHAR(80)")],
     "documents": [("pending", "INTEGER NOT NULL DEFAULT 0"), ("supplier", "VARCHAR(120)"), ("doc_date", "VARCHAR(10)"),
-                  ("notes", "VARCHAR(500)"), ("photos", "JSON")],
+                  ("notes", "VARCHAR(500)"), ("photos", "JSON"), ("mode", "VARCHAR(12)"), ("status", "VARCHAR(12)"),
+                  ("closed_at", "TIMESTAMP WITH TIME ZONE")],
     "reserve_items": [("image_url", "VARCHAR(500)")],
 }
 
