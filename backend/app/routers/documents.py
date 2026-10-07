@@ -2,15 +2,16 @@
 salio en un despacho), la remision de un proveedor (lo que llego) y el
 conteo de una ubicacion. Se aplican completos o nada, y el mismo numero no
 se puede aplicar dos veces."""
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
 import threading
+import unicodedata
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from starlette.concurrency import run_in_threadpool
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -104,13 +105,86 @@ def get_photo(doc_id: int, index: int, db: Session = Depends(get_db), _: models.
                     headers={"Cache-Control": "private, max-age=3600"})
 
 
+@router.get("/counts", response_model=schemas.DocumentCountsOut)
+def document_counts(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Cuantas remisiones y facturas hay guardadas (el apartado del Resumen)."""
+    rows = dict(db.query(models.Document.kind, func.count(models.Document.id)).group_by(models.Document.kind).all())
+    return schemas.DocumentCountsOut(remision=rows.get("remision", 0), factura=rows.get("factura", 0))
+
+
+def _local_midnight(y: int, m: int, d: int = 1) -> datetime:
+    """Las 12 de la noche en Colombia, en UTC (como esta en la base)."""
+    return datetime(y, m, d, tzinfo=ser.BOGOTA).astimezone(timezone.utc)
+
+
+@router.get("/calendar", response_model=list[schemas.DocumentDayOut])
+def documents_calendar(month: str = Query(pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
+                       db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """El calendario del Resumen: lo que entro con remision y lo que salio con
+    factura cada dia del mes (el dia en que se registro, hora de Colombia)."""
+    y, m = map(int, month.split("-"))
+    start, end = _local_midnight(y, m), _local_midnight(y + (m == 12), m % 12 + 1)
+    rows = (db.query(models.Document.kind, models.Document.created_at, models.Document.units)
+            .filter(models.Document.kind.in_(("remision", "factura")),
+                    models.Document.created_at >= start, models.Document.created_at < end).all())
+    days: dict[str, schemas.DocumentDayOut] = {}
+    for kind, created, units in rows:
+        day = ser.local_time(created).date().isoformat()
+        d = days.setdefault(day, schemas.DocumentDayOut(day=day))
+        if kind == "remision":
+            d.remisiones += 1
+            d.units_in += units or 0
+        else:
+            d.facturas += 1
+            d.units_out += units or 0
+    return [days[k] for k in sorted(days)]
+
+
+def _fold(s: str) -> str:
+    """Para buscar sin importar mayusculas ni tildes: 'Ñandú' -> 'nandu'."""
+    return "".join(c for c in unicodedata.normalize("NFKD", s.casefold()) if not unicodedata.combining(c))
+
+
+def _haystack(d: models.Document) -> str:
+    """Donde se busca: numero, proveedor, notas, quien la registro y cada
+    prenda (nombre, talla y codigo)."""
+    parts = [d.number, d.supplier or "", d.notes or "", d.user_name or ""]
+    parts += [f"{l.get('name') or ''} {l.get('size') or ''} {l.get('sku') or ''}" for l in (d.lines or [])]
+    return _fold(" | ".join(parts))
+
+
 @router.get("", response_model=list[schemas.DocumentOut])
 def list_documents(kind: Optional[Literal["factura", "remision", "conteo"]] = None, number: Optional[str] = None,
                    base: Optional[str] = None, prefix: Optional[str] = None, limit: int = Query(default=30, le=200),
+                   search: Optional[str] = Query(default=None, alias="q", max_length=60),
+                   before: Optional[int] = None,
+                   day: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
                    db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     q = db.query(models.Document).order_by(models.Document.id.desc())
     if kind:
         q = q.filter(models.Document.kind == kind)
+    if before:
+        # la pagina siguiente: las anteriores a la ultima que ya se vio
+        q = q.filter(models.Document.id < before)
+    if day:
+        # las de un dia del calendario (hora de Colombia)
+        try:
+            start = _local_midnight(*map(int, day.split("-")))
+        except ValueError:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Fecha inválida.")
+        q = q.filter(models.Document.created_at >= start, models.Document.created_at < start + timedelta(days=1))
+    term = _fold(" ".join((search or "").split()))
+    if term:
+        # se busca aqui y no en la base: asi da igual si se escribe con
+        # tildes, sin ellas o en minuscula (SQLite y Postgres no lo hacen igual)
+        compact = term.replace(" ", "")
+        found = []
+        for d in q.yield_per(200):
+            if term in _haystack(d) or compact in _fold(d.number):
+                found.append(d)
+                if len(found) >= limit:
+                    break
+        return found
     if number:
         q = q.filter(models.Document.number == _norm_number(number))
     if prefix:
@@ -187,8 +261,9 @@ def _sibling_location(db: Session, name: str, skus: set[str]) -> Optional[str]:
 def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db: Session = Depends(get_db),
                    user: models.User = Depends(get_current_user)):
     """Entrada de mercancia de un proveedor, ya contada. Cada talla con codigo
-    entra a la bodega (a su ubicacion principal o a la elegida); sin codigo, o
-    si se elige la reserva, queda en la reserva. Todo junto o nada."""
+    entra a la bodega (a la ubicacion elegida para su referencia, o a su
+    ubicacion principal); sin codigo, o si se elige la reserva, queda en la
+    reserva. Todo junto o nada."""
     number = _norm_number(payload.number or "")
     if not number:
         # el papel no trae numero: uno automatico con la fecha y la hora (asi
@@ -201,11 +276,15 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
                             f"La remisión {number} ya entró el {when} ({prev.user_name}). "
                             "Si es otra entrega de la misma orden, márcala como otra entrega.")
 
-    # la misma talla repetida se suma
-    merged: dict[tuple[str, str, Optional[str]], list[int]] = {}
+    to_bodega = payload.destination == "bodega"
+    passing = payload.destination == "despacho"
+    # la misma talla repetida se suma (si va al mismo lugar: una referencia se
+    # puede repartir en dos ubicaciones)
+    merged: dict[tuple[str, str, Optional[str], Optional[str]], list[int]] = {}
     for line in payload.lines:
         sku = inv.resolve_sku(db, line.sku or "") or None
-        key = (" ".join(line.name.upper().split()), line.size.strip().upper(), sku)
+        loc = ((line.location_id or payload.location_id or "").strip() or None) if to_bodega else None
+        key = (" ".join(line.name.upper().split()), line.size.strip().upper(), sku, loc)
         acc = merged.setdefault(key, [0, 0])
         acc[0] += line.qty
         acc[1] += line.pending
@@ -215,12 +294,11 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
     note = f"{inv.REMISION_NOTE}{number}"
     out_lines: list[dict] = []
     touched: list[str] = []
-    to_bodega = payload.destination == "bodega"
-    passing = payload.destination == "despacho"
     try:
-        if to_bodega and payload.location_id and payload.location_id not in inv.location_ids(db):
+        chosen = {k[3] for k in merged if k[3]}
+        if chosen - inv.location_ids(db):
             raise inv.InventoryError("Esa ubicación no existe.")
-        for (name, size, sku), (qty, pending) in merged.items():
+        for (name, size, sku, loc), (qty, pending) in merged.items():
             row = {"name": name, "size": size, "sku": sku, "qty": qty, "pending": pending,
                    "dest": None, "location_id": None}
             out_lines.append(row)
@@ -244,11 +322,10 @@ def apply_remision(payload: schemas.RemisionIn, background: BackgroundTasks, db:
                 row["dest"] = "reserva"
                 continue
             if product:
-                _, movs = inv.apply_movement(db, sku, "in", qty, user, location_id=payload.location_id,
-                                             note=note, commit=False)
+                _, movs = inv.apply_movement(db, sku, "in", qty, user, location_id=loc, note=note, commit=False)
                 row["location_id"] = movs[-1].location_id
             else:
-                loc = payload.location_id or _sibling_location(db, name, {k[2] for k in merged if k[0] == name and k[2]})
+                loc = loc or _sibling_location(db, name, {k[2] for k in merged if k[0] == name and k[2]})
                 if not loc:
                     raise inv.InventoryError(f"{sku} es un código nuevo: elige en qué ubicación guardarlo.")
                 image = (catalog.lookup(sku, fetch=False) or {}).get("image")

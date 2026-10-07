@@ -209,6 +209,9 @@ class RemisionLineIn(BaseModel):
     sku: Optional[str] = Field(default=None, max_length=64)  # sin codigo: entra a la reserva
     qty: int = Field(ge=0, default=0)  # lo que llego y se conto
     pending: int = Field(ge=0, default=0)  # lo que el proveedor quedo debiendo
+    # bodega: donde se guarda esta referencia; sin elegir, la de toda la remision
+    # o, si tampoco, donde ya esta cada talla
+    location_id: Optional[str] = Field(default=None, max_length=32)
 
 
 class RemisionIn(BaseModel):
@@ -254,6 +257,22 @@ class PhotoStoreOut(BaseModel):
     where: Literal["supabase", "local", "none"]
     days: int
     detail: str
+
+
+class DocumentCountsOut(BaseModel):
+    """Cuantas remisiones y facturas hay guardadas, para el Resumen."""
+    remision: int = 0
+    factura: int = 0
+
+
+class DocumentDayOut(BaseModel):
+    """Un dia del calendario (hora de Colombia): lo que entro con remision y
+    lo que salio con factura."""
+    day: str  # AAAA-MM-DD
+    remisiones: int = 0
+    units_in: int = 0
+    facturas: int = 0
+    units_out: int = 0
 
 
 class DocumentResult(BaseModel):

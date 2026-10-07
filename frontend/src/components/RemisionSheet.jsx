@@ -262,7 +262,6 @@ function Body() {
   const [picking, setPicking] = useState(true)
   const [showPending, setShowPending] = useState(false)
   const [dest, setDest] = useState('bodega')
-  const [place, setPlace] = useState('')
   const [history, setHistory] = useState(null)
   const [delivery, setDelivery] = useState(0)
   const [addingSize, setAddingSize] = useState(null)
@@ -290,7 +289,8 @@ function Body() {
   const prevPending = useMemo(() => {
     const last = history?.[0]
     const m = new Map()
-    if (last && (delivery || norm(number).includes('#'))) for (const l of last.lines || []) if (l.pending) m.set(`${l.name}|${l.size}`, l.pending)
+    // una talla repartida en dos ubicaciones viene en dos lineas: se suman
+    if (last && (delivery || norm(number).includes('#'))) for (const l of last.lines || []) if (l.pending) m.set(`${l.name}|${l.size}`, (m.get(`${l.name}|${l.size}`) || 0) + l.pending)
     return m
   }, [history, delivery, number])
 
@@ -298,9 +298,11 @@ function Body() {
     const rows = ref.isNew
       ? TEMPLATE.map((s) => newRow(s))
       : [...ref.sizes.values()].sort((a, b) => sizeRank(a.size) - sizeRank(b.size)).map((s) => newRow(s.size, s))
-    setBlocks((bs) => [...bs, { id: nextId++, name: ref.name, isNew: !!ref.isNew, shop: !!ref.shop, rows }])
+    // place: la ubicacion de esta referencia ('' = donde ya esta cada talla)
+    setBlocks((bs) => [...bs, { id: nextId++, name: ref.name, isNew: !!ref.isNew, shop: !!ref.shop, rows, place: '' }])
     setPicking(false)
   }
+  const setPlace = (bid, place) => setBlocks((bs) => bs.map((b) => (b.id === bid ? { ...b, place } : b)))
   // dos toques seguidos suman dos: cada cambio parte del valor actual
   const setRow = (bid, size, patch) =>
     setBlocks((bs) => bs.map((b) => (b.id !== bid ? b : {
@@ -322,7 +324,7 @@ function Body() {
 
   const lines = blocks.flatMap((b) => b.rows
     .filter((r) => r.qty > 0 || r.pending > 0)
-    .map((r) => ({ name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, qty: r.qty, pending: r.pending, isNew: b.isNew })))
+    .map((r) => ({ name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, qty: r.qty, pending: r.pending, isNew: b.isNew, place: b.place })))
   const units = lines.reduce((t, l) => t + l.qty, 0)
   const pend = lines.reduce((t, l) => t + l.pending, 0)
   const passing = dest === 'despacho'
@@ -333,13 +335,25 @@ function Body() {
   const clash = lines.some((l) => l.sku && known.get(l.sku) && known.get(l.sku).name !== l.name)
   // un codigo nuevo se guarda junto a las otras tallas; si la referencia no tiene ninguna en la bodega, hay que elegir
   const withKnown = new Set(blocks.filter((b) => b.rows.some((r) => r.sku && known.has(r.sku))).map((b) => b.name))
-  const needsPlace = dest === 'bodega' && !place && lines.some((l) => l.sku && l.qty > 0 && !known.get(l.sku) && !inBodega.has(l.name) && !withKnown.has(l.name))
+  const homeless = (b) => !inBodega.has(b.name) && !withKnown.has(b.name)
+  const needsPlace = dest === 'bodega'
+    ? blocks.find((b) => !b.place && homeless(b) && b.rows.some((r) => {
+      const code = r.sku || cleanCode(r.code) // de la tienda o escrito
+      return r.qty > 0 && code && !known.get(code)
+    }))
+    : null
+  // lo que dice "automatica" en cada referencia: donde estan hoy sus tallas
+  const autoLabel = (b) => {
+    const here = [...new Set(b.rows.map((r) => known.get(r.sku)).filter(Boolean).map((p) => p.location_name || p.location_id))]
+    if (here.length) return `Automática: donde ya está (${here.slice(0, 2).join(', ')}${here.length > 2 ? '…' : ''})`
+    return homeless(b) ? 'Elige dónde guardarla' : 'Automática: con sus otras tallas'
+  }
 
   const problem = dup ? 'Esta remisión ya entró.'
       : !blocks.length ? 'Elige la referencia que llegó.'
         : !units && !pend ? 'Pon cuántas llegaron de cada talla.'
           : clash ? 'Un código escrito es de otra referencia.'
-            : needsPlace ? 'Elige en qué ubicación guardar los códigos nuevos.'
+            : needsPlace ? `Elige dónde guardar ${needsPlace.name}.`
               : noCode ? `Las prendas de paso necesitan su código (talla ${noCode.size || 'única'}).`
                 : ''
 
@@ -348,8 +362,9 @@ function Body() {
     try {
       const res = await api.post('/api/documents/remision', {
         number: effective, supplier: supplier.trim(), date: date || undefined, destination: dest, notes: notes.trim(),
-        location_id: dest === 'bodega' && place ? place : undefined,
-        lines: lines.map(({ name, size, sku, qty, pending }) => ({ name, size, sku: sku || undefined, qty, pending })),
+        lines: lines.map(({ name, size, sku, qty, pending, place }) => ({
+          name, size, sku: sku || undefined, qty, pending, location_id: dest === 'bodega' && place ? place : undefined,
+        })),
       })
       refreshInventory()
       const d = res.document
@@ -497,18 +512,29 @@ function Body() {
       {passing ? (
         <p className="mode-hint">Se cuentan, pero no entran a la bodega: quedan en Despacho hasta que salgan con la factura o una salida. No cuentan para lo que hay que pedir.</p>
       ) : dest === 'bodega' ? (
-        <label className="field" style={{ marginTop: 12 }}>
-          <span className="field-label">Ubicación</span>
-          <select className="input" value={place} onChange={(e) => setPlace(e.target.value)}>
-            <option value="">Automática: donde ya está cada talla</option>
-            {groups.map((g) => (
-              <optgroup key={g.label} label={g.label}>
-                {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
-          <span className="field-hint">Las tallas sin código quedan en la reserva hasta que les pongas el código.</span>
-        </label>
+        <div className="field" style={{ marginTop: 12 }}>
+          <span className="field-label">{blocks.length > 1 ? 'Ubicación de cada referencia' : 'Ubicación'}</span>
+          {blocks.length ? (
+            <div className="rem-places">
+              {blocks.map((b) => (
+                <label key={b.id} className={`rem-place${needsPlace?.id === b.id ? ' need' : ''}`}>
+                  <span className="rem-place-name">{b.name}</span>
+                  <select className="input" value={b.place} onChange={(e) => setPlace(b.id, e.target.value)} aria-label={`Ubicación de ${b.name}`}>
+                    <option value="">{autoLabel(b)}</option>
+                    {groups.map((g) => (
+                      <optgroup key={g.label} label={g.label}>
+                        {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="mode-hint" style={{ marginTop: 4 }}>Cuando agregues lo que llegó, aquí eliges dónde se guarda cada referencia.</p>
+          )}
+          <span className="field-hint">Cada referencia puede ir a una ubicación distinta. Las tallas sin código quedan en la reserva hasta que les pongas el código.</span>
+        </div>
       ) : (
         <p className="mode-hint">Todo queda en la reserva. Desde ahí lo envías a la bodega cuando haga falta.</p>
       )}

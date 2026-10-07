@@ -9,6 +9,7 @@ import { downloadCsv, fmtTime, outletIdsOf, refKey, stockSplit } from '../utils'
 import Icon from '../components/Icon'
 import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
+import DocsSection from '../components/DocCalendar'
 import MovementSheet, { pairOf } from '../components/MovementSheet'
 import PassingSection from '../components/Passing'
 import StoreStatus, { PhotoStoreStatus } from '../components/StoreStatus'
@@ -28,8 +29,6 @@ export default function Summary() {
   const { data: products } = useProducts()
   const { data: reserve } = useReserve()
   const { data: layout } = useLayout()
-  const { data: facturas } = usePolling('/api/documents?kind=factura&limit=5', { interval: 30000 })
-  const { data: remisiones } = usePolling('/api/documents?kind=remision&limit=5', { interval: 30000 })
   const { data: passing } = usePolling('/api/reports/dispatch', { interval: 20000 })
   // desde otra pagina se llega a una seccion (/summary#despacho)
   const { hash } = useLocation()
@@ -178,6 +177,8 @@ export default function Summary() {
 
         <PassingSection />
 
+        <DocsSection onOpen={setDocOpen} onList={setDocList} />
+
         <h2 className="h-sec">Lo que más sale <small>últimos 30 días</small></h2>
         {top && top.length ? (
           <div className="card bars" role="list" aria-label="Unidades que salieron en 30 días">
@@ -191,53 +192,6 @@ export default function Summary() {
           </div>
         ) : (
           <Empty icon="summary" title="Sin salidas todavía">Cuando registres salidas, aquí verás las referencias que más rotan.</Empty>
-        )}
-
-        {remisiones?.length > 0 && (
-          <>
-            <h2 className="h-sec">Remisiones recibidas</h2>
-            <div className="card panel">
-              {remisiones.map((r) => {
-                const owed = (r.lines || []).filter((l) => l.pending > 0)
-                return (
-                  <button type="button" className="need doc-item" key={r.id} onClick={() => setDocOpen(r)}>
-                    <span className="need-t">
-                      <b className={r.number.startsWith('SN-') ? '' : 'mono'}>{r.number.startsWith('SN-') ? 'Sin número' : r.number}</b>
-                      <small>{[r.supplier, r.user_name, fmtTime(r.created_at)].filter(Boolean).join(' · ')}</small>
-                      {owed.length > 0 && (
-                        <small className="owed">Quedaron debiendo {owed.map((l) => `${l.size || 'única'} ${l.pending}`).join(', ')}</small>
-                      )}
-                      {r.notes && <small className="note">{r.notes}</small>}
-                    </span>
-                    <span className="need-q"><b>{r.units}</b><span>{r.units === 1 ? 'entró' : 'entraron'}</span></span>
-                  </button>
-                )
-              })}
-            </div>
-            <button type="button" className="link-btn see-all" onClick={() => setDocList('remision')}>
-              Ver todas las remisiones<Icon name="arrowRight" size={14} stroke={2.4} />
-            </button>
-          </>
-        )}
-
-        {facturas?.length > 0 && (
-          <>
-            <h2 className="h-sec">Facturas descontadas</h2>
-            <div className="card panel">
-              {facturas.map((f) => (
-                <button type="button" className="need doc-item" key={f.id} onClick={() => setDocOpen(f)}>
-                  <span className="need-t">
-                    <b className="mono">{f.number}</b>
-                    <small>{plural(f.lines.length, 'referencia', 'referencias')} · {f.user_name} · {fmtTime(f.created_at)}</small>
-                  </span>
-                  <span className="need-q dark"><b>{f.units}</b><span>{f.units === 1 ? 'salió' : 'salieron'}</span></span>
-                </button>
-              ))}
-            </div>
-            <button type="button" className="link-btn see-all" onClick={() => setDocList('factura')}>
-              Ver todas las facturas<Icon name="arrowRight" size={14} stroke={2.4} />
-            </button>
-          </>
         )}
 
         <h2 className="h-sec fold-sec">

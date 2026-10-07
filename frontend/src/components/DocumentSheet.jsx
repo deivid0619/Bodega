@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ApiError } from '../api'
+import { api, ApiError } from '../api'
 import { revalidate, useLayout, usePolling, useProducts } from '../hooks/useApi'
 import { docPhotoBlob, downloadPhoto, saveDocPhoto } from '../lib/docPhotos'
 import { PhotoZoom } from './RemisionSheet'
@@ -184,30 +184,90 @@ export default function DocumentSheet({ doc, onClose }) {
   )
 }
 
-// Todas las remisiones (o facturas), con busqueda por numero, proveedor,
-// notas, referencia o codigo. Tocar una abre su detalle.
+// Una remision o una factura en una lista: numero, de quien y cuando, lo
+// que quedaron debiendo, la nota y cuantas prendas. Si tiene la foto del
+// papel, una camarita.
+export function DocItem({ doc, onOpen, time = fmtTime }) {
+  const isRem = doc.kind === 'remision'
+  const sn = doc.number.startsWith('SN-')
+  const owed = isRem ? (doc.lines || []).filter((l) => l.pending > 0) : []
+  return (
+    <button type="button" className="need doc-item" onClick={() => onOpen(doc)}>
+      <span className="need-t">
+        <b className={sn ? '' : 'mono'}>
+          {sn ? 'Sin número' : doc.number}
+          {doc.photo_count > 0 && <Icon name="camera" size={14} stroke={2.2} className="doc-cam" aria-label="Con foto" role="img" aria-hidden={false} />}
+        </b>
+        <small>{[isRem ? doc.supplier : plural((doc.lines || []).length, 'referencia', 'referencias'), doc.user_name, time(doc.created_at)].filter(Boolean).join(' · ')}</small>
+        {owed.length > 0 && <small className="owed">Quedaron debiendo {owed.map((l) => `${l.size || 'única'} ${l.pending}`).join(', ')}</small>}
+        {doc.notes && <small className="note">{doc.notes}</small>}
+      </span>
+      <span className={`need-q ${isRem ? '' : 'dark'}`}>
+        <b>{doc.units}</b>
+        <span>{isRem ? (doc.units === 1 ? 'entró' : 'entraron') : (doc.units === 1 ? 'salió' : 'salieron')}</span>
+      </span>
+    </button>
+  )
+}
+
+const PAGE = 30
+
+// Todas las remisiones (o facturas): de a 30, con "Ver más", y buscando por
+// numero, proveedor, nota, quien la registro o una prenda (sin importar
+// tildes ni mayusculas). Tocar una abre su detalle.
 function All({ kind, onOpen }) {
-  const { data } = usePolling(`/api/documents?kind=${kind}&limit=200`, { interval: 60000 })
+  const { data: counts } = usePolling('/api/documents/counts', { interval: 60000 })
   const [q, setQ] = useState('')
-  const term = q.trim().toUpperCase()
-  const list = (data || []).filter((d) => !term || [d.number, d.supplier, d.notes, ...(d.lines || []).flatMap((l) => [l.name, l.sku])]
-    .some((v) => String(v || '').toUpperCase().includes(term)))
+  const [list, setList] = useState(null)
+  const [more, setMore] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const req = useRef(0) // solo vale la ultima busqueda
+  const term = q.trim()
   const isRem = kind === 'remision'
+
+  const load = async (before) => {
+    const id = ++req.current
+    setBusy(true)
+    try {
+      const page = await api.get(`/api/documents?kind=${kind}&limit=${PAGE}${term ? `&q=${encodeURIComponent(term)}` : ''}${before ? `&before=${before}` : ''}`)
+      if (id !== req.current) return
+      setList((cur) => (before ? [...(cur || []), ...page] : page))
+      setMore(page.length === PAGE)
+      setFailed(false)
+    } catch {
+      if (id === req.current) setFailed(true)
+    } finally {
+      if (id === req.current) setBusy(false)
+    }
+  }
+  useEffect(() => {
+    const t = setTimeout(() => load(), term ? 300 : 0)
+    return () => clearTimeout(t)
+  }, [kind, term]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const total = counts?.[kind]
   return (
     <>
-      <SheetHeader title={isRem ? 'Remisiones recibidas' : 'Facturas descontadas'} subtitle={data ? plural(data.length, isRem ? 'remisión' : 'factura', isRem ? 'remisiones' : 'facturas') : 'Cargando…'} />
+      <SheetHeader
+        title={isRem ? 'Remisiones recibidas' : 'Facturas descontadas'}
+        subtitle={total == null ? 'Cargando…' : `${plural(total, isRem ? 'remisión guardada' : 'factura guardada', isRem ? 'remisiones guardadas' : 'facturas guardadas')} · la más reciente primero`}
+      />
       <SearchField value={q} onChange={setQ} placeholder={isRem ? 'Número, proveedor, nota o prenda' : 'Número o prenda'} />
       <div className="card panel" style={{ marginTop: 12 }}>
-        {!data ? <div className="skeleton" /> : list.length ? list.map((d) => (
-          <button type="button" className="need doc-item" key={d.id} onClick={() => onOpen(d)}>
-            <span className="need-t">
-              <b className={d.number.startsWith('SN-') ? '' : 'mono'}>{d.number.startsWith('SN-') ? 'Sin número' : d.number}</b>
-              <small>{[d.supplier, d.user_name, fmtTime(d.created_at)].filter(Boolean).join(' · ')}</small>
-            </span>
-            <span className={`need-q ${isRem ? '' : 'dark'}`}><b>{d.units}</b><span>{isRem ? 'entraron' : 'salieron'}</span></span>
-          </button>
-        )) : <Empty icon="search" title="Nada coincide">Prueba con otra palabra.</Empty>}
+        {!list ? (
+          failed ? <p className="muted doc-photo-none">No se pudo cargar. Revisa la conexión.</p> : <div className="skeleton" style={{ margin: '10px 0' }} />
+        ) : list.length ? list.map((d) => <DocItem key={d.id} doc={d} onOpen={onOpen} />) : (
+          <Empty icon="search" title={term ? 'Nada coincide' : isRem ? 'Todavía no hay remisiones' : 'Todavía no hay facturas'}>
+            {term ? 'Prueba con otra palabra.' : isRem ? 'Se reciben desde Escanear → Recibir remisión.' : 'Se descuentan desde Escanear → Descontar factura.'}
+          </Empty>
+        )}
       </div>
+      {list && more && (
+        <button type="button" className="link-btn see-all" disabled={busy} onClick={() => load(list[list.length - 1].id)}>
+          {busy ? 'Cargando…' : 'Ver más'}<Icon name="arrowRight" size={14} stroke={2.4} />
+        </button>
+      )}
     </>
   )
 }
