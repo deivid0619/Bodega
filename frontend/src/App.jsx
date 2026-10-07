@@ -103,7 +103,7 @@ function Shell() {
       name = sessionStorage.getItem(WELCOME)
       sessionStorage.removeItem(WELCOME)
     } catch { /* sin almacenamiento */ }
-    if (name !== null && isViewer) showToast(`Hola${name ? `, ${name}` : ''}: aquí puedes ver todo, sin cambiar nada.`)
+    if (name !== null && isViewer) showToast(`Hola${name ? `, ${name}` : ''}`)
   }, [isViewer, showToast])
   return (
     <div className="app">
