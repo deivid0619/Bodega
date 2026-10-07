@@ -7,6 +7,7 @@ import MoveSheet from './MoveSheet'
 import ParcelSheet, { parcelIcon, parcelName, waited } from './ParcelSheet'
 import Icon from './Icon'
 import { ProductThumb, Stepper, plural } from './Bits'
+import RestockHint from './RestockHint'
 
 // Lo que hay EN esta ubicacion: un codigo puede estar aqui y en otras.
 export function itemsAt(products, locationId) {
@@ -99,7 +100,7 @@ const LocationSheet = forwardRef(function LocationSheet(
             const low = isLow(p)
             const elsewhere = (p.stock || []).filter((s) => s.location_id !== locationId)
             return (
-              <div className={`prow ${p.sku === highlightSku ? 'hl' : ''}`} key={p.sku}>
+              <div className={`prow ${p.sku === highlightSku ? 'hl' : ''} ${low || here === 0 ? 'wrap' : ''}`} key={p.sku}>
                 {p.image_url ? <ProductThumb src={p.image_url} alt={p.name} size="sm" /> : <div className={`sz ${low ? 'low' : ''}`}>{p.size || 'U'}</div>}
                 <button className="prow-info" onClick={() => onOpenProduct(p.sku)}>
                   <b>{p.name}</b>
@@ -119,6 +120,7 @@ const LocationSheet = forwardRef(function LocationSheet(
                     <button className="link-btn" onClick={() => setMoving(p)}><Icon name="arrowRight" size={14} stroke={2.2} />Mover</button>
                   )}
                 </div>
+                {(low || here === 0) && <RestockHint product={p} to={locationId} />}
               </div>
             )
           })}

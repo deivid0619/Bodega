@@ -8,17 +8,19 @@ import { ProductThumb, Stepper, plural } from './Bits'
 import Icon from './Icon'
 
 // Sacar de la reserva: a una ubicacion de la bodega, o despachar (sale ya
-// empacado, sin quedar en ninguna canasta).
-function Form({ item, locations, onDone }) {
+// empacado, sin quedar en ninguna canasta). Desde una prenda en su minimo
+// ("Traer de la reserva") llegan ya la ubicacion, la cantidad y el codigo.
+function Form({ item, locations, onDone, defaultLocation, defaultQty, defaultSku }) {
   const showToast = useToast()
   const navigate = useNavigate()
   const { close } = useSheet()
   const [mode, setMode] = useState('bodega') // bodega | despachar
-  const [qty, setQty] = useState(Math.min(1, item.qty) || 1)
+  const [qty, setQty] = useState(Math.min(defaultQty || 1, item.qty) || 1)
   // a la bodega va a una ubicacion de verdad: para lo que sale esta "Despachar"
   const places = locations.filter((g) => !g.options.some((o) => o.id === 'DESPACHO'))
-  const [locationId, setLocationId] = useState(places[0]?.options[0]?.id || '')
-  const [sku, setSku] = useState(item.sku || '')
+  const [locationId, setLocationId] = useState(
+    defaultLocation && places.some((g) => g.options.some((o) => o.id === defaultLocation)) ? defaultLocation : places[0]?.options[0]?.id || '')
+  const [sku, setSku] = useState(item.sku || defaultSku || '')
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)

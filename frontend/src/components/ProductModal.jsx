@@ -10,6 +10,7 @@ import Sheet, { SheetHeader, useSheet } from './Sheet'
 import MoveSheet from './MoveSheet'
 import Icon from './Icon'
 import { Count, ProductThumb, Stepper, StockMeter } from './Bits'
+import RestockHint from './RestockHint'
 
 function LocationSelect({ value, onChange, locations, currentName }) {
   return (
@@ -145,6 +146,8 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
           </span>
         )}
       </div>
+
+      <RestockHint product={product} />
 
       <h3 className="h-sec">Dónde está <small>{places.filter((s) => s.qty > 0).length || 'ninguna'} {places.filter((s) => s.qty > 0).length === 1 ? 'ubicación' : 'ubicaciones'}</small></h3>
       <div className="card panel">

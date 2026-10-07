@@ -1085,3 +1085,12 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .rem-recent b{color:#7A3606;font-size:14px}
 .rem-recent small{font-size:12.5px;line-height:1.4;color:#7A3606}
 .rem-recent .btn{justify-self:start}
+
+/* ---------- abastecimiento disponible: traer de la reserva ---------- */
+.restock-hint{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding:10px 12px;border-radius:var(--r-md);background:var(--lime-soft);box-shadow:inset 0 0 0 1.5px rgba(106,154,0,.35)}
+.restock-t{min-width:0}
+.restock-t b{display:block;font-weight:700;font-size:13.5px;color:var(--lime-deep)}
+.restock-t small{display:block;margin-top:2px;font-size:12.5px;line-height:1.3;color:var(--graphite)}
+.restock-hint .btn{flex:none}
+.prow.wrap{flex-wrap:wrap}
+.prow .restock-hint{flex-basis:100%;margin-top:4px}
