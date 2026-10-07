@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api'
 import { useAuth } from '../context/AuthContext'
-import { useLayout, useProducts } from '../hooks/useApi'
+import { useLayout, useProducts, useRestock } from '../hooks/useApi'
 import WarehouseCanvas from '../components/WarehouseCanvas'
 import LocationSheet from '../components/LocationSheet'
 import EditPanel from '../components/EditPanel'
@@ -64,6 +64,9 @@ export default function Warehouse() {
   const units = useMemo(() => (products || []).reduce((s, p) => s + stockSplit(p, null, outlet).bodega, 0), [products, outlet])
   const withStock = useMemo(() => (products || []).filter((p) => p.qty > 0).length, [products])
   const needCount = useMemo(() => (products || []).filter((p) => p.min_qty > 0 && p.qty <= p.min_qty).length, [products])
+  // abastecimiento disponible: tallas agotadas o en su minimo que tienen
+  // prendas en la reserva (lo mismo que "Para traer" en Reserva)
+  const { data: restock } = useRestock()
   const groupsLoc = useMemo(() => locationGroups(layout?.elements), [layout])
   const storageEls = useMemo(() => (layout?.elements || []).filter((e) => STORAGE.includes(e.type) && e.code), [layout])
   const locIndex = useMemo(() => {
@@ -71,6 +74,14 @@ export default function Warehouse() {
     for (const el of layout?.elements || []) for (const l of el.locations) m.set(l.id, { ...l, el })
     return m
   }, [layout])
+  // a donde hay que traer: la ubicacion principal de cada talla, con cuantas
+  const supply = useMemo(() => (restock || []).filter((t) => locIndex.has(t.product.location_id)), [restock, locIndex])
+  const supplySkus = useMemo(() => supply.map((t) => t.product.sku), [supply])
+  const supplyPlaces = useMemo(() => {
+    const by = new Map()
+    for (const t of supply) by.set(t.product.location_id, (by.get(t.product.location_id) || 0) + t.suggest)
+    return [...by].map(([id, n]) => ({ id, qty: `+${n}` }))
+  }, [supply])
 
   const results = useMemo(() => {
     const q = norm(query.trim())
@@ -143,7 +154,7 @@ export default function Warehouse() {
   // Todas las ubicaciones de una prenda marcadas en verde a la vez (no solo
   // una): "donde esta la XL", con cuantas hay en cada lugar
   const [marked, setMarked] = useState(null) // { sku, name, size, places: [{ id, qty }] }
-  const markedOutlet = (marked?.places || []).reduce((t, x) => t + (outlet.has(x.id) ? x.qty : 0), 0)
+  const markedOutlet = marked?.kind === 'supply' ? 0 : (marked?.places || []).reduce((t, x) => t + (outlet.has(x.id) ? x.qty : 0), 0)
   const placesOf = (p) => (p.stock || []).filter((s) => s.qty > 0 && locIndex.has(s.location_id)).map((s) => ({ id: s.location_id, qty: s.qty }))
   const markProduct = (sku) => {
     const p = (products || []).find((x) => x.sku === sku)
@@ -169,9 +180,34 @@ export default function Warehouse() {
     setMarked(null)
     sceneRef.current?.markLocations([])
   }
+  // "Abastecimiento disponible": se marcan en el 3D las ubicaciones que
+  // tienen tallas en su minimo con prendas en la reserva, con cuantas traer
+  const markSupply = () => {
+    if (!supplyPlaces.length) return
+    setQuery('')
+    setSearchOpen(false)
+    searchRef.current?.blur()
+    if (selLoc) sheetRef.current?.close()
+    setMarked({ kind: 'supply', places: supplyPlaces })
+    setView(null)
+    sceneRef.current?.setViewInsets(insetsFor({ sheet: false, editMode: false }))
+    sceneRef.current?.markLocations(supplyPlaces)
+    sceneRef.current?.focusLocations(supplyPlaces.map((x) => x.id))
+  }
+  // lo que se trae (o se acaba en la reserva) sale de las marcas solo
+  useEffect(() => {
+    if (marked?.kind !== 'supply' || JSON.stringify(supplyPlaces) === JSON.stringify(marked.places)) return
+    if (!supplyPlaces.length) {
+      clearMarks()
+      return
+    }
+    setMarked({ kind: 'supply', places: supplyPlaces })
+    sceneRef.current?.markLocations(supplyPlaces)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supplyPlaces])
   // si cambia lo que hay (alguien saca o mete), las marcas se actualizan solas
   useEffect(() => {
-    if (!marked) return
+    if (!marked || marked.kind === 'supply') return
     const p = (products || []).find((x) => x.sku === marked.sku)
     const places = p ? placesOf(p) : []
     if (JSON.stringify(places) === JSON.stringify(marked.places)) return
@@ -265,6 +301,7 @@ export default function Warehouse() {
       <WarehouseCanvas
         layout={shown}
         products={products}
+        supply={supplySkus}
         editMode={editMode}
         onTapLocation={tapLocation}
         onTapElement={(id) => { setSelEl(id); sceneRef.current?.selectElement(id) }}
@@ -326,6 +363,11 @@ export default function Warehouse() {
           )}
           {!showResults && (
             <div className="wh-stats">
+              {supply.length > 0 && (
+                <button className="pill supply" onClick={markSupply} aria-pressed={marked?.kind === 'supply'}>
+                  <Icon name="reserve" size={15} stroke={2.2} /><b>{supply.length}</b>para traer de la reserva
+                </button>
+              )}
               <span className="pill dark"><b><Count value={units} /></b>prendas</span>
               <span className="pill"><b>{withStock}</b>{withStock === 1 ? 'código' : 'códigos'}</span>
               {needCount > 0 && (
@@ -335,7 +377,15 @@ export default function Warehouse() {
           )}
           {!showResults && marked && (
             <div className="wh-mark" role="status">
-              <span className="wh-mark-ico"><Icon name="pin" size={16} stroke={2.2} /></span>
+              <span className="wh-mark-ico"><Icon name={marked.kind === 'supply' ? 'reserve' : 'pin'} size={16} stroke={2.2} /></span>
+              {marked.kind === 'supply' ? (
+                <span className="wh-mark-t">
+                  <b>Abastecimiento disponible</b>
+                  <small>
+                    {plural(supply.length, 'talla en su mínimo tiene', 'tallas en su mínimo tienen')} prendas en la reserva · toca una ubicación para traerlas
+                  </small>
+                </span>
+              ) : (
               <span className="wh-mark-t">
                 <b>{marked.name}{marked.size ? ` · ${marked.size}` : ''}</b>
                 <small>
@@ -343,6 +393,7 @@ export default function Warehouse() {
                   {markedOutlet > 0 && ` (${markedOutlet} en outlet)`} · toca una para ver qué hay
                 </small>
               </span>
+              )}
               <button type="button" className="wh-mark-x" onClick={clearMarks} aria-label="Quitar las marcas"><Icon name="x" size={18} stroke={2.2} /></button>
             </div>
           )}

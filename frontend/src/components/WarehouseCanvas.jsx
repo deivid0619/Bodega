@@ -4,7 +4,7 @@ import { WarehouseScene } from '../three/WarehouseScene'
 // Puente entre React y el motor 3D imperativo: crea la escena una sola vez
 // y le empuja los datos nuevos cuando cambian, en vez de recrearla en cada
 // render.
-export default function WarehouseCanvas({ layout, products, editMode, onTapLocation, onTapElement, onTapTag, onElementMoved, sceneRef }) {
+export default function WarehouseCanvas({ layout, products, supply, editMode, onTapLocation, onTapElement, onTapTag, onElementMoved, sceneRef }) {
   const containerRef = useRef(null)
   const engineRef = useRef(null)
   const cbRef = useRef({})
@@ -41,6 +41,11 @@ export default function WarehouseCanvas({ layout, products, editMode, onTapLocat
   useEffect(() => {
     if (products && engineRef.current) engineRef.current.setProducts(products)
   }, [products])
+
+  // lo que se puede traer de la reserva, en lima
+  useEffect(() => {
+    engineRef.current?.setSupply(supply)
+  }, [supply])
 
   useEffect(() => {
     engineRef.current?.setEditMode(editMode)

@@ -70,6 +70,7 @@ export class WarehouseScene {
     this.cb = callbacks
     this.layout = { room: { width: 8.4, depth: 7 }, elements: [] }
     this.products = []
+    this.supply = new Set() // codigos en su minimo que tienen prendas en la reserva
     this.editMode = false
     this.selectedLocation = null
     this.selectedElement = null
@@ -123,6 +124,16 @@ export class WarehouseScene {
     this._productsSig = sig
     this.products = products
     this._updateFill()
+  }
+
+  // codigos que se pueden traer de la reserva: su mueble y su canasta se ven
+  // en lima (el naranja es "por reponer" sin nada guardado: hay que pedirla)
+  setSupply(skus) {
+    const sig = [...(skus || [])].sort().join(',')
+    if (sig === this._supplySig) return
+    this._supplySig = sig
+    this.supply = new Set(skus || [])
+    this._updateFill(true)
   }
 
   setEditMode(on) {
@@ -1222,9 +1233,11 @@ export class WarehouseScene {
       const items = (byLoc[id] || []).filter((p) => p.qty > 0).sort((a, b) => b.qty - a.qty || a.size.localeCompare(b.size))
       const units = items.reduce((s, p) => s + p.qty, 0)
       const low = (byLoc[id] || []).some((p) => p.min_qty > 0 && p.total <= p.min_qty)
-      const agg = (perEl[o.elId] = perEl[o.elId] || { units: 0, low: false })
+      const supply = (byLoc[id] || []).some((p) => this.supply.has(p.sku))
+      const agg = (perEl[o.elId] = perEl[o.elId] || { units: 0, low: false, supply: false })
       agg.units += units
       agg.low = agg.low || low
+      agg.supply = agg.supply || supply
       if (o.kind === 'bin') {
         const layers = units > 0 ? clamp(Math.ceil(units / 4), 1, 4) : 0
         for (let l = 0; l < 4; l++) {
@@ -1238,7 +1251,7 @@ export class WarehouseScene {
         }
         touched.add(o.folds)
         if (!labelColors.has(o.labels)) labelColors.set(o.labels, [])
-        labelColors.get(o.labels).push([o.i, low ? AMBER : units > 0 ? 0xffffff : 0x8a8d88])
+        labelColors.get(o.labels).push([o.i, supply ? LIME : low ? AMBER : units > 0 ? 0xffffff : 0x8a8d88])
       } else if (o.kind === 'shelf') {
         const k = units > 0 ? Math.min(o.n, Math.ceil(units / 6)) : 0
         for (let j = 0; j < o.n; j++) {
@@ -1283,11 +1296,16 @@ export class WarehouseScene {
       im.computeBoundingSphere()
     })
     for (const t of new Set(Object.values(this.tags))) {
-      let units = 0, low = false
-      for (const id of t.members) { units += perEl[id]?.units || 0; low = low || !!perEl[id]?.low }
+      let units = 0, low = false, supply = false
+      for (const id of t.members) {
+        units += perEl[id]?.units || 0
+        low = low || !!perEl[id]?.low
+        supply = supply || !!perEl[id]?.supply
+      }
       t.count.textContent = units > 0 ? `${units}` : ''
       t.div.classList.toggle('solo', units === 0)
       t.div.classList.toggle('low', low)
+      t.div.classList.toggle('supply', supply)
     }
     if (!skipShadow) this.renderer.shadowMap.needsUpdate = true
     this.dirty = true
