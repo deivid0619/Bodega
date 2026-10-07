@@ -7,6 +7,8 @@ const pad = (n) => String(n).padStart(2, '0')
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1)
 const WEEK = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
+// cuantas hay guardadas, para los botones de ver todas
+const saved = (n, one, many) => (n == null ? 'Ver y buscar' : n === 0 ? 'Ninguna todavía' : `${n} ${n === 1 ? one : many} · ver y buscar`)
 const hour = (iso) => new Date(iso).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit' })
 
 // Lo que dice un dia para quien no ve la pantalla
@@ -105,12 +107,14 @@ export default function DocsSection({ onOpen, onList }) {
       ) : (
         <p className="cal-none">{day === today ? 'Hoy todavía no' : 'Ese día no'} entró nada con remisión ni salió con factura.</p>
       )}
-      <div className="doc-links">
-        <button type="button" className="link-btn" onClick={() => onList('remision')}>
-          Todas las remisiones{counts ? ` (${counts.remision})` : ''}<Icon name="arrowRight" size={14} stroke={2.4} />
+      <div className="doc-cards doc-all">
+        <button type="button" className="doc-card light" onClick={() => onList('remision')}>
+          <span className="doc-ico in"><Icon name="boxIn" size={22} /></span>
+          <span className="doc-card-t"><b>Remisiones</b><small>{saved(counts?.remision, 'guardada', 'guardadas')}</small></span>
         </button>
-        <button type="button" className="link-btn" onClick={() => onList('factura')}>
-          Todas las facturas{counts ? ` (${counts.factura})` : ''}<Icon name="arrowRight" size={14} stroke={2.4} />
+        <button type="button" className="doc-card light" onClick={() => onList('factura')}>
+          <span className="doc-ico out"><Icon name="receipt" size={22} /></span>
+          <span className="doc-card-t"><b>Facturas</b><small>{saved(counts?.factura, 'guardada', 'guardadas')}</small></span>
         </button>
       </div>
     </>

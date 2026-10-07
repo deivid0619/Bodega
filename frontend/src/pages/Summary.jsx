@@ -10,6 +10,7 @@ import Icon from '../components/Icon'
 import ResetSheet from '../components/ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../components/DocumentSheet'
 import DocsSection from '../components/DocCalendar'
+import SummaryIndex from '../components/SummaryIndex'
 import MovementSheet, { pairOf } from '../components/MovementSheet'
 import PassingSection from '../components/Passing'
 import StoreStatus, { PhotoStoreStatus } from '../components/StoreStatus'
@@ -120,9 +121,10 @@ export default function Summary() {
   }
 
   return (
-    <section className="page" aria-label="Resumen">
+    <section className="page sum-page" aria-label="Resumen">
       <div className="page-inner">
         <PageHead title="Resumen" lede={date.charAt(0).toUpperCase() + date.slice(1)} />
+        <SummaryIndex onJump={(id) => { if (id === 'movimientos' && !movesOpen) { setMovesOpen(true); setMovesShown(10) } }} />
 
         <div className="kpis">
           <div className="kpi dark"><b>{products ? <Count value={kpi.units} /> : '–'}</b><span>prendas en bodega</span></div>
@@ -179,7 +181,7 @@ export default function Summary() {
 
         <DocsSection onOpen={setDocOpen} onList={setDocList} />
 
-        <h2 className="h-sec">Lo que más sale <small>últimos 30 días</small></h2>
+        <h2 className="h-sec" id="mas-sale">Lo que más sale <small>últimos 30 días</small></h2>
         {top && top.length ? (
           <div className="card bars" role="list" aria-label="Unidades que salieron en 30 días">
             {top.map((t) => (
@@ -194,8 +196,8 @@ export default function Summary() {
           <Empty icon="summary" title="Sin salidas todavía">Cuando registres salidas, aquí verás las referencias que más rotan.</Empty>
         )}
 
-        <h2 className="h-sec fold-sec">
-          <button type="button" className="fold-btn" aria-expanded={movesOpen} aria-controls="movimientos" onClick={toggleMoves}>
+        <h2 className="h-sec fold-sec" id="movimientos">
+          <button type="button" className="fold-btn" aria-expanded={movesOpen} aria-controls="movimientos-lista" onClick={toggleMoves}>
             Movimientos
             <small>{movesOpen ? 'Ocultar' : moves?.length ? `Ver ${moves.length >= 60 ? 'los últimos 60' : moves.length}` : ''}</small>
             <Icon name="arrowRight" size={16} stroke={2.4} />
@@ -208,7 +210,7 @@ export default function Summary() {
           </button>
         )}
         {movesOpen && (
-        <div id="movimientos">
+        <div id="movimientos-lista">
         <div className="chips" style={{ marginTop: 0 }} role="toolbar" aria-label="Filtrar movimientos">
           {[['all', 'Todo'], ['in', 'Entradas'], ['out', 'Salidas'], ['set', 'Conteos']].map(([f, label]) => (
             <button key={f} className="chip" aria-pressed={filter === f} onClick={() => { setFilter(f); setMovesShown(10) }}>{label}</button>
@@ -243,7 +245,7 @@ export default function Summary() {
         </div>
         )}
 
-        <h2 className="h-sec">Datos y respaldo</h2>
+        <h2 className="h-sec" id="datos">Datos y respaldo</h2>
         <div className="stack">
           <button className="btn btn-ink btn-block" onClick={() => exportCsv('/api/reports/inventory.csv', `inventario-${today()}.csv`)}>
             <Icon name="download" size={18} />Descargar inventario para Excel
