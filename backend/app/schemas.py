@@ -31,7 +31,7 @@ class RegisterIn(BaseModel):
 
 
 class ViewKeyIn(BaseModel):
-    key: str = Field(min_length=10, max_length=100)
+    key: str = Field(min_length=1, max_length=200)  # una llave mal pegada da "Este enlace ya no funciona"
 
 
 class ViewLinkIn(BaseModel):
@@ -39,11 +39,13 @@ class ViewLinkIn(BaseModel):
 
 
 class ViewLinkOut(BaseModel):
-    """El enlace para ver sin editar: activo o no, su llave (va en el enlace)
-    y para quien es."""
-    active: bool
-    key: Optional[str] = None
-    name: Optional[str] = None
+    """Un enlace para ver sin editar: su llave (va en el enlace), para quien es
+    y si ya lo abrio."""
+    id: int
+    key: str
+    name: str
+    used: bool = False
+    created_at: Optional[UtcDatetime] = None
 
 
 class LoginIn(BaseModel):

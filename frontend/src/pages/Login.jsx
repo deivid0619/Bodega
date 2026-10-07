@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { LINK_ERROR, useAuth } from '../context/AuthContext'
+import { LINK_ERROR, keyFrom, useAuth } from '../context/AuthContext'
 import { ApiError } from '../api'
 import { BrandMark } from '../components/Icon'
 
@@ -21,7 +21,24 @@ function Stripes() {
 }
 
 export default function Login() {
-  const { token, ready, login, register } = useAuth()
+  const { token, ready, login, register, enterView } = useAuth()
+  // en un iPhone la app instalada no ve la sesion de Safari: se pega el enlace
+  const [pasted, setPasted] = useState('')
+  const [linkBusy, setLinkBusy] = useState(false)
+  const openLink = async (e) => {
+    e.preventDefault()
+    const key = keyFrom(pasted)
+    if (!key) return
+    setError('')
+    setLinkBusy(true)
+    try {
+      await enterView(key)
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No hay conexión con el servidor. Revisa tu internet e intenta otra vez.')
+    } finally {
+      setLinkBusy(false)
+    }
+  }
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -99,6 +116,15 @@ export default function Login() {
         <button type="button" className="login-switch" onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError('') }}>
           {mode === 'login' ? 'Crear cuenta' : 'Ya tengo cuenta'}
         </button>
+        {mode === 'login' && (
+          <form className="login-link" onSubmit={openLink}>
+            <span>¿Te mandaron un enlace para ver? Pégalo aquí</span>
+            <div className="manual">
+              <input className="input" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="https://…/?ver=…" aria-label="Enlace para ver" autoCapitalize="off" spellCheck="false" />
+              <button className="btn btn-ink" disabled={!pasted.trim() || linkBusy}>{linkBusy ? 'Entrando…' : 'Entrar'}</button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   )

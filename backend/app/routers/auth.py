@@ -1,8 +1,6 @@
 """Registro, inicio de sesion, datos del usuario actual y el enlace para ver
 sin editar."""
 import secrets
-from typing import Optional
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -12,8 +10,8 @@ from ..database import get_db
 from ..deps import get_current_user, require_admin
 from ..security import create_access_token, hash_password, verify_password
 
-VIEW_KEY = "view_link"  # en app_settings: la llave del enlace activo
-VIEW_NAME = "view_link_name"  # y para quien es
+VIEW_KEY = "view_link"  # el enlace unico de antes (app_settings): pasa a view_links
+VIEW_NAME = "view_link_name"
 
 router = APIRouter(prefix="/api/auth", tags=["autenticación"])
 
@@ -48,67 +46,96 @@ def me(user: models.User = Depends(get_current_user)):
     return user
 
 
-# ---- enlace para ver sin editar (para mostrar la app a alguien) ----
-def _viewers_out(db: Session) -> None:
-    """Las sesiones abiertas con un enlace viejo dejan de servir."""
-    db.query(models.User).filter(models.User.role == "viewer").delete(synchronize_session=False)
+# ---- enlaces para ver sin editar (uno por persona) ----
+VIEW_DAYS = 30  # la sesion de solo ver dura un mes (quitar el enlace la cierra al instante)
 
 
-def _setting(db: Session, key: str, value: str | None) -> None:
-    row = db.get(models.AppSetting, key)
-    if value:
-        if row:
-            row.value = value
-        else:
-            db.add(models.AppSetting(key=key, value=value))
-    elif row:
-        db.delete(row)
+def _viewer_email(key: str) -> str:
+    return f"solo-ver-{key[:8].lower()}@bodega.app"
 
 
-@router.get("/view-link", response_model=schemas.ViewLinkOut)
-def view_link(db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
+def _legacy(db: Session) -> None:
+    """El enlace unico de antes (en app_settings) pasa a la lista con la misma
+    llave: quien ya lo tenia sigue entrando."""
     row = db.get(models.AppSetting, VIEW_KEY)
+    if not row:
+        return
     who = db.get(models.AppSetting, VIEW_NAME)
-    return schemas.ViewLinkOut(active=bool(row), key=row.value if row else None, name=who.value if row and who else None)
-
-
-@router.post("/view-link", response_model=schemas.ViewLinkOut)
-def new_view_link(payload: Optional[schemas.ViewLinkIn] = None, db: Session = Depends(get_db),
-                  _: models.User = Depends(require_admin)):
-    """Crea el enlace (o uno nuevo: el anterior y sus sesiones dejan de servir),
-    con el nombre de quien lo va a usar."""
-    key = secrets.token_urlsafe(18)
-    name = " ".join((payload.name if payload else "").split())
-    _setting(db, VIEW_KEY, key)
-    _setting(db, VIEW_NAME, name or None)
-    _viewers_out(db)
+    if not db.query(models.ViewLink).filter(models.ViewLink.key == row.value).first():
+        db.add(models.ViewLink(key=row.value, name=who.value if who else ""))
+    db.delete(row)
+    if who:
+        db.delete(who)
     db.commit()
-    return schemas.ViewLinkOut(active=True, key=key, name=name or None)
 
 
-@router.delete("/view-link", status_code=status.HTTP_204_NO_CONTENT)
-def stop_view_link(db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
-    """Desactiva el enlace: ya no abre y quien lo estaba usando sale."""
-    _setting(db, VIEW_KEY, None)
-    _setting(db, VIEW_NAME, None)
-    _viewers_out(db)
+def _link_out(db: Session, link: models.ViewLink) -> schemas.ViewLinkOut:
+    used = db.query(models.User.id).filter(models.User.email == _viewer_email(link.key)).first() is not None
+    return schemas.ViewLinkOut(id=link.id, key=link.key, name=link.name, used=used, created_at=link.created_at)
+
+
+def _get_link(db: Session, link_id: int) -> models.ViewLink:
+    link = db.get(models.ViewLink, link_id)
+    if not link:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese enlace ya no existe.")
+    return link
+
+
+@router.get("/view-links", response_model=list[schemas.ViewLinkOut])
+def view_links(db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
+    _legacy(db)
+    return [_link_out(db, l) for l in db.query(models.ViewLink).order_by(models.ViewLink.id).all()]
+
+
+@router.post("/view-links", response_model=schemas.ViewLinkOut, status_code=status.HTTP_201_CREATED)
+def new_view_link(payload: schemas.ViewLinkIn, db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
+    """Un enlace nuevo para alguien: su cuenta "Solo ver" se llama asi."""
+    _legacy(db)
+    link = models.ViewLink(key=secrets.token_urlsafe(18), name=" ".join(payload.name.split()))
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+    return _link_out(db, link)
+
+
+@router.patch("/view-links/{link_id}", response_model=schemas.ViewLinkOut)
+def rename_view_link(link_id: int, payload: schemas.ViewLinkIn, db: Session = Depends(get_db),
+                     _: models.User = Depends(require_admin)):
+    """Cambiar el nombre: el enlace sigue igual y su cuenta se llama distinto."""
+    link = _get_link(db, link_id)
+    link.name = " ".join(payload.name.split())
+    user = db.query(models.User).filter(models.User.email == _viewer_email(link.key)).first()
+    if user:
+        user.name = link.name or "Solo ver"
+    db.commit()
+    return _link_out(db, link)
+
+
+@router.delete("/view-links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_view_link(link_id: int, db: Session = Depends(get_db), _: models.User = Depends(require_admin)):
+    """Quitar un enlace: ya no abre y quien lo estaba usando sale."""
+    link = _get_link(db, link_id)
+    db.query(models.User).filter(models.User.email == _viewer_email(link.key)).delete(synchronize_session=False)
+    db.delete(link)
     db.commit()
 
 
 @router.post("/view", response_model=schemas.Token)
 def enter_view(payload: schemas.ViewKeyIn, db: Session = Depends(get_db)):
-    """Entrar con el enlace para ver: sin contrasena, como "Solo ver"."""
-    row = db.get(models.AppSetting, VIEW_KEY)
-    if not row or not secrets.compare_digest(row.value, payload.key.strip()):
+    """Entrar con un enlace para ver: sin contrasena, como "Solo ver", con el
+    nombre del enlace."""
+    _legacy(db)
+    key = payload.key.strip()
+    link = db.query(models.ViewLink).filter(models.ViewLink.key == key).first()
+    if not link or not secrets.compare_digest(link.key, key):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Este enlace ya no funciona. Pide uno nuevo.")
-    # una cuenta por enlace: al crear otro o desactivarlo, se borra y sus sesiones se cierran
-    email = f"solo-ver-{row.value[:8].lower()}@bodega.app"
+    email = _viewer_email(link.key)
     user = db.query(models.User).filter(models.User.email == email).first()
     if not user:
-        who = db.get(models.AppSetting, VIEW_NAME)
-        user = models.User(email=email, name=who.value if who else "Solo ver",
+        user = models.User(email=email, name=link.name or "Solo ver",
                            password_hash=hash_password(secrets.token_urlsafe(24)), role="viewer")
         db.add(user)
         db.commit()
         db.refresh(user)
-    return schemas.Token(access_token=create_access_token(user.email), user=schemas.UserOut.model_validate(user))
+    return schemas.Token(access_token=create_access_token(user.email, minutes=VIEW_DAYS * 24 * 60),
+                         user=schemas.UserOut.model_validate(user))

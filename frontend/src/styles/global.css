@@ -1102,7 +1102,8 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .el-tag.supply::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--lime);margin-left:1px;box-shadow:0 0 0 2px rgba(192,255,0,.25)}
 
 /* ---------- solo ver: la etiqueta de arriba y el enlace (Resumen) ---------- */
-.view-chip{display:inline-flex;align-items:center;height:26px;padding:0 9px;border-radius:var(--r-xs);background:var(--lime);color:var(--ink);font:800 11.5px/1 var(--font);letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.view-chip{display:inline-block;max-width:44vw;height:26px;padding:0 9px;border-radius:var(--r-xs);background:var(--lime);color:var(--ink);font:700 12px/26px var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.view-chip b{font-weight:800}
 .view-link{margin-top:16px;padding:16px;display:grid;gap:10px}
 .view-link-t b{display:block;font-weight:700;font-size:15px}
 .view-link-t small{display:block;margin-top:3px;font-size:13px;line-height:1.4;color:var(--muted)}
@@ -1123,3 +1124,21 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .rem-pend small{display:block;margin-top:2px;font-weight:500;font-size:11.5px;color:var(--muted)}
 .rem-split{color:var(--lime-deep)}
 .rem-block-head .link-btn + .link-btn{margin-left:4px}
+
+/* enlaces para ver: la lista del administrador y pegar el enlace al entrar */
+.vl-row{padding:12px 0;border-top:1px solid var(--line);display:grid;gap:10px}
+.vl-head{display:flex;align-items:center;gap:10px}
+.vl-ico{flex:none;width:34px;height:34px;border-radius:var(--r-sm);display:grid;place-items:center;background:var(--lime);color:var(--ink);font:800 italic 16px/1 var(--font)}
+.vl-t{min-width:0}
+.vl-t b{display:block;font-weight:700;font-size:14.5px;overflow-wrap:anywhere}
+.vl-t small{display:block;margin-top:2px;font-size:12.5px;color:var(--muted)}
+.vl-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.vl-edit{display:flex;align-items:center;gap:8px}
+.vl-edit .input{flex:1;min-width:0;height:42px}
+.vl-new{padding-top:12px;border-top:1px solid var(--line);display:grid;gap:10px}
+.login-link{margin-top:22px;display:grid;gap:8px}
+.login-link > span{font-size:13px;font-weight:600;color:#A9ADA6;text-align:center}
+/* con la etiqueta "Gabriel · solo ver" arriba, el logo no se encoge: se acorta la etiqueta */
+.brand svg{flex:none}
+.topbar-actions{min-width:0}
+@media (max-width:420px){.view-chip{max-width:34vw}}

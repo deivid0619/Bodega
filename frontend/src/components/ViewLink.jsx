@@ -4,96 +4,116 @@ import { useToast } from './ToastContext'
 import { useConfirm } from './ConfirmContext'
 import Icon from './Icon'
 
-// El enlace para ver sin editar: para mostrar la app (a un jefe, a un socio)
-// sin que pueda cambiar nada. Quien lo abre entra sin contrasena como "Solo
-// ver". Se copia o se comparte; crear otro o desactivarlo cierra el anterior.
+const urlOf = (l) => `${window.location.origin}/?ver=${l.key}`
+
+// Los enlaces para ver sin editar, uno por persona (un jefe, un socio...):
+// quien lo abre entra sin contrasena con su nombre, ve todo en vivo y no
+// puede cambiar nada. El administrador los crea, les cambia el nombre, los
+// copia o comparte, y los quita (quien lo estaba usando sale).
 export default function ViewLink() {
   const showToast = useToast()
   const confirm = useConfirm()
-  const [link, setLink] = useState(null) // { active, key, name }
-  const [who, setWho] = useState('') // para quien es: su cuenta se llama asi
+  const [links, setLinks] = useState(null)
+  const [who, setWho] = useState('')
   const [busy, setBusy] = useState(false)
-  useEffect(() => {
-    api.get('/api/auth/view-link').then(setLink).catch(() => setLink({ active: false }))
-  }, [])
-  const url = link?.key ? `${window.location.origin}/?ver=${link.key}` : ''
+  const [editing, setEditing] = useState(null) // id del que se esta renombrando
+  const [draft, setDraft] = useState('')
   const canShare = typeof navigator.share === 'function'
+  useEffect(() => {
+    api.get('/api/auth/view-links').then(setLinks).catch(() => setLinks([]))
+  }, [])
 
-  const create = async () => {
-    if (link?.active && !(await confirm({
-      title: '¿Crear otro enlace?',
-      body: 'El enlace de ahora deja de funcionar y quien lo esté usando sale.',
-      confirmLabel: 'Crear otro',
-    }))) return
+  const create = async (e) => {
+    e.preventDefault()
+    if (!who.trim()) return
     setBusy(true)
     try {
-      setLink(await api.post('/api/auth/view-link', { name: (who || link?.name || '').trim() }))
+      const l = await api.post('/api/auth/view-links', { name: who.trim() })
+      setLinks((ls) => [...(ls || []), l])
       setWho('')
-      showToast('Enlace para ver creado: cópialo y compártelo')
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'No se pudo crear el enlace.', 'err')
+      showToast(`Enlace para ${l.name} creado: cópialo o compártelo`)
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'No se pudo crear el enlace.', 'err')
     } finally {
       setBusy(false)
     }
   }
-  const stop = async () => {
+  const rename = async (e, l) => {
+    e.preventDefault()
+    const name = draft.trim()
+    if (!name) return
+    try {
+      const n = await api.patch(`/api/auth/view-links/${l.id}`, { name })
+      setLinks((ls) => ls.map((x) => (x.id === l.id ? n : x)))
+      setEditing(null)
+      showToast(`Ahora se llama ${n.name}`)
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'No se pudo cambiar el nombre.', 'err')
+    }
+  }
+  const remove = async (l) => {
     if (!(await confirm({
-      title: '¿Desactivar el enlace?',
-      body: 'Deja de abrir y quien lo esté usando sale de la app.',
-      confirmLabel: 'Desactivar',
+      title: `¿Quitar el enlace de ${l.name || 'esta persona'}?`,
+      body: 'Deja de abrir y, si lo estaba usando, sale de la app.',
+      confirmLabel: 'Quitar',
     }))) return
     try {
-      await api.delete('/api/auth/view-link')
-      setLink({ active: false })
-      showToast('Enlace desactivado')
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'No se pudo desactivar.', 'err')
+      await api.delete(`/api/auth/view-links/${l.id}`)
+      setLinks((ls) => ls.filter((x) => x.id !== l.id))
+      showToast('Enlace quitado')
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'No se pudo quitar.', 'err')
     }
   }
-  const copy = async () => {
+  const copy = async (l) => {
     try {
-      await navigator.clipboard.writeText(url)
-      showToast('Enlace copiado: pégalo en WhatsApp o en un correo')
+      await navigator.clipboard.writeText(urlOf(l))
+      showToast(`Enlace de ${l.name} copiado: pégalo en WhatsApp o en un correo`)
     } catch {
-      showToast('Este dispositivo no dejó copiar: mantén presionado el enlace para copiarlo.', 'err')
+      showToast('Este dispositivo no dejó copiar: usa "Compartir".', 'err')
     }
   }
-  const share = async () => {
+  const share = async (l) => {
     try {
-      await navigator.share({ title: 'Bodega · solo ver', text: `${link?.name ? `${link.name}: ` : ''}la bodega de Pigmalion. Puedes ver todo, sin cambiar nada.`, url })
+      await navigator.share({ title: 'Bodega · solo ver', text: `${l.name}: la bodega de Pigmalion. Puedes ver todo, sin cambiar nada.`, url: urlOf(l) })
     } catch { /* se cerro sin compartir */ }
   }
 
   return (
     <div className="card view-link">
       <div className="view-link-t">
-        <b>Enlace para ver (sin editar)</b>
-        <small>Para mostrar la app: quien lo abre entra sin contraseña, ve todo y no puede cambiar nada.</small>
+        <b>Enlaces para ver (sin editar)</b>
+        <small>Uno por persona: entra sin contraseña con su nombre, ve todo en vivo y no puede cambiar nada. Se puede instalar como app.</small>
       </div>
-      {link?.active ? (
-        <>
-          {link.name && <p className="view-link-who">Para <b>{link.name}</b> · entra como “{link.name}”, solo para ver</p>}
-          <input className="input mono view-link-url" readOnly value={url} onFocus={(e) => e.target.select()} aria-label="Enlace para ver" />
-          <div className="btn-row">
-            <button type="button" className="btn btn-lime" onClick={copy}><Icon name="copy" size={18} />Copiar</button>
-            {canShare && <button type="button" className="btn btn-ghost" onClick={share}>Compartir</button>}
+      {links?.map((l) => (
+        <div className="vl-row" key={l.id}>
+          {editing === l.id ? (
+            <form className="vl-edit" onSubmit={(e) => rename(e, l)}>
+              <input className="input" value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={60} autoFocus aria-label="Nombre" />
+              <button className="btn btn-ink btn-sm" disabled={!draft.trim()}>Guardar</button>
+              <button type="button" className="link-btn" onClick={() => setEditing(null)}>Cancelar</button>
+            </form>
+          ) : (
+            <div className="vl-head">
+              <span className="vl-ico" aria-hidden="true">{(l.name || '?').charAt(0).toUpperCase()}</span>
+              <span className="vl-t"><b>{l.name || 'Sin nombre'}</b><small>{l.used ? 'Ya entró' : 'Todavía no lo ha abierto'}</small></span>
+            </div>
+          )}
+          <div className="vl-actions">
+            <button type="button" className="btn btn-lime btn-sm" onClick={() => copy(l)}><Icon name="copy" size={16} />Copiar</button>
+            {canShare && <button type="button" className="btn btn-ghost btn-sm" onClick={() => share(l)}>Compartir</button>}
+            <button type="button" className="link-btn" onClick={() => { setEditing(l.id); setDraft(l.name) }}>Cambiar nombre</button>
+            <button type="button" className="link-btn" onClick={() => remove(l)}>Quitar</button>
           </div>
-          <div className="btn-row">
-            <button type="button" className="btn btn-quiet" onClick={create} disabled={busy}>Crear otro</button>
-            <button type="button" className="btn btn-quiet" onClick={stop}>Desactivar</button>
-          </div>
-        </>
-      ) : (
-        <>
-          <label className="field" style={{ marginTop: 0 }}>
-            <span className="field-label">¿Para quién es? <small className="opt">su cuenta se llama así</small></span>
-            <input className="input" value={who} onChange={(e) => setWho(e.target.value)} maxLength={60} placeholder="Ej. Gabriel" />
-          </label>
-          <button type="button" className="btn btn-ink btn-block" onClick={create} disabled={busy || !link}>
-            {busy ? 'Creando…' : 'Crear enlace para ver'}
-          </button>
-        </>
-      )}
+        </div>
+      ))}
+      <form className="vl-new" onSubmit={create}>
+        <label className="field" style={{ marginTop: 0 }}>
+          <span className="field-label">Nuevo enlace: ¿para quién es?</span>
+          <input className="input" value={who} onChange={(e) => setWho(e.target.value)} maxLength={60} placeholder="Ej. Gabriel" />
+        </label>
+        <button className="btn btn-ink btn-block" disabled={busy || !who.trim() || !links}>{busy ? 'Creando…' : 'Crear enlace para ver'}</button>
+      </form>
     </div>
   )
 }

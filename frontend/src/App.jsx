@@ -1,6 +1,6 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
-import { useAuth } from './context/AuthContext'
+import { WELCOME, useAuth } from './context/AuthContext'
 import NavBar from './components/NavBar'
 import NotificationBell from './components/NotificationBell'
 import Icon, { BrandMark } from './components/Icon'
@@ -94,7 +94,17 @@ function AccountMenu() {
 
 function Shell() {
   useMovementNotifications()
-  const { isViewer } = useAuth()
+  const { isViewer, user } = useAuth()
+  const showToast = useToast()
+  // al entrar con el enlace para ver: "Hola, Gabriel" (una vez)
+  useEffect(() => {
+    let name = null
+    try {
+      name = sessionStorage.getItem(WELCOME)
+      sessionStorage.removeItem(WELCOME)
+    } catch { /* sin almacenamiento */ }
+    if (name !== null && isViewer) showToast(`Hola${name ? `, ${name}` : ''}: aquí puedes ver todo, sin cambiar nada.`)
+  }, [isViewer, showToast])
   return (
     <div className="app">
       <header className="topbar">
@@ -103,7 +113,11 @@ function Shell() {
           <span className="brand-word">bodega</span>
         </Link>
         <div className="topbar-actions">
-          {isViewer && <span className="view-chip" title="Puedes recorrer todo; los cambios no se guardan">Solo ver</span>}
+          {isViewer && (
+            <span className="view-chip" title="Puedes recorrer todo; los cambios no se guardan">
+              {user?.name && user.name !== 'Solo ver' ? <><b>{user.name}</b> · solo ver</> : 'Solo ver'}
+            </span>
+          )}
           <NotificationBell />
           <AccountMenu />
         </div>

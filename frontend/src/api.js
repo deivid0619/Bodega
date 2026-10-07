@@ -49,7 +49,8 @@ async function request(path, { method = 'GET', body, isForm } = {}) {
     let detail = `Error ${res.status}`
     try {
       const data = await res.json()
-      detail = data.detail || detail
+      // el servidor a veces responde la lista de campos que no son validos: un mensaje que se entienda
+      detail = typeof data.detail === 'string' ? data.detail : data.detail ? 'Revisa los datos: hay algo que no es válido.' : detail
     } catch {
       // la respuesta no era JSON (por ejemplo, un error de red del proxy)
     }
@@ -73,7 +74,8 @@ async function raw(path, { method = 'GET', body, type } = {}) {
   if (!res.ok) {
     let detail = `Error ${res.status}`
     try {
-      detail = (await res.json()).detail || detail
+      const d = (await res.json()).detail
+      detail = typeof d === 'string' ? d : d ? 'Revisa los datos: hay algo que no es válido.' : detail
     } catch {
       // no era JSON
     }

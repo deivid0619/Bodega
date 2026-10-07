@@ -206,6 +206,18 @@ class PushSubscription(Base):
     created_at = Column(DateTime(timezone=True), default=now)
 
 
+class ViewLink(Base):
+    """Un enlace para ver sin editar, uno por persona: quien lo abre entra sin
+    contrasena como "Solo ver", con el nombre del enlace. Al quitarlo, su
+    sesion se cierra."""
+    __tablename__ = "view_links"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(64), nullable=False, unique=True)
+    name = Column(String(60), nullable=False, default="")
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class AppSetting(Base):
     """Valores internos de la app (ej. las llaves con que se firman los avisos)."""
     __tablename__ = "app_settings"
