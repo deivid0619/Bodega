@@ -10,7 +10,8 @@ import Icon from './Icon'
 export default function ViewLink() {
   const showToast = useToast()
   const confirm = useConfirm()
-  const [link, setLink] = useState(null) // { active, key }
+  const [link, setLink] = useState(null) // { active, key, name }
+  const [who, setWho] = useState('') // para quien es: su cuenta se llama asi
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     api.get('/api/auth/view-link').then(setLink).catch(() => setLink({ active: false }))
@@ -26,7 +27,8 @@ export default function ViewLink() {
     }))) return
     setBusy(true)
     try {
-      setLink(await api.post('/api/auth/view-link'))
+      setLink(await api.post('/api/auth/view-link', { name: (who || link?.name || '').trim() }))
+      setWho('')
       showToast('Enlace para ver creado: cópialo y compártelo')
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo crear el enlace.', 'err')
@@ -58,7 +60,7 @@ export default function ViewLink() {
   }
   const share = async () => {
     try {
-      await navigator.share({ title: 'Bodega · solo ver', text: 'La bodega de Pigmalion: puedes ver todo, sin cambiar nada.', url })
+      await navigator.share({ title: 'Bodega · solo ver', text: `${link?.name ? `${link.name}: ` : ''}la bodega de Pigmalion. Puedes ver todo, sin cambiar nada.`, url })
     } catch { /* se cerro sin compartir */ }
   }
 
@@ -70,6 +72,7 @@ export default function ViewLink() {
       </div>
       {link?.active ? (
         <>
+          {link.name && <p className="view-link-who">Para <b>{link.name}</b> · entra como “{link.name}”, solo para ver</p>}
           <input className="input mono view-link-url" readOnly value={url} onFocus={(e) => e.target.select()} aria-label="Enlace para ver" />
           <div className="btn-row">
             <button type="button" className="btn btn-lime" onClick={copy}><Icon name="copy" size={18} />Copiar</button>
@@ -81,9 +84,15 @@ export default function ViewLink() {
           </div>
         </>
       ) : (
-        <button type="button" className="btn btn-ink btn-block" onClick={create} disabled={busy || !link}>
-          {busy ? 'Creando…' : 'Crear enlace para ver'}
-        </button>
+        <>
+          <label className="field" style={{ marginTop: 0 }}>
+            <span className="field-label">¿Para quién es? <small className="opt">su cuenta se llama así</small></span>
+            <input className="input" value={who} onChange={(e) => setWho(e.target.value)} maxLength={60} placeholder="Ej. Gabriel" />
+          </label>
+          <button type="button" className="btn btn-ink btn-block" onClick={create} disabled={busy || !link}>
+            {busy ? 'Creando…' : 'Crear enlace para ver'}
+          </button>
+        </>
       )}
     </div>
   )

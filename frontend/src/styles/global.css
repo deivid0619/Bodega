@@ -1108,3 +1108,4 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .view-link-t small{display:block;margin-top:3px;font-size:13px;line-height:1.4;color:var(--muted)}
 .view-link .btn-row{margin-top:0}
 .view-link-url{font-size:13px}
+.view-link-who{font-size:13.5px;color:var(--graphite)}

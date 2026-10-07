@@ -34,10 +34,16 @@ class ViewKeyIn(BaseModel):
     key: str = Field(min_length=10, max_length=100)
 
 
+class ViewLinkIn(BaseModel):
+    name: str = Field(default="", max_length=60)  # para quien es (su cuenta se llama asi)
+
+
 class ViewLinkOut(BaseModel):
-    """El enlace para ver sin editar: activo o no, y su llave (va en el enlace)."""
+    """El enlace para ver sin editar: activo o no, su llave (va en el enlace)
+    y para quien es."""
     active: bool
     key: Optional[str] = None
+    name: Optional[str] = None
 
 
 class LoginIn(BaseModel):

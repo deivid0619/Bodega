@@ -22,12 +22,12 @@ def test_view_link_sees_everything_and_changes_nothing():
         admin = _h(client.post("/api/auth/login", json={"email": settings.admin_email, "password": settings.admin_password}).json()["access_token"])
         assert client.post("/api/products", headers=admin, json={"sku": "VER-1", "name": "PRUEBA SOLO VER", "size": "M",
                                                                  "location_id": "F-1-1", "qty": 2}).status_code == 201
-        key = client.post("/api/auth/view-link", headers=admin).json()["key"]
-        assert client.get("/api/auth/view-link", headers=admin).json() == {"active": True, "key": key}
+        key = client.post("/api/auth/view-link", headers=admin, json={"name": "  Gabriel "}).json()["key"]
+        assert client.get("/api/auth/view-link", headers=admin).json() == {"active": True, "key": key, "name": "Gabriel"}
 
-        # entra sin contrasena y es "Solo ver"
+        # entra sin contrasena, como "Solo ver", con el nombre de quien lo usa
         r = client.post("/api/auth/view", json={"key": key})
-        assert r.status_code == 200 and r.json()["user"]["role"] == "viewer"
+        assert r.status_code == 200 and r.json()["user"]["role"] == "viewer" and r.json()["user"]["name"] == "Gabriel"
         viewer = _h(r.json()["access_token"])
         assert client.get("/api/products", headers=viewer).status_code == 200
         assert client.get("/api/documents/counts", headers=viewer).status_code == 200
@@ -39,16 +39,18 @@ def test_view_link_sees_everything_and_changes_nothing():
         assert client.get("/api/auth/view-link", headers=viewer).status_code == 403
         assert client.get("/api/products/VER-1", headers=admin).json()["qty"] == 2
 
-        # un enlace nuevo: el anterior ya no abre y su sesion se cierra
+        # un enlace nuevo (sin nombre): el anterior ya no abre y su sesion se cierra
         new = client.post("/api/auth/view-link", headers=admin).json()["key"]
         assert new != key
         assert client.get("/api/products", headers=viewer).status_code == 401
         assert client.post("/api/auth/view", json={"key": key}).status_code == 401
-        viewer = _h(client.post("/api/auth/view", json={"key": new}).json()["access_token"])
+        r = client.post("/api/auth/view", json={"key": new})
+        assert r.json()["user"]["name"] == "Solo ver"
+        viewer = _h(r.json()["access_token"])
         assert client.get("/api/products", headers=viewer).status_code == 200
 
         # desactivado: no abre y quien estaba adentro sale
         assert client.delete("/api/auth/view-link", headers=admin).status_code == 204
         assert client.get("/api/products", headers=viewer).status_code == 401
         assert client.post("/api/auth/view", json={"key": new}).status_code == 401
-        assert client.get("/api/auth/view-link", headers=admin).json() == {"active": False, "key": None}
+        assert client.get("/api/auth/view-link", headers=admin).json() == {"active": False, "key": None, "name": None}
