@@ -17,6 +17,7 @@ import Viewfinder, { PhotoRead } from '../components/Viewfinder'
 import { beep } from '../lib/feedback'
 import { asksFrom, fmtTime, fromMissing, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../utils'
 import FromPick from '../components/FromPick'
+import { itemsText, sendNotice, useNotifyPick } from '../components/Notices'
 
 const MODES = [
   { m: 'in', label: 'Entrada', icon: 'boxIn', hint: 'Cada código suma prendas a su ubicación.' },
@@ -117,6 +118,7 @@ function ScanHit({ hit, tally, onUndo }) {
 }
 
 export default function Scan() {
+  const notifyIn = useNotifyPick('in') // a quien de los enlaces se le avisa de lo que entro
   const { data: layout } = useLayout()
   const showToast = useToast()
   const confirm = useConfirm()
@@ -370,6 +372,7 @@ export default function Scan() {
     setHit(null)
     const lines = [...toConfirmRef.current].reverse() // en el orden en que se escanearon
     const failed = []
+    const entered = [] // lo que entro, para el aviso
     let units = 0
     for (const l of lines) {
       // una salida: primero de donde se eligio y, si ahi no alcanza, el resto de donde haya
@@ -397,14 +400,22 @@ export default function Scan() {
         failed.unshift({ ...l, qty: l.qty - done, err: e instanceof ApiError ? e.message : 'No hay conexión con el servidor.' })
       }
       units += done
+      if (l.type === 'in' && done > 0) entered.push({ name: l.name, size: l.size, qty: done, loc: l.loc || l.main })
     }
     setToConfirm(failed)
     setLastMove(null)
     refreshInventory()
     savingRef.current = false
     setSaving(false)
-    if (!failed.length) showToast(`Guardado: ${plural(units, 'prenda', 'prendas')}`)
-    else showToast(`${units ? `Se guardaron ${units}. ` : ''}${plural(failed.length, 'código no se pudo', 'códigos no se pudieron')} guardar: revisa la lista`, 'err')
+    const inUnits = entered.reduce((t, x) => t + x.qty, 0)
+    const where = [...new Set(entered.map((x) => x.loc).filter(Boolean))]
+    const told = inUnits ? await sendNotice({
+      kind: 'in', ids: notifyIn.ids, names: notifyIn.names,
+      title: `Entraron ${plural(inUnits, 'prenda', 'prendas')}`,
+      body: `${itemsText(entered)}${where.length ? ` · en ${where.slice(0, 4).join(', ')}` : ''}`,
+    }) : ''
+    if (!failed.length) showToast(`Guardado: ${plural(units, 'prenda', 'prendas')}${told}`)
+    else showToast(`${units ? `Se guardaron ${units}. ` : ''}${plural(failed.length, 'código no se pudo', 'códigos no se pudieron')} guardar: revisa la lista${told}`, 'err')
   }
 
   const discardAll = async () => {
@@ -614,6 +625,7 @@ export default function Scan() {
               </div>
               )
             })}
+            {toConfirmTypes.has('in') && notifyIn.el}
             <button type="button" className="link-btn to-confirm-discard" onClick={discardAll} disabled={saving}>Descartar todo</button>
           </div>
         )}

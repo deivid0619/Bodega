@@ -14,6 +14,7 @@ import { SearchField, Stepper, plural } from './Bits'
 import ScanBox from './ScanBox'
 import NearPick from './NearPick'
 import { useCrop } from './PhotoCrop'
+import { itemsText, sendNotice, useNotifyPick } from './Notices'
 
 // la plantilla de remision de Pigmalion trae estas tallas
 const TEMPLATE = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']
@@ -255,6 +256,7 @@ function SizeRow({ row, dest, showPending, prevPending, known, onChange }) {
 
 function Body() {
   const showToast = useToast()
+  const notify = useNotifyPick('remision') // a quien de los enlaces se le avisa
   const { close } = useSheet()
   const { data: products } = useProducts()
   const { data: reserve } = useReserve()
@@ -495,8 +497,17 @@ function Body() {
         }
       }
       revalidate('/api/documents')
-      showToast(`Remisión ${d.number.startsWith('SN-') ? 'sin número' : d.number}: ${record ? `registro de ${plural(d.units, 'prenda', 'prendas')} (no se sumaron)` : plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}${
-        photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}`, kept || !photoFile ? 'ok' : 'err')
+      // el aviso a quienes se eligio en "Avisar a"
+      const shown = d.number.startsWith('SN-') ? 'sin número' : d.number
+      const where = [toBodega && `${toBodega} a la bodega`, toReserve && `${toReserve} a la reserva`, passing && `${units} de paso`].filter(Boolean).join(' · ')
+      const told = await sendNotice({
+        kind: 'remision', ids: notify.ids, names: notify.names,
+        title: `Remisión ${shown}${supplier.trim() ? ` · ${supplier.trim()}` : ''}`,
+        body: `${record ? `Se registró (no se sumó): ${plural(d.units, 'prenda', 'prendas')}` : `Entraron ${plural(d.units, 'prenda', 'prendas')}${where ? ` (${where})` : ''}`}${
+          d.pending ? `, faltan ${d.pending} por llegar` : ''}. ${itemsText(lines)}`,
+      })
+      showToast(`Remisión ${shown}: ${record ? `registro de ${plural(d.units, 'prenda', 'prendas')} (no se sumaron)` : plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}${
+        photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}${told}`, kept || !photoFile ? 'ok' : 'err')
       close()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No hay conexión. No entró nada; intenta de nuevo.', 'err')
@@ -746,6 +757,8 @@ function Body() {
       ) : (
         <p className="mode-hint">Todo queda en la reserva. Desde ahí lo envías a la bodega cuando haga falta.</p>
       )}
+
+      {notify.el}
 
       <div className="doc-footer">
         <p className="mode-hint">

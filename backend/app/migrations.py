@@ -14,6 +14,7 @@ _NEW_COLUMNS = {
                   ("notes", "VARCHAR(500)"), ("photos", "JSON"), ("mode", "VARCHAR(12)"), ("status", "VARCHAR(12)"),
                   ("closed_at", "TIMESTAMP WITH TIME ZONE")],
     "reserve_items": [("image_url", "VARCHAR(500)")],
+    "view_links": [("notify", "JSON")],
 }
 
 

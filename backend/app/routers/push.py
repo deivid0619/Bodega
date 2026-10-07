@@ -1,12 +1,13 @@
 """Avisos al celular: activar o apagar en este dispositivo, elegir cuales,
-y mandar uno de prueba."""
+y mandar uno de prueba. La cuenta "solo ver" tambien puede (es solo su
+celular: no cambia nada de la bodega)."""
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import models, push
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import get_any_user
 
 router = APIRouter(prefix="/api/push", tags=["avisos al celular"])
 
@@ -30,12 +31,12 @@ def _mine(db: Session, endpoint: str, user: models.User) -> models.PushSubscript
 
 
 @router.get("/key")
-def key(db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+def key(db: Session = Depends(get_db), _: models.User = Depends(get_any_user)):
     return {"public_key": push.public_key(db), "kinds": list(push.KINDS)}
 
 
 @router.post("/subscribe", status_code=status.HTTP_204_NO_CONTENT)
-def subscribe(payload: SubscriptionIn, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def subscribe(payload: SubscriptionIn, db: Session = Depends(get_db), user: models.User = Depends(get_any_user)):
     p256dh, auth = payload.keys.get("p256dh"), payload.keys.get("auth")
     if not p256dh or not auth:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Faltan las llaves de este celular.")
@@ -50,20 +51,20 @@ def subscribe(payload: SubscriptionIn, db: Session = Depends(get_db), user: mode
 
 
 @router.post("/prefs", status_code=status.HTTP_204_NO_CONTENT)
-def prefs(payload: EndpointIn, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def prefs(payload: EndpointIn, db: Session = Depends(get_db), user: models.User = Depends(get_any_user)):
     sub = _mine(db, payload.endpoint, user)
     sub.prefs = push.clean_prefs(payload.prefs)
     db.commit()
 
 
 @router.post("/unsubscribe", status_code=status.HTTP_204_NO_CONTENT)
-def unsubscribe(payload: EndpointIn, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def unsubscribe(payload: EndpointIn, db: Session = Depends(get_db), user: models.User = Depends(get_any_user)):
     db.query(models.PushSubscription).filter_by(endpoint=payload.endpoint, user_id=user.id).delete()
     db.commit()
 
 
 @router.post("/test")
-def test(payload: EndpointIn, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def test(payload: EndpointIn, db: Session = Depends(get_db), user: models.User = Depends(get_any_user)):
     sub = _mine(db, payload.endpoint, user)
     ok = push.send(sub, {"title": "Bodega", "body": "Así te llegarán los avisos.", "url": "/", "tag": "prueba"},
                    push._keys(db))

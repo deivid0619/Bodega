@@ -85,18 +85,33 @@ def notify(kind: str, title: str, body: str, url: str = "/summary", tag: str | N
     if kind not in KINDS:
         return
     with SessionLocal() as db:
+        # a las cuentas "solo ver" solo les llega lo que se les manda (notify_users)
+        viewers = {u for (u,) in db.query(models.User.id).filter(models.User.role == "viewer")}
         targets = [s for s in db.query(models.PushSubscription).all()
-                   if s.user_id != exclude_user_id and clean_prefs(s.prefs)[kind]]
-        if not targets:
-            return
-        vapid = _keys(db)
+                   if s.user_id != exclude_user_id and s.user_id not in viewers and clean_prefs(s.prefs)[kind]]
         # el mismo tag reemplaza el aviso anterior en el celular en vez de apilarlos
-        payload = {"title": title, "body": body, "url": url, "tag": tag or kind}
-        gone = [s for s in targets if not send(s, payload, vapid)]
-        for s in gone:
-            db.delete(s)
-        if gone:
-            db.commit()
+        _deliver(db, targets, {"title": title, "body": body, "url": url, "tag": tag or kind})
+
+
+def notify_users(user_ids: list[int], title: str, body: str, url: str = "/", tag: str | None = None) -> None:
+    """Un aviso solo para estas personas (las de los enlaces "solo ver" a las
+    que se les mando). En segundo plano."""
+    if not user_ids:
+        return
+    with SessionLocal() as db:
+        targets = db.query(models.PushSubscription).filter(models.PushSubscription.user_id.in_(user_ids)).all()
+        _deliver(db, targets, {"title": title, "body": body, "url": url, "tag": tag or "aviso"})
+
+
+def _deliver(db: Session, targets: list[models.PushSubscription], payload: dict) -> None:
+    if not targets:
+        return
+    vapid = _keys(db)
+    gone = [s for s in targets if not send(s, payload, vapid)]
+    for s in gone:
+        db.delete(s)
+    if gone:
+        db.commit()
 
 
 def label(name: str, size: str) -> str:

@@ -73,6 +73,18 @@ export default function ViewLink() {
       showToast('Este dispositivo no dejó copiar: usa "Compartir".', 'err')
     }
   }
+  // que avisos le van marcados de entrada (al registrar igual se puede cambiar)
+  const setNotify = async (l, key) => {
+    const next = { ...l.notify, [key]: !l.notify?.[key] }
+    setLinks((ls) => ls.map((x) => (x.id === l.id ? { ...x, notify: next } : x)))
+    try {
+      const n = await api.put(`/api/auth/view-links/${l.id}/notify`, next)
+      setLinks((ls) => ls.map((x) => (x.id === l.id ? n : x)))
+    } catch (err) {
+      setLinks((ls) => ls.map((x) => (x.id === l.id ? l : x)))
+      showToast(err instanceof ApiError ? err.message : 'No se pudo cambiar.', 'err')
+    }
+  }
   const share = async (l) => {
     try {
       await navigator.share({ title: 'Bodega · solo ver', text: `${l.name}: la bodega de Pigmalion. Puedes ver todo, sin cambiar nada.`, url: urlOf(l) })
@@ -83,7 +95,7 @@ export default function ViewLink() {
     <div className="card view-link">
       <div className="view-link-t">
         <b>Enlaces para ver (sin editar)</b>
-        <small>Uno por persona: entra sin contraseña con su nombre, ve todo en vivo y no puede cambiar nada. Se puede instalar como app.</small>
+        <small>Uno por persona: entra sin contraseña con su nombre, ve todo en vivo y no puede cambiar nada. Se puede instalar como app. Le llegan los avisos que le mandes al registrar una remisión o unas entradas.</small>
       </div>
       {links?.map((l) => (
         <div className="vl-row" key={l.id}>
@@ -99,6 +111,15 @@ export default function ViewLink() {
               <span className="vl-t"><b>{l.name || 'Sin nombre'}</b><small>{l.used ? 'Ya entró' : 'Todavía no lo ha abierto'}</small></span>
             </div>
           )}
+          <div className="vl-notify">
+            <span>Avisarle<small>Va marcado al registrar; ahí puedes cambiarlo</small></span>
+            {[['remision', 'Remisiones'], ['entradas', 'Entradas']].map(([k, label]) => (
+              <button key={k} type="button" className="chip" aria-pressed={!!l.notify?.[k]} onClick={() => setNotify(l, k)}
+                      aria-label={`Avisarle a ${l.name || 'esta persona'}: ${label.toLowerCase()}`}>
+                {l.notify?.[k] && <Icon name="check" size={14} stroke={2.6} />}{label}
+              </button>
+            ))}
+          </div>
           <div className="vl-actions">
             <button type="button" className="btn btn-lime btn-sm" onClick={() => copy(l)}><Icon name="copy" size={16} />Copiar</button>
             {canShare && <button type="button" className="btn btn-ghost btn-sm" onClick={() => share(l)}>Compartir</button>}

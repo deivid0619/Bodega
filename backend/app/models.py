@@ -215,7 +215,26 @@ class ViewLink(Base):
     id = Column(Integer, primary_key=True)
     key = Column(String(64), nullable=False, unique=True)
     name = Column(String(60), nullable=False, default="")
+    # que avisos le van marcados de entrada: {"remision": bool, "in": bool}
+    # (al registrar se puede cambiar; sin dato, marcados)
+    notify = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
+
+
+class Notice(Base):
+    """Un aviso para las personas de los enlaces "solo ver": quien registra
+    una remision o unas entradas elige a quien se lo manda. Lo ven en su
+    apartado de Avisos y les llega al celular si lo activaron."""
+    __tablename__ = "notices"
+
+    id = Column(Integer, primary_key=True)
+    kind = Column(String(12), nullable=False)  # remision | in
+    title = Column(String(140), nullable=False)
+    body = Column(String(1000), nullable=False, default="")
+    url = Column(String(200), nullable=False, default="/summary")
+    links = Column(JSON, nullable=False, default=list)  # a que enlaces se mando (ids)
+    user_name = Column(String(80), nullable=False, default="")  # quien lo mando
+    created_at = Column(DateTime(timezone=True), default=now, index=True)
 
 
 class AppSetting(Base):

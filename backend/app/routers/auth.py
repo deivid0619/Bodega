@@ -69,9 +69,30 @@ def _legacy(db: Session) -> None:
     db.commit()
 
 
+def link_notify(link: models.ViewLink) -> dict[str, bool]:
+    """Que avisos le van marcados de entrada (sin dato: todos)."""
+    saved = link.notify or {}
+    return {k: bool(saved.get(k, True)) for k in ("remision", "entradas")}
+
+
+def link_of(db: Session, user: models.User) -> models.ViewLink | None:
+    """El enlace de una cuenta "solo ver"."""
+    for link in db.query(models.ViewLink).all():
+        if _viewer_email(link.key) == user.email:
+            return link
+    return None
+
+
+def viewer_ids(db: Session, links: list[models.ViewLink]) -> list[int]:
+    """Las cuentas de esos enlaces (solo existen si ya los abrieron)."""
+    emails = [_viewer_email(l.key) for l in links]
+    return [u for (u,) in db.query(models.User.id).filter(models.User.email.in_(emails))] if emails else []
+
+
 def _link_out(db: Session, link: models.ViewLink) -> schemas.ViewLinkOut:
     used = db.query(models.User.id).filter(models.User.email == _viewer_email(link.key)).first() is not None
-    return schemas.ViewLinkOut(id=link.id, key=link.key, name=link.name, used=used, created_at=link.created_at)
+    return schemas.ViewLinkOut(id=link.id, key=link.key, name=link.name, used=used, notify=link_notify(link),
+                               created_at=link.created_at)
 
 
 def _get_link(db: Session, link_id: int) -> models.ViewLink:
@@ -107,6 +128,17 @@ def rename_view_link(link_id: int, payload: schemas.ViewLinkIn, db: Session = De
     user = db.query(models.User).filter(models.User.email == _viewer_email(link.key)).first()
     if user:
         user.name = link.name or "Solo ver"
+    db.commit()
+    return _link_out(db, link)
+
+
+@router.put("/view-links/{link_id}/notify", response_model=schemas.ViewLinkOut)
+def set_link_notify(link_id: int, payload: schemas.ViewLinkNotifyIn, db: Session = Depends(get_db),
+                    _: models.User = Depends(require_admin)):
+    """Que avisos le van marcados de entrada a esta persona (al registrar una
+    remision o unas entradas igual se puede cambiar)."""
+    link = _get_link(db, link_id)
+    link.notify = {"remision": payload.remision, "entradas": payload.entradas}
     db.commit()
     return _link_out(db, link)
 

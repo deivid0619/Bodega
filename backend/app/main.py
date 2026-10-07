@@ -14,7 +14,7 @@ from .config import settings
 from .database import Base, SessionLocal, engine
 from .catalog import warm as warm_catalog
 from .migrations import backfill_stock, ensure_columns, purge_old_photos, remove_sample_product, table_bins
-from .routers import auth, catalog, documents, layout, movements, parcels, products, push, reports, reserve
+from .routers import auth, catalog, documents, layout, movements, notices, parcels, products, push, reports, reserve
 from .seed import seed
 
 logger = logging.getLogger("uvicorn.error")
@@ -81,6 +81,7 @@ app.include_router(documents.router)
 app.include_router(parcels.router)
 app.include_router(catalog.router)
 app.include_router(push.router)
+app.include_router(notices.router)
 
 
 @app.get("/api/health")

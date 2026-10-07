@@ -18,7 +18,8 @@ export function setViewOnly(on) {
 }
 
 export const isViewOnly = () => viewOnly
-const blocked = (method, path) => viewOnly && method !== 'GET' && !path.startsWith('/api/auth/')
+// lo unico que guarda: entrar, y activar los avisos en su propio celular
+const blocked = (method, path) => viewOnly && method !== 'GET' && !path.startsWith('/api/auth/') && !path.startsWith('/api/push/')
 
 export function setUnauthorizedHandler(fn) {
   onUnauthorized = fn

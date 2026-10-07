@@ -21,7 +21,8 @@ export function useMovementNotifications() {
   prefsRef.current = prefs
 
   useEffect(() => {
-    if (!token) return
+    // a la cuenta "solo ver" solo le llega lo que le mandan (sus Avisos)
+    if (!token || user?.role === 'viewer') return
     let cancelled = false
 
     const poll = async () => {

@@ -214,4 +214,5 @@ def reset_inventory(confirm: str = "", db: Session = Depends(get_db), _: models.
         pass  # si el almacenamiento no responde, se borran los documentos igual
     db.query(models.Document).delete()
     db.query(models.Parcel).delete()
+    db.query(models.Notice).delete()  # los avisos hablaban de lo que se borro
     db.commit()
