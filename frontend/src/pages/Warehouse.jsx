@@ -97,7 +97,7 @@ export default function Warehouse() {
     for (const p of products || []) {
       const places = p.stock?.length ? p.stock : [{ location_id: p.location_id, qty: 0 }]
       const text = norm(`${p.name} ${p.sku} ${p.size} ${places.map((s) => s.location_id).join(' ')}`)
-      if (!text.includes(q)) continue
+      if (!q.split(/\s+/).every((w) => text.includes(w))) continue
       const rows = places.map((s) => ({ type: 'prod', p, loc: s.location_id, here: s.qty })).sort((a, b) => b.here - a.here)
       const stocked = rows.filter((r) => r.here > 0 && locIndex.has(r.loc))
       found.push({ p, rows, stocked: stocked.length, total: stocked.reduce((t, r) => t + r.here, 0) })

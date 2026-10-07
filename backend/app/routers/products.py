@@ -1,4 +1,5 @@
 """Inventario: buscar, ver, editar y eliminar códigos de producto."""
+import unicodedata
 from typing import Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -19,6 +20,31 @@ def _out(db: Session, p: models.Product) -> schemas.ProductOut:
     return ser.one_product_out(db, p)
 
 
+def _fold(s: str) -> str:
+    """Para buscar sin importar mayusculas ni tildes: 'Génesis' -> 'genesis'."""
+    return "".join(c for c in unicodedata.normalize("NFKD", (s or "").casefold()) if not unicodedata.combining(c))
+
+
+def _matching(db: Session, products: list[models.Product], search: str) -> list[models.Product]:
+    """Las prendas que tienen todas las palabras buscadas, en cualquier orden:
+    en su nombre, codigo, talla o ubicacion, en el nombre que tiene en la
+    tienda (si se guardo con otro) o en una etiqueta corregida de ese codigo."""
+    words = _fold(search).split()
+    if not words:
+        return products
+    store = catalog.items(fetch=False)  # lo que ya esta en memoria: no sale a internet
+    labels: dict[str, list[str]] = {}
+    for code, sku in db.query(models.CodeAlias.code, models.CodeAlias.sku).all():
+        labels.setdefault(sku, []).append(code)
+    out = []
+    for p in products:
+        text = _fold(" ".join([p.name, p.sku, p.size or "", p.location_id or "",
+                               (store.get(p.sku) or {}).get("name", ""), *labels.get(p.sku, [])]))
+        if all(w in text for w in words):
+            out.append(p)
+    return out
+
+
 @router.get("", response_model=list[schemas.ProductOut])
 def list_products(
     search: Optional[str] = None,
@@ -26,14 +52,9 @@ def list_products(
     db: Session = Depends(get_db),
     _: models.User = Depends(get_current_user),
 ):
-    q = db.query(models.Product)
+    products = db.query(models.Product).all()
     if search:
-        like = f"%{search.strip()}%"
-        q = q.filter(
-            (models.Product.sku.ilike(like)) | (models.Product.name.ilike(like)) |
-            (models.Product.size.ilike(like)) | (models.Product.location_id.ilike(like))
-        )
-    products = q.all()
+        products = _matching(db, products, search)
     _fill_photos(db, products)
     from ..layout_logic import all_locations
     loc_map = all_locations([{"id": e.id, "type": e.type, "code": e.code, "params": e.params}

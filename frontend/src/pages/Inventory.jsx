@@ -68,8 +68,9 @@ export default function Inventory() {
     if (!all || !reserve || filter !== 'all') return []
     const used = new Set()
     for (const p of all) for (const it of reserveFor(p, index)) used.add(it.id)
-    const q = norm(search)
-    return reserve.filter((it) => it.qty > 0 && !used.has(it.id) && (!q || norm(`${it.name} ${it.sku || ''} ${it.size}`).includes(q)))
+    // por palabras, en cualquier orden (como el buscador de la bodega)
+    const words = norm(search).split(/\s+/).filter(Boolean)
+    return reserve.filter((it) => it.qty > 0 && !used.has(it.id) && words.every((w) => norm(`${it.name} ${it.sku || ''} ${it.size}`).includes(w)))
   }, [all, reserve, index, filter, search])
   const outlet = useMemo(() => outletIdsOf(layout), [layout])
   const groups = useMemo(() => groupProducts(products || [], index, reserveOnly, outlet), [products, index, reserveOnly, outlet])
