@@ -10,6 +10,9 @@ export default defineConfig({
   server: {
     port: 5190,
     strictPort: true,
+    // en todas las direcciones: "localhost" aqui es solo IPv6 (::1) y asi no
+    // abria en 127.0.0.1 ni desde el celular en el mismo wifi
+    host: true,
     proxy: {
       '/api': {
         // 127.0.0.1 explicito, no "localhost": en esta maquina a veces resuelve
