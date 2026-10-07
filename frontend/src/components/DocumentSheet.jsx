@@ -10,6 +10,7 @@ import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { Empty, SearchField, plural } from './Bits'
 import AttachSheet from './AttachFactura'
+import { useCrop } from './PhotoCrop'
 
 // un pedido que espera su factura todavia no tiene numero (PED-...)
 export const waiting = (d) => d.kind === 'factura' && d.status === 'espera'
@@ -64,9 +65,12 @@ function Photos({ doc, onChange }) {
     }
   }, [doc.id, count])
 
+  const [cropEl, crop] = useCrop()
   const add = async (e) => {
-    const f = e.target.files?.[0]
+    const picked = e.target.files?.[0]
     e.target.value = ''
+    if (!picked) return
+    const f = await crop(picked)
     if (!f) return
     setBusy(true)
     try {
@@ -106,6 +110,7 @@ function Photos({ doc, onChange }) {
       {canAdd && (
         <>
           <input ref={input} type="file" accept="image/*" hidden onChange={add} />
+          {cropEl}
           <button type="button" className="link-btn see-all" onClick={() => input.current.click()} disabled={busy}>
             <Icon name="camera" size={15} />{busy ? 'Guardando la foto…' : count ? 'Agregar otra foto' : 'Agregar la foto'}
           </button>

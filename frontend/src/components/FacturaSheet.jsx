@@ -13,6 +13,7 @@ import FromPick from './FromPick'
 import ScanBox from './ScanBox'
 import { AttachBody } from './AttachFactura'
 import { PhotoButtons, ReadingStep, readFactura } from './FacturaParts'
+import { useCrop } from './PhotoCrop'
 
 let nextId = 1
 
@@ -110,12 +111,15 @@ function PedidoStep({ onSaved, onBack }) {
     try { localStorage.setItem(PEDIDO_KEY, JSON.stringify({ lines, notes })) } catch { /* sin almacenamiento */ }
   }, [lines, notes])
   useEffect(() => () => { if (orderPreview) URL.revokeObjectURL(orderPreview) }, [orderPreview])
-  const pickOrder = (e) => {
+  const [cropEl, crop] = useCrop()
+  const pickOrder = async (e) => {
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
-    setOrderPhoto(f)
-    setOrderPreview(URL.createObjectURL(f))
+    const out = await crop(f)
+    if (!out) return
+    setOrderPhoto(out)
+    setOrderPreview(URL.createObjectURL(out))
   }
 
   const add = (p) => {
@@ -246,6 +250,7 @@ function PedidoStep({ onSaved, onBack }) {
       <div className="field">
         <span className="field-label">Foto del pedido del cliente <small className="opt">si quieres</small></span>
         <input ref={orderInput} type="file" accept="image/*" hidden onChange={pickOrder} />
+        {cropEl}
         {orderPreview ? (
           <div className="order-photo">
             <img src={orderPreview} alt="Foto del pedido del cliente" />

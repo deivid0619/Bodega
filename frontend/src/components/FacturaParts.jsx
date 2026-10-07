@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { SheetHeader } from './Sheet'
 import Icon from './Icon'
+import { useCrop } from './PhotoCrop'
 import { matchAll, parseFactura } from '../lib/facturaParser'
 import { readPhoto } from '../lib/ocr'
 
@@ -32,13 +33,17 @@ export function ReadingStep({ preview, stage, progress }) {
 export function PhotoButtons({ onFile }) {
   const camera = useRef(null)
   const gallery = useRef(null)
-  const pick = (e) => {
+  const [cropEl, crop] = useCrop() // se recorta antes de leerla: solo la tabla lee mejor
+  const pick = async (e) => {
     const f = e.target.files?.[0]
     e.target.value = ''
-    if (f) onFile(f)
+    if (!f) return
+    const out = await crop(f)
+    if (out) onFile(out)
   }
   return (
     <>
+      {cropEl}
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
       <input ref={gallery} type="file" accept="image/*" hidden onChange={pick} />
       <button type="button" className="btn btn-lime btn-lg btn-block" style={{ marginTop: 16 }} onClick={() => camera.current.click()}>

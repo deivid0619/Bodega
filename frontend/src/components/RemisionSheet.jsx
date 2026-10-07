@@ -13,6 +13,7 @@ import Icon from './Icon'
 import { SearchField, Stepper, plural } from './Bits'
 import ScanBox from './ScanBox'
 import NearPick from './NearPick'
+import { useCrop } from './PhotoCrop'
 
 // la plantilla de remision de Pigmalion trae estas tallas
 const TEMPLATE = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']
@@ -63,15 +64,19 @@ function shopRef(g, known) {
 }
 
 function PickStep({ onFile, onSkip }) {
+  const [cropEl, crop] = useCrop()
   const camera = useRef(null)
   const gallery = useRef(null)
-  const pick = (e) => {
+  const pick = async (e) => {
     const f = e.target.files?.[0]
     e.target.value = ''
-    if (f) onFile(f)
+    if (!f) return
+    const out = await crop(f)
+    if (out) onFile(out)
   }
   return (
     <>
+      {cropEl}
       <SheetHeader
         eyebrow={<div className="sheet-eyebrow"><span className="tag tag-in">Entrada de mercancía</span></div>}
         title="Recibir una remisión"
@@ -183,8 +188,7 @@ function RefPicker({ refs, known, onPick, onCancel }) {
   )
 }
 
-function SizeRow({ row, dest, showPending, prevPending, known, onChange, split }) {
-  const toRes = Math.min(row.toRes || 0, row.qty)
+function SizeRow({ row, dest, showPending, prevPending, known, onChange }) {
   const code = cleanCode(row.code)
   const other = code && known.get(code)
   const noCode = !row.sku && !code
@@ -229,21 +233,6 @@ function SizeRow({ row, dest, showPending, prevPending, known, onChange, split }
             spellCheck="false"
           />
           {other && <small className="warn">Ese código ya es de {other.name}{other.size ? ` · ${other.size}` : ''}.</small>}
-        </div>
-      )}
-      {split && dest === 'bodega' && row.qty > 0 && (
-        <div className="rem-pend rem-split">
-          <span>A la reserva<small>{row.qty - toRes} a la bodega · {toRes} a la reserva</small></span>
-          <Stepper
-            value={toRes}
-            onMinus={() => onChange((r) => ({ toRes: Math.max(0, Math.min(r.toRes || 0, r.qty) - 1) }))}
-            onPlus={() => onChange((r) => ({ toRes: Math.min(r.qty, (r.toRes || 0) + 1) }))}
-            disabledMinus={toRes === 0}
-            disabledPlus={toRes >= row.qty}
-            minusLabel="Una menos a la reserva"
-            plusLabel="Una más a la reserva"
-            small
-          />
         </div>
       )}
       {showPending && (
@@ -610,9 +599,6 @@ function Body() {
         <section className="rem-block" key={b.id} aria-label={b.name}>
           <div className="rem-block-head">
             <b>{b.name}{b.isNew && <span className="tag tag-warn" style={{ marginLeft: 8 }}>Nueva</span>}{b.shop && <span className="tag tag-set" style={{ marginLeft: 8 }}>Tienda</span>}</b>
-            {dest === 'bodega' && (
-              <button type="button" className="link-btn" onClick={() => toggleSplit(b.id)}>{b.split ? 'No repartir' : 'Repartir con la reserva'}</button>
-            )}
             <button type="button" className="link-btn" onClick={() => removeBlock(b.id)}>Quitar</button>
           </div>
           {b.rows.map((r) => (
@@ -623,7 +609,6 @@ function Body() {
               showPending={showPending}
               prevPending={prevPending.get(`${b.name}|${r.size}`) || 0}
               known={known}
-              split={!!b.split}
               onChange={(patch) => setRow(b.id, r.size, patch)}
             />
           ))}
@@ -700,19 +685,58 @@ function Body() {
           <span className="field-label">{blocks.length > 1 ? 'Ubicación de cada referencia' : 'Ubicación'}</span>
           {blocks.length ? (
             <div className="rem-places">
-              {blocks.map((b) => (
-                <label key={b.id} className={`rem-place${needsPlace?.id === b.id ? ' need' : ''}`}>
-                  <span className="rem-place-name">{b.name}</span>
-                  <select className="input" value={b.place} onChange={(e) => setPlace(b.id, e.target.value)} aria-label={`Ubicación de ${b.name}`}>
-                    <option value="">{autoLabel(b)}</option>
-                    {groups.map((g) => (
-                      <optgroup key={g.label} label={g.label}>
-                        {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                      </optgroup>
-                    ))}
-                  </select>
-                </label>
-              ))}
+              {blocks.map((b) => {
+                const arrived = b.rows.filter((r) => r.qty > 0)
+                return (
+                  <div key={b.id} className={`rem-place${needsPlace?.id === b.id ? ' need' : ''}`}>
+                    <span className="rem-place-name">{b.name}</span>
+                    <select className="input" value={b.place} onChange={(e) => setPlace(b.id, e.target.value)} aria-label={`Ubicación de ${b.name}`}>
+                      <option value="">{autoLabel(b)}</option>
+                      {groups.map((g) => (
+                        <optgroup key={g.label} label={g.label}>
+                          {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                        </optgroup>
+                      ))}
+                    </select>
+                    {arrived.length > 0 && (
+                      <button type="button" className="link-btn rem-split-toggle" onClick={() => toggleSplit(b.id)}>
+                        {b.split ? 'Todo a la bodega (no repartir)' : 'Repartir: una parte a la reserva'}
+                      </button>
+                    )}
+                    {b.split && arrived.map((r) => {
+                      const toRes = Math.min(r.toRes || 0, r.qty)
+                      const set = (n) => setRow(b.id, r.size, (x) => ({ toRes: Math.max(0, Math.min(x.qty, n)) }))
+                      return (
+                        <div className="rem-split-row" key={r.size}>
+                          <span>
+                            <b>Talla {r.size || 'única'} · llegaron {r.qty}</b>
+                            <small>{r.qty - toRes} a la bodega · {toRes} a la reserva</small>
+                          </span>
+                          <Stepper
+                            onMinus={() => set(toRes - 1)}
+                            onPlus={() => set(toRes + 1)}
+                            disabledMinus={toRes === 0}
+                            disabledPlus={toRes >= r.qty}
+                            minusLabel={`Una menos a la reserva, talla ${r.size || 'única'}`}
+                            plusLabel={`Una más a la reserva, talla ${r.size || 'única'}`}
+                            small
+                          >
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              aria-label={`A la reserva, talla ${r.size || 'única'}`}
+                              value={toRes || ''}
+                              placeholder="0"
+                              onChange={(e) => set(Math.floor(+e.target.value) || 0)}
+                            />
+                          </Stepper>
+                        </div>
+                      )
+                    })}
+                    {b.split && <small className="rem-split-hint">Escribe cuántas van a la reserva; el resto entra a la ubicación de arriba.</small>}
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <p className="mode-hint" style={{ marginTop: 4 }}>Cuando agregues lo que llegó, aquí eliges dónde se guarda cada referencia.</p>
