@@ -42,7 +42,7 @@ def near(sku: str, db: Session = Depends(get_db), _: models.User = Depends(get_c
     seen = {o["sku"] for o in out}
     if len(code) >= 6:
         for p in db.query(models.Product).filter(models.Product.sku.like(f"%{code[-2:]}")).all():
-            if p.sku not in seen and catalog.close_codes(p.sku, code):
+            if p.sku not in seen and catalog.similar(p.sku, code) is not None:
                 out.append({"sku": p.sku, "name": p.name, "size": p.size, "price": 0, "image": p.image_url, "in_bodega": True})
     return out[:4]
 

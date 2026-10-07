@@ -7,6 +7,7 @@ se guarda en el repositorio. Si la tienda no responde, la app sigue igual,
 solo que sin sugerencias."""
 from __future__ import annotations
 
+import re
 import threading
 import time
 
@@ -112,16 +113,41 @@ def close_codes(a: str, b: str) -> bool:
     return a[i + 1:] == b[i + 1:] if len(a) == len(b) else a[i:] == b[i + 1:]
 
 
+def _distance(a: str, b: str) -> int:
+    """Cuantas letras hay que cambiar, poner o quitar para pasar de a a b."""
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def similar(store: str, code: str) -> int | None:
+    """Que tan parecido es un codigo de la tienda al de una etiqueta (None si
+    no se parece). El final (la talla) tiene que ser el mismo, para no
+    confundir una talla con otra.
+    - Una letra distinta: P-PRM001800XL en la etiqueta, P-PRM00180XL en la tienda.
+    - Hasta tres, si trae el mismo numero de referencia: PGPRBI072CMM en la
+      etiqueta, PGPRGP072VCMM en la tienda."""
+    if store == code or len(code) < 6 or store[-2:] != code[-2:]:
+        return None
+    if close_codes(store, code):
+        return 1
+    nums = re.findall(r"\d{3,}", code)
+    if len(code) < 8 or not nums or not any(n in store for n in nums):
+        return None
+    d = _distance(store, code)
+    return d if d <= 3 else None
+
+
 def near(sku: str, limit: int = 3, fetch: bool = True) -> list[dict]:
-    """Codigos de la tienda casi iguales al de una etiqueta. En algunas tallas
-    la tienda tiene el codigo mas corto que la etiqueta (P-PRM001800XL en la
-    etiqueta, P-PRM00180XL en la tienda). El final (la talla) tiene que ser el
-    mismo, para no confundir una talla con otra."""
+    """Codigos de la tienda casi iguales al de una etiqueta, del mas parecido
+    al menos (ver similar)."""
     code = "".join(str(sku or "").upper().split())
-    if len(code) < 6:
-        return []
-    tail = code[-2:]
-    return [it for k, it in items(fetch).items() if k.endswith(tail) and close_codes(k, code)][:limit]
+    found = [(d, it) for k, it in items(fetch).items() if (d := similar(k, code)) is not None]
+    return [it for _, it in sorted(found, key=lambda x: x[0])][:limit]
 
 
 def search(q: str, limit: int = 8) -> list[dict]:
