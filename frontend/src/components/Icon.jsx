@@ -35,6 +35,7 @@ const PATHS = {
   crate: 'M3 9h18l-1.4 9.6a1.6 1.6 0 0 1-1.6 1.4H6a1.6 1.6 0 0 1-1.6-1.4L3 9ZM3 9l1.6-4h14.8L21 9M8.5 12.5v4M12 12.5v4M15.5 12.5v4',
   bag: 'M5.5 8.5h13l1 12h-15l1-12ZM9 8.5V7a3 3 0 0 1 6 0v1.5',
   tag: 'M3.5 12.3V4.5a1 1 0 0 1 1-1h7.8l8.2 8.2a1 1 0 0 1 0 1.4l-7.4 7.4a1 1 0 0 1-1.4 0L3.5 12.3ZM8 8h.01',
+  image: 'M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1ZM4 16l4.5-4.5 4 4L15 13l5 5M15.5 9h.01',
 }
 
 export default function Icon({ name, size = 22, stroke = 1.9, className, ...rest }) {

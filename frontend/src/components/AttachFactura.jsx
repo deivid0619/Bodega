@@ -1,14 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { api, ApiError } from '../api'
 import { refreshInventory, revalidate, useLayout, useProducts } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { plural } from './Bits'
-import { saveDocPhoto } from '../lib/docPhotos'
 import { asksFrom, fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../utils'
 import FromPick from './FromPick'
-import { PhotoButtons, ReadingStep, readFactura } from './FacturaParts'
+import { PhotoButtons, ProofPhoto, ReadMoreButton, ReadingStep, photoNote, readFactura, savePhotos } from './FacturaParts'
 
 const label = (p, sku) => (p ? `${p.name}${p.size ? ` · ${p.size}` : ''}` : sku)
 
@@ -25,7 +24,8 @@ export function AttachBody({ pedido, onDone, onBack }) {
   const [stage, setStage] = useState('preparing')
   const [progress, setProgress] = useState(0)
   const [preview, setPreview] = useState(null)
-  const [photoFile, setPhotoFile] = useState(null)
+  const [reads, setReads] = useState([]) // las fotos de cerca con las que se leyo
+  const [proof, setProof] = useState(null) // la factura completa: la prueba que se guarda
   const [error, setError] = useState('')
   const [number, setNumber] = useState('')
   const [read, setRead] = useState(null) // lo que leyo la foto: { qty: Map sku -> cantidad, unknown: [codigos] }
@@ -36,10 +36,10 @@ export function AttachBody({ pedido, onDone, onBack }) {
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
 
-  const onFile = async (file) => {
+  // more: otra parte de la tabla, que se suma a lo ya leido
+  const onFile = async (file, more = false) => {
     setError('')
     setPreview(URL.createObjectURL(file))
-    setPhotoFile(file)
     setProgress(0)
     setStage('preparing')
     setStep('reading')
@@ -52,15 +52,37 @@ export function AttachBody({ pedido, onDone, onBack }) {
         if (m.product) qty.set(m.sku, (qty.get(m.sku) || 0) + l.qty)
         else unknown.push(l.code || l.read)
       })
+      if (more) {
+        setStep('compare')
+        if (!r.lines.length) {
+          showToast('En esa foto no se leyeron líneas: tómala más cerca y derecha.', 'err')
+          return
+        }
+        // lo que sale en las dos fotos (donde se montan) no se suma dos veces
+        const was = read?.qty || new Map()
+        const fresh = [...qty.keys()].filter((sku) => !was.has(sku)).length + unknown.filter((c) => !read?.unknown.includes(c)).length
+        const merged = new Map(was)
+        for (const [sku, n] of qty) merged.set(sku, Math.max(merged.get(sku) || 0, n))
+        setRead({ qty: merged, unknown: [...new Set([...(read?.unknown || []), ...unknown])] })
+        if (!number.trim() && r.number) setNumber(r.number)
+        if (fresh) setReads((rs) => [...rs, file]) // una foto repetida no se guarda
+        showToast(fresh ? `Se ${fresh === 1 ? 'sumó una prenda' : `sumaron ${fresh} prendas`} de esa parte` : 'Esa parte ya estaba leída: no se sumó nada.', fresh ? 'ok' : 'err')
+        return
+      }
+      setReads([file])
       if (r.number) setNumber(r.number)
       setRead(r.lines.length ? { qty, unknown } : null)
       if (!r.lines.length) setError('La foto no dejó leer las líneas: se anexa sin comparar (la foto igual queda guardada).')
       setStep('compare')
     } catch {
-      setStep('pick')
-      setError('No se pudo leer la foto. Revisa la conexión la primera vez (se descarga el lector) e intenta de nuevo, o anéxala solo con el número.')
+      setStep(more ? 'compare' : 'pick')
+      const msg = 'No se pudo leer la foto. Revisa la conexión la primera vez (se descarga el lector) e intenta de nuevo, o anéxala solo con el número.'
+      if (more) showToast(msg, 'err')
+      else setError(msg)
     }
   }
+  // el numero, si no salio en la foto de cerca: de la foto completa
+  const fillNumber = useCallback((n) => setNumber((cur) => (cur.trim() ? cur : n)), [])
 
   // la misma factura no puede quedar dos veces
   useEffect(() => {
@@ -111,19 +133,12 @@ export function AttachBody({ pedido, onDone, onBack }) {
         number: number.trim(), deduct: lines, returns: returning.map((r) => ({ sku: r.sku, qty: r.p - r.f })),
       })
       refreshInventory()
-      let doc = res.document
-      let kept = false
-      if (photoFile) {
-        try {
-          doc = await saveDocPhoto(doc.id, photoFile)
-          kept = true
-        } catch {
-          kept = false
-        }
-      }
+      // primero la factura completa y despues las de cerca
+      const photos = [proof, ...reads].filter(Boolean)
+      const saved = await savePhotos(res.document.id, photos)
+      const doc = saved.doc || res.document
       revalidate('/api/documents')
-      showToast(`Factura ${doc.number} anexada al pedido${photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}`,
-                kept || !photoFile ? 'ok' : 'err')
+      showToast(`Factura ${doc.number} anexada al pedido${photoNote(photos.length, saved.kept)}`, saved.kept === photos.length ? 'ok' : 'err')
       onDone?.(doc)
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No hay conexión. No se anexó nada; intenta de nuevo.', 'err')
@@ -142,10 +157,10 @@ export function AttachBody({ pedido, onDone, onBack }) {
         <SheetHeader eyebrow={eyebrow} title="Anexar la factura" subtitle={who} />
         {error && <p className="form-err" role="alert">{error}</p>}
         <PhotoButtons onFile={onFile} />
-        <button type="button" className="btn btn-quiet btn-block" style={{ marginTop: 10 }} onClick={() => { setRead(null); setPhotoFile(null); setStep('compare') }}>
-          Sin foto: escribir solo el número
+        <button type="button" className="btn btn-quiet btn-block" style={{ marginTop: 10 }} onClick={() => { setRead(null); setReads([]); setStep('compare') }}>
+          Sin leer: escribir solo el número
         </button>
-        <p className="mode-hint">Con la foto, la app la compara con lo que se empacó y te dice si faltó o sobró algo. La foto queda guardada un mes como prueba.</p>
+        <p className="mode-hint">Toma la foto de cerca, solo a la tabla: la app la compara con lo que se empacó y te dice si faltó o sobró algo. Después tomas la factura completa para guardarla un mes.</p>
         {onBack && <button type="button" className="link-btn" style={{ marginTop: 14 }} onClick={onBack}>Volver</button>}
       </>
     )
@@ -219,13 +234,17 @@ export function AttachBody({ pedido, onDone, onBack }) {
         </div>
       )}
 
+      {read && <ReadMoreButton onFile={(f) => onFile(f, true)} />}
+
+      <ProofPhoto file={proof} onChange={setProof} reads={reads.length} findNumber={number.trim() ? undefined : fillNumber} />
+
       <div className="doc-footer">
         <p className="mode-hint">{problem || summary}</p>
         <button type="button" className="btn btn-lime btn-lg btn-block" disabled={!!problem || saving} onClick={confirm}>
           {saving ? 'Anexando…' : 'Anexar factura'}
         </button>
-        <button type="button" className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={() => { setError(''); setStep('pick') }}>
-          {photoFile ? 'Tomar otra foto' : 'Volver'}
+        <button type="button" className="btn btn-quiet btn-block" style={{ marginTop: 8 }} onClick={() => { setError(''); setRead(null); setReads([]); setProof(null); setStep('pick') }}>
+          {reads.length ? 'Empezar de nuevo' : 'Volver'}
         </button>
       </div>
     </>

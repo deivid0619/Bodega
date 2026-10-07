@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canon, matchAll, matchLine, parseFactura, sizeOf } from './facturaParser'
+import { canon, matchAll, matchLine, parseFactura, sameLine, sizeOf } from './facturaParser'
 
 // Lo que leyo Tesseract (gratis, en el navegador) de una foto real de una
 // factura de Pigmalion: solo el numero y las lineas de productos (los
@@ -93,5 +93,18 @@ describe('factura impresa leida con OCR', () => {
   it('las parejas que el OCR confunde valen lo mismo', () => {
     expect(canon('LSS43REL')).toBe(canon('LS543REL'))
     expect(canon('PGPRBIOTOSFEM')).toBe(canon('PGPRBI070SFEM'))
+  })
+
+  it('reconoce la misma linea leida en dos fotos, aunque el codigo salga distinto', () => {
+    const a = { code: 'PCLL0025U', description: 'CUELLO TERMICO NEGRO TU', qty: 6 }
+    expect(sameLine(a, { code: 'POLLOGISY', description: 'CUBLLO TERMICO NEGRO TU', qty: 6 })).toBe(true)
+    // otra talla u otra cantidad: es otra linea
+    expect(sameLine({ code: 'X1', description: 'CHAQUETA TOURING GRIS TM', qty: 3 }, { code: 'Y2', description: 'CHAQUETA TOURING GRIS TL', qty: 3 })).toBe(false)
+    expect(sameLine(a, { ...a, code: 'ZZZ', qty: 2 })).toBe(false)
+  })
+
+  it('entiende la unidad mal leida (2UuND, 4 UNO) sin perder la cantidad', () => {
+    const r = parseFactura('| PGPRGPOT2vCMM      CHAQUETA MOTO GENESIS PRO VERANO CAMO GRIS TM   2UuND   $ 000 000 00\nP-WPM210200L   CORTAVIENTOS REXA IMP NEGRO TL   4 UNO   $ 000.000,00')
+    expect(r.lines.map((l) => l.qty)).toEqual([2, 4])
   })
 })

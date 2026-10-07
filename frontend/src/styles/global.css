@@ -1168,3 +1168,14 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .crop-h.se{right:-14px;bottom:-14px;cursor:nwse-resize}.crop-h.se i{right:12px;bottom:12px;border-left:0;border-top:0}
 .crop-foot{flex:none;display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 16px calc(14px + var(--safe-b))}
 .crop-foot .btn-ghost{background:transparent;color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.35)}
+
+/* factura: la foto completa que se guarda, tomada despues de leer de cerca */
+.proof{margin-top:18px}
+.proof-btns{display:grid;grid-template-columns:1fr auto;gap:8px}
+.proof-btns .btn-ghost{width:52px;padding:0}
+.proof-row{display:flex;align-items:center;gap:12px;padding:10px;border-radius:var(--r-sm);background:var(--paper);box-shadow:inset 0 0 0 1.5px var(--fog-2)}
+.proof-row img{flex:none;width:64px;height:84px;object-fit:cover;border-radius:6px;background:var(--fog-2)}
+.proof-t{flex:1;min-width:0}
+.proof-t b{display:block;font-size:14px}
+.proof-t small{display:block;margin-top:3px;font-size:12.5px;color:var(--muted)}
+.proof-act{flex:none;display:grid;gap:6px;justify-items:end}

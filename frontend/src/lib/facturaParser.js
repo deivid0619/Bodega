@@ -7,7 +7,8 @@
 // de la factura es el mismo de la etiqueta, se compara en una forma
 // "canonica" donde esas parejas valen lo mismo.
 
-const UNIT = '(?:UND|UNO|UN0|UNID(?:ADES)?|PARES|PAR|PR)'
+// UND, y como lo confunde el OCR: UNO, UN0, UUND
+const UNIT = '(?:U{1,2}N[DO0]|UNID(?:ADES)?|PARES|PAR|PR)'
 const LINE_RE = new RegExp(`^[^A-Z0-9]*([A-Z0-9][A-Z0-9.\\-!|' ]{3,22}?)\\s{2,}(.+?)\\s+(\\d{1,4})\\s*${UNIT}\\b`, 'i')
 const NUMBER_RE = /\b(FEV|FE|FV)\s*[-.]?\s*([0-9OoQDZzIlSsBb]{3,})/
 
@@ -109,6 +110,15 @@ export function matchLine(line, products, claimed = new Set()) {
   }
   if (best) return { sku: best.p.sku, product: best.p, how: 'fixed' }
   return { sku: line.code, product: null, how: null }
+}
+
+// La misma linea leida en dos fotos que se montan (sin prenda de la bodega
+// que las una): el mismo codigo, o la misma descripcion con la misma talla y
+// cantidad (el codigo es lo que el OCR lee peor; las palabras, mejor).
+export function sameLine(a, b) {
+  if (canon(a.code) && canon(a.code) === canon(b.code)) return true
+  return a.qty === b.qty && sizeOf(a.description) === sizeOf(b.description)
+    && nameMatch(a.description, b.description) >= 0.8 && nameMatch(b.description, a.description) >= 0.8
 }
 
 // Todas las lineas: primero las seguras (iguales), despues las corregidas,

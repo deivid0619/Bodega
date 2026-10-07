@@ -1,18 +1,18 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../api'
 import { refreshInventory, revalidate, useLayout, usePolling, useProducts } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
 import { SearchField, Stepper, plural } from './Bits'
-import { cleanCode, matchLine } from '../lib/facturaParser'
+import { cleanCode, matchLine, sameLine } from '../lib/facturaParser'
 import { saveDocPhoto } from '../lib/docPhotos'
 import { beep } from '../lib/feedback'
 import { asksFrom, fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../utils'
 import FromPick from './FromPick'
 import ScanBox from './ScanBox'
 import { AttachBody } from './AttachFactura'
-import { PhotoButtons, ReadingStep, readFactura } from './FacturaParts'
+import { PhotoButtons, ProofPhoto, ReadMoreButton, ReadingStep, photoNote, readFactura, savePhotos } from './FacturaParts'
 import { useCrop } from './PhotoCrop'
 
 let nextId = 1
@@ -67,16 +67,17 @@ function StartStep({ onHave, onPedido, onAttach }) {
 function PickStep({ onFile, error, onBack }) {
   return (
     <>
-      <SheetHeader title="Descontar una factura" subtitle="Toma una foto de la factura impresa. La app lee los códigos y las cantidades, tú revisas y confirmas." />
+      <SheetHeader title="Descontar una factura" subtitle="Primero una foto de cerca, solo a la tabla de productos: así lee bien los códigos. La factura completa la fotografías después, para guardarla." />
       {error && <p className="form-err" role="alert">{error}</p>}
       <PhotoButtons onFile={onFile} />
       <details className="doc-help">
         <summary>Recomendaciones para usarla bien</summary>
         <ul>
-          <li>Que se vea toda la tabla de productos, derecha, con buena luz y sin sombras.</li>
+          <li>Acércate hasta que la tabla llene la foto, derecha, con buena luz y sin sombras. No importa que no salga el resto de la factura.</li>
+          <li>Si la tabla es larga, lee una parte y después toca “Leer otra parte de la tabla”: lo que se repite entre las dos fotos no se suma dos veces.</li>
           <li>Revisa cada línea antes de confirmar: si un código o una cantidad no se leyó bien, corrígelo.</li>
-          <li>Si ya descontaste esas prendas por otro lado, al revisar marca “Solo registro”: se guarda la factura sin descontar otra vez.</li>
-          <li>La foto se guarda un mes como prueba de lo que salió (se puede ver y descargar en Resumen). Después se borra sola.</li>
+          <li>Al revisar, toma la foto de la factura completa (puede ser de lejos): esa se guarda un mes como prueba y se ve en Resumen. Si el número no salió en la foto de cerca, lo busca en esa.</li>
+          <li>Si ya descontaste esas prendas por otro lado, marca “Solo registro”: se guarda la factura sin descontar otra vez.</li>
         </ul>
       </details>
       <button type="button" className="link-btn" style={{ marginTop: 14 }} onClick={onBack}>Volver</button>
@@ -290,7 +291,8 @@ function Body({ onDone }) {
   const [stage, setStage] = useState('preparing')
   const [progress, setProgress] = useState(0)
   const [preview, setPreview] = useState(null)
-  const [photoFile, setPhotoFile] = useState(null) // la foto, para guardarla como prueba al confirmar
+  const [reads, setReads] = useState([]) // las fotos de cerca con las que se leyo
+  const [proof, setProof] = useState(null) // la factura completa: la prueba que se guarda
   const [error, setError] = useState('')
   const [number, setNumber] = useState('')
   const [rows, setRows] = useState([])
@@ -302,28 +304,53 @@ function Body({ onDone }) {
 
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
 
-  const onFile = async (file) => {
+  // more: otra parte de la tabla, que se suma a lo ya leido
+  const onFile = async (file, more = false) => {
     setError('')
     setPreview(URL.createObjectURL(file))
-    setPhotoFile(file)
     setProgress(0)
     setStage('preparing')
     setStep('reading')
     try {
       const r = await readFactura(file, known, { onProgress: setProgress, onStage: setStage })
       if (!r.lines.length) {
+        if (more) {
+          setStep('review')
+          showToast('En esa foto no se leyeron líneas: tómala más cerca y derecha.', 'err')
+          return
+        }
         setStep('pick')
-        setError('No se encontraron líneas de productos. Toma la foto más derecha y más cerca de la tabla.')
+        setError('No se encontraron líneas de productos. Acércate más: que la tabla llene la foto, derecha y con buena luz.')
         return
       }
-      setNumber(r.number)
-      setRows(r.lines.map((l, i) => withDefault(toRow(l, r.matches[i]), outlet)))
+      const read = r.lines.map((l, i) => toRow(l, r.matches[i]))
+      if (more) {
+        // lo que sale en las dos fotos (donde se montan) no se suma dos veces
+        const fresh = read.filter((x) => !rows.some((y) => (x.product
+          ? y.product && y.sku === x.sku
+          : !y.product && sameLine(x, y))))
+        setRows([...rows, ...fresh.map((x) => withDefault(x, outlet))])
+        if (!number.trim() && r.number) setNumber(r.number)
+        const again = read.length - fresh.length
+        showToast(fresh.length
+          ? `Se ${fresh.length === 1 ? 'sumó una línea' : `sumaron ${fresh.length} líneas`}${again ? ` · ${again} ya ${again === 1 ? 'estaba' : 'estaban'}` : ''}`
+          : 'Esa parte ya estaba leída: no se sumó nada.', fresh.length ? 'ok' : 'err')
+        if (fresh.length) setReads((rs) => [...rs, file]) // una foto repetida no se guarda
+      } else {
+        setNumber(r.number)
+        setRows(read.map((x) => withDefault(x, outlet)))
+        setReads([file])
+      }
       setStep('review')
     } catch {
-      setStep('pick')
-      setError('No se pudo leer la foto. Revisa la conexión la primera vez (se descarga el lector) e intenta de nuevo.')
+      setStep(more ? 'review' : 'pick')
+      const msg = 'No se pudo leer la foto. Revisa la conexión la primera vez (se descarga el lector) e intenta de nuevo.'
+      if (more) showToast(msg, 'err')
+      else setError(msg)
     }
   }
+  // el numero, si no salio en la foto de cerca: de la foto completa
+  const fillNumber = useCallback((n) => setNumber((cur) => (cur.trim() ? cur : n)), [])
 
   // la misma factura no se puede registrar dos veces
   useEffect(() => {
@@ -374,19 +401,13 @@ function Body({ onDone }) {
       }
       const res = await api.post('/api/documents/factura', { number: number.trim(), lines, record_only: recordOnly })
       refreshInventory()
-      // la foto queda como prueba (un mes); si no sube, la factura igual quedo
-      let kept = false
-      if (photoFile) {
-        try {
-          await saveDocPhoto(res.document.id, photoFile)
-          kept = true
-        } catch {
-          kept = false
-        }
-      }
+      // las fotos quedan como prueba (un mes): primero la completa; si no
+      // suben, la factura igual quedo
+      const photos = [proof, ...reads].filter(Boolean)
+      const { kept } = await savePhotos(res.document.id, photos)
       revalidate('/api/documents')
       showToast(`Factura ${number.trim().toUpperCase()}: ${recordOnly ? `registro de ${plural(units, 'prenda', 'prendas')} (no se descontó nada)` : plural(units, 'prenda descontada', 'prendas descontadas')}${
-        photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}`, kept || !photoFile ? 'ok' : 'err')
+        photoNote(photos.length, kept)}`, kept === photos.length ? 'ok' : 'err')
       onDone?.()
       close()
     } catch (e) {
@@ -482,18 +503,22 @@ function Body({ onDone }) {
         })}
       </div>
 
+      <ReadMoreButton onFile={(f) => onFile(f, true)} />
+
+      <ProofPhoto file={proof} onChange={setProof} reads={reads.length} findNumber={number.trim() ? undefined : fillNumber} />
+
       <div className="doc-footer">
         {missingFrom > 0 && (
           <p className="to-confirm-ask">
             {missingFrom === 1 ? 'Falta elegir de dónde sale una prenda' : `Falta elegir de dónde salen ${missingFrom} prendas`}: está en varios lugares
           </p>
         )}
-        <p className="mode-hint">{recordOnly ? 'Solo se guarda el registro con su foto: el inventario no cambia.' : 'Se descuenta todo junto: si algo falla, no se descuenta nada.'}</p>
+        <p className="mode-hint">{recordOnly ? 'Solo se guarda el registro con sus fotos: el inventario no cambia.' : 'Se descuenta todo junto: si algo falla, no se descuenta nada.'}</p>
         <button className="btn btn-lime btn-lg btn-block" disabled={!chosen.length || !number.trim() || !!dup || blocked || missingFrom > 0 || saving} onClick={confirm}>
           {saving ? 'Guardando…' : recordOnly ? `Guardar registro de ${plural(units, 'prenda', 'prendas')}` : `Descontar ${plural(units, 'prenda', 'prendas')}`}
         </button>
-        <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={() => { setRows([]); setStep('pick') }}>
-          Tomar otra foto
+        <button className="btn btn-quiet btn-block" style={{ marginTop: 8 }} onClick={() => { setRows([]); setReads([]); setProof(null); setStep('pick') }}>
+          Empezar de nuevo
         </button>
       </div>
     </>
