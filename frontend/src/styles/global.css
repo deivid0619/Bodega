@@ -1289,3 +1289,10 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .res-search{margin:2px 0 10px}
 .res-found{margin:-4px 0 8px}
 @media (prefers-reduced-motion:reduce){.res-tasks-chev{transition:none}}
+/* Inventario: lo que solo esta en la reserva (o en 0 en la bodega) se avisa claro */
+.ref-res-note{grid-column:1/-1;display:flex;align-items:center;gap:10px;margin-top:-4px;padding:10px 12px;border-radius:var(--r-sm);background:var(--lime-soft);color:var(--ink);text-align:left;transition:transform 160ms var(--ease-out)}
+.ref-res-note:active{transform:scale(.99)}
+.ref-res-note > svg:first-child{flex:none;color:var(--lime-deep)}
+.ref-res-note span{flex:1;min-width:0;font-size:13px;font-weight:600;line-height:1.35}
+.ref-res-note span b{display:block;margin-top:2px;font-size:12.5px;font-weight:800;color:var(--lime-deep)}
+.ref-res-note > svg:last-child{flex:none;color:var(--lime-deep)}

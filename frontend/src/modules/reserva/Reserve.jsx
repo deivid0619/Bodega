@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../../core/api'
 import { mutate, refreshInventory, revalidate, setReserveQty, useLayout, usePolling, useReserve, useRestock } from '../../core/useApi'
 import { useToast } from '../../ui/ToastContext'
@@ -96,7 +96,9 @@ export default function Reserve() {
   const taskNames = [...new Set(tasks.map((t) => `${t.product.name}${t.product.size ? ` ${t.product.size}` : ''}`))]
 
   // buscar en lo guardado: por la referencia, la talla o el codigo (palabras en cualquier orden)
-  const [q, setQ] = useState('')
+  // desde el Inventario ("Ver en la reserva") llega con la busqueda puesta
+  const [params] = useSearchParams()
+  const [q, setQ] = useState(() => params.get('buscar') || '')
   const words = fold(q).split(/\s+/).filter(Boolean)
   const shownItems = (items || []).filter((i) => {
     const hay = fold(`${i.name} ${i.size || ''} ${i.sku || ''}`)

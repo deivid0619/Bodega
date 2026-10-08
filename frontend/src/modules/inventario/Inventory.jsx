@@ -4,6 +4,7 @@ import { useLayout, useProducts, useReserve } from '../../core/useApi'
 import { locationGroups } from '../../core/locationGroups'
 import { outletIdsOf, refCode, refKey, reserveFor, reserveIndex, stockSplit } from '../../core/utils'
 import ProductModal from './ProductModal'
+import { reserveNote } from './reserveNote'
 import Icon from '../../ui/Icon'
 import { Count, Empty, PageHead, ProductThumb, SearchField, plural } from '../../ui/Bits'
 
@@ -75,6 +76,8 @@ export default function Inventory() {
   const outlet = useMemo(() => outletIdsOf(layout), [layout])
   const groups = useMemo(() => groupProducts(products || [], index, reserveOnly, outlet), [products, index, reserveOnly, outlet])
   const groupsLoc = useMemo(() => locationGroups(layout?.elements), [layout])
+  // a la Reserva con la busqueda ya puesta (esa referencia)
+  const toReserve = (name) => navigate(`/reserve?buscar=${encodeURIComponent(name)}`)
   const totals = useMemo(() => {
     const list = all || []
     return {
@@ -110,7 +113,10 @@ export default function Inventory() {
           {!products ? (
             [0, 1, 2].map((i) => <div key={i} className="skeleton" />)
           ) : groups.length ? (
-            groups.map((g) => (
+            groups.map((g) => {
+              // lo que esta en la reserva se dice claro: quien busca aqui puede no saberlo
+              const note = reserveNote(g)
+              return (
               <article className="card ref" key={g.base}>
                 <ProductThumb src={g.image} alt={g.name} />
                 <div style={{ minWidth: 0 }}>
@@ -121,11 +127,18 @@ export default function Inventory() {
                   <b><Count value={g.bodega + g.reserve} /></b>
                   <span>{g.reserve > 0 ? 'en total' : g.bodega === 1 ? 'prenda' : 'prendas'}</span>
                 </div>
-                {(g.reserve > 0 || g.passing > 0 || g.outlet > 0) && (
+                {note?.tone === 'only' && (
+                  <button type="button" className="ref-res-note" onClick={() => toReserve(g.name)}>
+                    <Icon name="reserve" size={18} stroke={2.1} />
+                    <span>{note.text}<b>Ver en la reserva</b></span>
+                    <Icon name="arrowRight" size={16} stroke={2.4} />
+                  </button>
+                )}
+                {(note?.tone === 'more' || g.passing > 0 || g.outlet > 0) && (
                   <p className="ref-split">
                     <span><b>{g.bodega}</b> en la bodega</span>
                     {g.reserve > 0 && (
-                      <button type="button" className="res" onClick={() => navigate('/reserve')}><b>+{g.reserve}</b> en la reserva</button>
+                      <button type="button" className="res" onClick={() => toReserve(g.name)}><b>+{g.reserve}</b> en la reserva</button>
                     )}
                     {g.passing > 0 && <span><b>{g.passing}</b> de paso</span>}
                     {g.outlet > 0 && <span className="outlet"><b>{g.outlet}</b> en outlet</span>}
@@ -142,7 +155,7 @@ export default function Inventory() {
                       {x.size || 'Única'} <b>{x.bodega}</b>{x.reserve > 0 && <i className="size-res">+{x.reserve}</i>}
                     </button>
                   ) : (
-                    <button key={x.key} className="size zero" onClick={() => navigate('/reserve')} aria-label={`Talla ${x.size || 'única'}: ${x.reserve} en la reserva`}>
+                    <button key={x.key} className="size zero" onClick={() => toReserve(g.name)} aria-label={`Talla ${x.size || 'única'}: ${x.reserve} en la reserva`}>
                       {x.size || 'Única'} <b>0</b><i className="size-res">+{x.reserve}</i>
                     </button>
                   )))}
@@ -158,7 +171,8 @@ export default function Inventory() {
                   </div>
                 )}
               </article>
-            ))
+              )
+            })
           ) : products.length === 0 && !search && filter === 'all' ? (
             <Empty icon="scan" title="Todavía no hay prendas" action={<button className="btn btn-lime" onClick={() => navigate('/scan')}>Escanear la primera</button>}>
               Escanea la etiqueta de una prenda para registrarla en su ubicación.
