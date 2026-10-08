@@ -5,6 +5,8 @@ export default function SizeRow({ row, dest, showPending, prevPending, known, on
   const code = cleanCode(row.code)
   const other = code && known.get(code)
   const noCode = !row.sku && !code
+  // en la bodega el codigo es opcional (sin el va a la reserva); de paso es obligatorio
+  const wantsCode = dest === 'bodega' || dest === 'despacho'
   return (
     <div className="rem-row">
       <div className="sz">{row.size || 'U'}</div>
@@ -17,8 +19,10 @@ export default function SizeRow({ row, dest, showPending, prevPending, known, on
             {row.inReserve ? ` · ${row.inReserve} en reserva` : ''}
           </small>
         ) : (
-          <small className={row.qty > 0 && dest === 'bodega' ? 'warn' : ''}>
-            {row.qty > 0 && dest === 'bodega' && noCode ? 'Sin código: queda en la reserva' : 'Talla sin código todavía'}
+          <small className={row.qty > 0 && wantsCode ? 'warn' : ''}>
+            {row.qty > 0 && noCode && dest === 'bodega' ? 'Sin código: queda en la reserva'
+              : row.qty > 0 && noCode && dest === 'despacho' ? 'De paso necesita el código: escríbelo abajo'
+                : 'Talla sin código todavía'}
           </small>
         )}
         {prevPending > 0 && <small className="due">Debían {prevPending} de la entrega anterior</small>}
@@ -39,13 +43,13 @@ export default function SizeRow({ row, dest, showPending, prevPending, known, on
           onChange={(e) => onChange({ qty: Math.max(0, Math.min(9999, Math.floor(+e.target.value) || 0)) })}
         />
       </Stepper>
-      {!row.sku && row.qty > 0 && dest === 'bodega' && (
+      {!row.sku && row.qty > 0 && wantsCode && (
         <div className="rem-row-code">
           <input
             className="rem-code"
             value={row.code}
             onChange={(e) => onChange({ code: e.target.value })}
-            placeholder="Código de la etiqueta (opcional)"
+            placeholder={dest === 'despacho' ? 'Código de la etiqueta' : 'Código de la etiqueta (opcional)'}
             aria-label={`Código de la talla ${row.size || 'única'}`}
             autoCapitalize="characters"
             spellCheck="false"

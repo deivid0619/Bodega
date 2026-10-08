@@ -132,9 +132,14 @@ function Body() {
   }, [history, delivery, number])
 
   const pickRef = (ref) => {
+    setPicking(false)
+    // ya esta en la remision: no se repite (sus tallas estan arriba)
+    if (blocks.some((b) => b.name === ref.name)) {
+      showToast(`${ref.name} ya está en esta remisión: pon las cantidades arriba.`, 'info')
+      return
+    }
     // place: la ubicacion de esta referencia ('' = donde ya esta cada talla)
     setBlocks((bs) => [...bs, { id: blockId(), name: ref.name, isNew: !!ref.isNew, shop: !!ref.shop, rows: rowsOf(ref), place: '' }])
-    setPicking(false)
   }
   const setPlace = (bid, place) => setBlocks((bs) => bs.map((b) => (b.id === bid ? { ...b, place } : b)))
   // dos toques seguidos suman dos: cada cambio parte del valor actual
@@ -233,10 +238,17 @@ function Body() {
     ...b,
     split: !b.split,
     rows: b.rows.map((r) => (b.split ? { ...r, parts: [] }
-      : r.qty > 0 && !r.parts?.length ? { ...r, parts: [{ key: blockId(), loc: '', qty: 0 }] } : r)),
+      : r.qty > 0 && (r.sku || cleanCode(r.code)) && !r.parts?.length ? { ...r, parts: [{ key: blockId(), loc: '', qty: 0 }] } : r)),
   })))
   const setParts = (bid, size, parts) => setRow(bid, size, { parts })
-  const removeBlock = (bid) => {
+  const removeBlock = async (bid) => {
+    const b = blocks.find((x) => x.id === bid)
+    const counted = (b?.rows || []).reduce((t, r) => t + r.qty + r.pending, 0)
+    if (counted > 0 && !(await ask({
+      title: `¿Quitar ${b.name}?`,
+      body: `Se borra lo que contaste de esta referencia (${plural(counted, 'prenda', 'prendas')}).`,
+      confirmLabel: 'Sí, quitar',
+    }))) return
     setBlocks((bs) => {
       const left = bs.filter((b) => b.id !== bid)
       if (!left.length) setPicking(true)
@@ -246,11 +258,12 @@ function Body() {
 
   // repartida: una linea por ubicacion (el servidor junta la misma talla si va al mismo lugar)
   const splitting = (b) => dest === 'bodega' && !!b.split
+  const coded = (r) => !!(r.sku || cleanCode(r.code)) // sin codigo va a la reserva: no se reparte
   const lines = blocks.flatMap((b) => b.rows
     .filter((r) => r.qty > 0 || r.pending > 0)
     .flatMap((r) => {
       const base = { name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, isNew: b.isNew }
-      const { parts, rest } = splitRow(r, splitting(b))
+      const { parts, rest } = splitRow(r, splitting(b) && coded(r))
       const out = rest > 0 || r.pending > 0 ? [{ ...base, place: b.place, qty: Math.max(0, rest), pending: r.pending }] : []
       return [...out, ...parts.map((x) => (x.loc === RESERVA
         ? { ...base, place: '', qty: x.qty, pending: 0, toReserve: true }
@@ -281,12 +294,12 @@ function Body() {
   const needsPlace = dest === 'bodega'
     ? blocks.find((b) => !b.place && homeless(b) && b.rows.some((r) => {
       const code = r.sku || cleanCode(r.code) // de la tienda o escrito
-      return splitRow(r, splitting(b)).rest > 0 && code && !known.get(code) // lo repartido ya tiene su ubicacion
+      return splitRow(r, splitting(b) && coded(r)).rest > 0 && code && !known.get(code) // lo repartido ya tiene su ubicacion
     }))
     : null
   // repartida: que no pase de lo que llego y que cada parte diga a donde va
-  const overSplit = blocks.find((b) => splitting(b) && b.rows.some((r) => partsTotal(r.parts) > r.qty))
-  const unplaced = blocks.find((b) => splitting(b) && b.rows.some((r) => r.qty > 0 && (r.parts || []).some((x) => x.qty > 0 && !x.loc)))
+  const overSplit = blocks.find((b) => splitting(b) && b.rows.some((r) => coded(r) && partsTotal(r.parts) > r.qty))
+  const unplaced = blocks.find((b) => splitting(b) && b.rows.some((r) => coded(r) && r.qty > 0 && (r.parts || []).some((x) => x.qty > 0 && !x.loc)))
   // lo que dice "automatica" en cada referencia: donde estan hoy sus tallas
   const autoLabel = (b) => {
     const here = [...new Set(b.rows.map((r) => known.get(r.sku)).filter(Boolean).map((p) => p.location_name || p.location_id))]
@@ -306,9 +319,9 @@ function Body() {
           : clash ? 'Un código escrito es de otra referencia.'
             : overSplit ? `En ${overSplit.name} repartiste más de las que llegaron.`
               : unplaced ? `Elige la ubicación de cada parte de ${unplaced.name}.`
-              : needsPlace ? `Elige dónde guardar ${needsPlace.name}.`
-              : noCode ? `Las prendas de paso necesitan su código (talla ${noCode.size || 'única'}).`
-                : ''
+                : needsPlace ? `Elige dónde guardar ${needsPlace.name}.`
+                  : noCode ? `Las prendas de paso necesitan su código (talla ${noCode.size || 'única'}).`
+                    : ''
 
   const discard = async () => {
     const ok = await ask({
@@ -563,7 +576,7 @@ function Body() {
           {blocks.length ? (
             <div className="rem-places">
               {blocks.map((b) => {
-                const arrived = b.rows.filter((r) => r.qty > 0)
+                const arrived = b.rows.filter((r) => r.qty > 0 && coded(r)) // las sin codigo van a la reserva
                 return (
                   <div key={b.id} className={`rem-place${needsPlace?.id === b.id ? ' rem-place-need' : ''}`}>
                     <span className="rem-place-name">{b.name}</span>
