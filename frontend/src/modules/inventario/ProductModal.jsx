@@ -4,7 +4,7 @@ import { api, ApiError, isNetworkError } from '../../core/api'
 import { useAuth } from '../../core/AuthContext'
 import { useToast } from '../../ui/ToastContext'
 import { useConfirm } from '../../ui/ConfirmContext'
-import { cachedProduct, useLayout, useReserve } from '../../core/useApi'
+import { applyLocally, bumpStock, cachedProduct, useLayout, useReserve } from '../../core/useApi'
 import { outletIdsOf, reserveIndex, stockSplit } from '../../core/utils'
 import Sheet, { SheetHeader, useSheet } from '../../ui/Sheet'
 import MoveSheet from './MoveSheet'
@@ -49,7 +49,14 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
   }, [sku])
 
   // los + y − quedan marcados hasta tocar "Guardar" (un toque sin querer no cuenta)
-  const staged = useStagedSteps(() => (product ? `${product.name}${product.size ? ` · ${product.size}` : ''}` : sku))
+  // (al guardar, el numero nuevo se ve aqui en el acto, como en la bodega)
+  const staged = useStagedSteps(
+    () => (product ? `${product.name}${product.size ? ` · ${product.size}` : ''}` : sku),
+    (code, loc, d) => {
+      setProduct((p) => (p ? applyLocally(p, d > 0 ? 'in' : 'out', Math.abs(d), loc || undefined) : p))
+      return bumpStock(code, d, loc || undefined)
+    },
+  )
   const stepsSaved = (results) => {
     const last = results[results.length - 1]
     if (last?.product) setProduct(last.product)
