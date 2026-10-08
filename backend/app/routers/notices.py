@@ -1,5 +1,5 @@
 """Avisos para las personas de los enlaces "solo ver". Quien registra una
-remision o unas entradas elige a quien avisarle; a ellos les queda en su
+remision, unas entradas o unas salidas (factura, pedido) elige a quien avisarle; a ellos les queda en su
 apartado de Avisos y les llega al celular si lo activaron. Nada mas les
 llega: lo demas de la bodega lo ven entrando a la app."""
 from datetime import datetime, timedelta, timezone
@@ -15,7 +15,6 @@ from .auth import link_notify, link_of, viewer_ids
 router = APIRouter(prefix="/api/notices", tags=["avisos"])
 
 KEEP_DAYS = 60  # los avisos viejos se borran solos
-KIND_KEY = {"remision": "remision", "in": "entradas"}
 
 
 def _staff(user: models.User) -> None:

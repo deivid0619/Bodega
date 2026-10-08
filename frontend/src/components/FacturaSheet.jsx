@@ -14,6 +14,7 @@ import ScanBox from './ScanBox'
 import { AttachBody } from './AttachFactura'
 import { PhotoButtons, ProofPhoto, ReadMoreButton, ReadingStep, photoNote, readFactura, savePhotos } from './FacturaParts'
 import { useCrop } from './PhotoCrop'
+import { itemsText, sendNotice, useNotifyPick } from './Notices'
 
 let nextId = 1
 
@@ -92,6 +93,7 @@ const PEDIDO_KEY = 'bodega_pedido_borrador'
 // factura. Lo armado se guarda en este celular por si se cierra la hoja.
 function PedidoStep({ onSaved, onBack }) {
   const showToast = useToast()
+  const notify = useNotifyPick('out') // a quien de los enlaces se le avisa
   const { data: products } = useProducts()
   const { data: layout } = useLayout()
   const outlet = outletIdsOf(layout)
@@ -181,8 +183,13 @@ function PedidoStep({ onSaved, onBack }) {
         }
       }
       revalidate('/api/documents')
+      const told = await sendNotice({
+        kind: 'out', ids: notify.ids, names: notify.names,
+        title: `Pedido empacado${notes.trim() ? ` · ${notes.trim()}` : ''}`,
+        body: `Salieron ${plural(units, 'prenda', 'prendas')} (la factura llega después). ${itemsText(lines.map((l) => ({ name: bySku.get(l.sku)?.name || l.sku, size: bySku.get(l.sku)?.size, qty: l.qty })))}`,
+      })
       showToast(`Pedido empacado: ${plural(units, 'prenda descontada', 'prendas descontadas')}. Queda esperando la factura.${
-        orderPhoto ? (kept ? ' Foto del pedido guardada.' : ' La foto no se guardó: agrégala desde Resumen.') : ''}`, kept ? 'ok' : 'err')
+        orderPhoto ? (kept ? ' Foto del pedido guardada.' : ' La foto no se guardó: agrégala desde Resumen.') : ''}${told}`, kept ? 'ok' : 'err')
       onSaved()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No hay conexión. No se descontó nada; intenta de nuevo.', 'err')
@@ -264,6 +271,7 @@ function PedidoStep({ onSaved, onBack }) {
         )}
         <span className="field-hint">Queda con el pedido; la foto de la factura se agrega al anexarla. Las dos se guardan un mes.</span>
       </div>
+      {notify.el}
 
       <label className="field">
         <span className="field-label">Pedido o cliente <small className="opt">si quieres</small></span>
@@ -283,6 +291,7 @@ function PedidoStep({ onSaved, onBack }) {
 
 function Body({ onDone }) {
   const showToast = useToast()
+  const notify = useNotifyPick('out') // a quien de los enlaces se le avisa
   const { close } = useSheet()
   const { data: products } = useProducts()
   const { data: layout } = useLayout()
@@ -406,8 +415,14 @@ function Body({ onDone }) {
       const photos = [proof, ...reads].filter(Boolean)
       const { kept } = await savePhotos(res.document.id, photos)
       revalidate('/api/documents')
+      const told = await sendNotice({
+        kind: 'out', ids: notify.ids, names: notify.names,
+        title: `Factura ${number.trim().toUpperCase()}`,
+        body: `${recordOnly ? `Se registró (ya se había descontado): ${plural(units, 'prenda', 'prendas')}` : `Salieron ${plural(units, 'prenda', 'prendas')}`}. ${
+          itemsText(chosen.map((r) => ({ name: r.product.name, size: r.product.size, qty: r.qty })))}`,
+      })
       showToast(`Factura ${number.trim().toUpperCase()}: ${recordOnly ? `registro de ${plural(units, 'prenda', 'prendas')} (no se descontó nada)` : plural(units, 'prenda descontada', 'prendas descontadas')}${
-        photoNote(photos.length, kept)}`, kept === photos.length ? 'ok' : 'err')
+        photoNote(photos.length, kept)}${told}`, kept === photos.length ? 'ok' : 'err')
       onDone?.()
       close()
     } catch (e) {
@@ -506,6 +521,7 @@ function Body({ onDone }) {
       <ReadMoreButton onFile={(f) => onFile(f, true)} />
 
       <ProofPhoto file={proof} onChange={setProof} reads={reads.length} findNumber={number.trim() ? undefined : fillNumber} />
+      {notify.el}
 
       <div className="doc-footer">
         {missingFrom > 0 && (

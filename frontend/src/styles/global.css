@@ -1196,6 +1196,7 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .notice:first-child{border-top:0}
 .notice-dot{flex:none;width:32px;height:32px;border-radius:var(--r-sm);display:grid;place-items:center;background:var(--lime);color:var(--ink)}
 .notice-dot.in{background:var(--fog-2)}
+.notice-dot.out{background:var(--ink);color:#fff}
 .notice-t{flex:1;min-width:0}
 .notice-t b{display:block;font-weight:700;font-size:14.5px;overflow-wrap:anywhere}
 .notice-t span{display:block;margin-top:3px;font-size:13px;color:var(--graphite);overflow-wrap:anywhere}

@@ -31,11 +31,11 @@ def test_notices_reach_only_who_was_chosen(monkeypatch):
         admin = _h(client.post("/api/auth/login", json={"email": settings.admin_email, "password": settings.admin_password}).json()["access_token"])
         gab = client.post("/api/auth/view-links", headers=admin, json={"name": "Gabriel"}).json()
         ana = client.post("/api/auth/view-links", headers=admin, json={"name": "Ana"}).json()
-        assert gab["notify"] == {"remision": True, "entradas": True}
+        assert gab["notify"] == {"remision": True, "entradas": True, "salidas": True}
 
         # a Ana no se le marcan las remisiones de entrada
-        r = client.put(f"/api/auth/view-links/{ana['id']}/notify", headers=admin, json={"remision": False, "entradas": True})
-        assert r.status_code == 200 and r.json()["notify"] == {"remision": False, "entradas": True}
+        r = client.put(f"/api/auth/view-links/{ana['id']}/notify", headers=admin, json={"remision": False, "entradas": True, "salidas": False})
+        assert r.status_code == 200 and r.json()["notify"] == {"remision": False, "entradas": True, "salidas": False}
         rec = {x["name"]: x for x in client.get("/api/notices/recipients", headers=admin).json()}
         assert rec["Ana"]["remision"] is False and rec["Gabriel"]["remision"] is True
 

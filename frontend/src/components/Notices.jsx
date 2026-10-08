@@ -10,15 +10,16 @@ import PushBox from './PushBox'
 
 // Avisos para las personas de los enlaces "solo ver": quien registra una
 // remision o unas entradas elige a quien avisarle ("Avisar a"); ellos los
-// ven en su campana y les llegan al celular si lo activaron.
+// ven en su campana y les llegan al celular si lo activaron. Tambien las
+// salidas: una factura, un pedido empacado o lo que sale escaneando.
 
 const SEEN = 'bodega_avisos_visto'
 const readSeen = () => { try { return Number(localStorage.getItem(SEEN)) || 0 } catch { return 0 } }
-const KEY = { remision: 'remision', in: 'entradas' }
+const KEY = { remision: 'remision', in: 'entradas', out: 'salidas' }
 
 // "Avisar a": las personas de los enlaces, marcadas segun lo que eligio el
 // administrador para cada una; se puede cambiar antes de confirmar.
-export function useNotifyPick(kind) {
+export function useNotifyPick(kind, label = 'Avisar a') {
   const { data } = usePolling('/api/notices/recipients', { interval: 60000 })
   const people = Array.isArray(data) ? data : [] // la cuenta "solo ver" recibe la lista vacia
   const [picked, setPicked] = useState(null) // Set de ids; null hasta que llega la lista
@@ -34,7 +35,7 @@ export function useNotifyPick(kind) {
   })
   const el = people.length ? (
     <div className="notify-pick">
-      <span className="notify-pick-t"><Icon name="bell" size={16} />Avisar a</span>
+      <span className="notify-pick-t"><Icon name="bell" size={16} />{label}</span>
       <div className="notify-pick-chips">
         {people.map((p) => (
           <button key={p.id} type="button" className="chip" aria-pressed={!!picked?.has(p.id)} onClick={() => toggle(p.id)}>
@@ -80,7 +81,7 @@ function NoticeList() {
   const list = Array.isArray(data) ? data : []
   return (
     <>
-      <SheetHeader title="Avisos" subtitle="Lo que te mandan desde la bodega: remisiones y entradas." />
+      <SheetHeader title="Avisos" subtitle="Lo que te mandan desde la bodega: remisiones, entradas y salidas." />
       {loading && <p className="mode-hint">Cargando…</p>}
       {!loading && !list.length && (
         <p className="mode-hint">Todavía no hay avisos. Cuando te manden uno, aparece aquí.</p>
@@ -89,7 +90,7 @@ function NoticeList() {
         <div className="card panel notice-list">
           {list.map((n) => (
             <button key={n.id} type="button" className="notice" onClick={() => { close(); navigate(n.url || '/summary') }}>
-              <span className={`notice-dot ${n.kind}`} aria-hidden="true"><Icon name={n.kind === 'remision' ? 'receipt' : 'boxIn'} size={16} /></span>
+              <span className={`notice-dot ${n.kind}`} aria-hidden="true"><Icon name={n.kind === 'remision' ? 'receipt' : n.kind === 'out' ? 'boxOut' : 'boxIn'} size={16} /></span>
               <span className="notice-t">
                 <b>{n.title}</b>
                 {n.body && <span>{n.body}</span>}

@@ -72,7 +72,7 @@ def _legacy(db: Session) -> None:
 def link_notify(link: models.ViewLink) -> dict[str, bool]:
     """Que avisos le van marcados de entrada (sin dato: todos)."""
     saved = link.notify or {}
-    return {k: bool(saved.get(k, True)) for k in ("remision", "entradas")}
+    return {k: bool(saved.get(k, True)) for k in ("remision", "entradas", "salidas")}
 
 
 def link_of(db: Session, user: models.User) -> models.ViewLink | None:
@@ -136,9 +136,9 @@ def rename_view_link(link_id: int, payload: schemas.ViewLinkIn, db: Session = De
 def set_link_notify(link_id: int, payload: schemas.ViewLinkNotifyIn, db: Session = Depends(get_db),
                     _: models.User = Depends(require_admin)):
     """Que avisos le van marcados de entrada a esta persona (al registrar una
-    remision o unas entradas igual se puede cambiar)."""
+    remision, unas entradas o unas salidas igual se puede cambiar)."""
     link = _get_link(db, link_id)
-    link.notify = {"remision": payload.remision, "entradas": payload.entradas}
+    link.notify = {"remision": payload.remision, "entradas": payload.entradas, "salidas": payload.salidas}
     db.commit()
     return _link_out(db, link)
 

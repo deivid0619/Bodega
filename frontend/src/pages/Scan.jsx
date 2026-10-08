@@ -118,7 +118,8 @@ function ScanHit({ hit, tally, onUndo }) {
 }
 
 export default function Scan() {
-  const notifyIn = useNotifyPick('in') // a quien de los enlaces se le avisa de lo que entro
+  const notifyIn = useNotifyPick('in', 'Avisar las entradas a') // a quien de los enlaces se le avisa
+  const notifyOut = useNotifyPick('out', 'Avisar las salidas a')
   const { data: layout } = useLayout()
   const showToast = useToast()
   const confirm = useConfirm()
@@ -372,7 +373,8 @@ export default function Scan() {
     setHit(null)
     const lines = [...toConfirmRef.current].reverse() // en el orden en que se escanearon
     const failed = []
-    const entered = [] // lo que entro, para el aviso
+    const entered = [] // lo que entro y lo que salio, para los avisos
+    const left = []
     let units = 0
     for (const l of lines) {
       // una salida: primero de donde se eligio y, si ahi no alcanza, el resto de donde haya
@@ -401,6 +403,7 @@ export default function Scan() {
       }
       units += done
       if (l.type === 'in' && done > 0) entered.push({ name: l.name, size: l.size, qty: done, loc: l.loc || l.main })
+      if (l.type === 'out' && done > 0) left.push({ name: l.name, size: l.size, qty: done })
     }
     setToConfirm(failed)
     setLastMove(null)
@@ -414,8 +417,13 @@ export default function Scan() {
       title: `Entraron ${plural(inUnits, 'prenda', 'prendas')}`,
       body: `${itemsText(entered)}${where.length ? ` · en ${where.slice(0, 4).join(', ')}` : ''}`,
     }) : ''
-    if (!failed.length) showToast(`Guardado: ${plural(units, 'prenda', 'prendas')}${told}`)
-    else showToast(`${units ? `Se guardaron ${units}. ` : ''}${plural(failed.length, 'código no se pudo', 'códigos no se pudieron')} guardar: revisa la lista${told}`, 'err')
+    const outUnits = left.reduce((t, x) => t + x.qty, 0)
+    const toldOut = outUnits ? await sendNotice({
+      kind: 'out', ids: notifyOut.ids, names: notifyOut.names,
+      title: `Salieron ${plural(outUnits, 'prenda', 'prendas')}`, body: itemsText(left),
+    }) : ''
+    if (!failed.length) showToast(`Guardado: ${plural(units, 'prenda', 'prendas')}${told}${toldOut}`)
+    else showToast(`${units ? `Se guardaron ${units}. ` : ''}${plural(failed.length, 'código no se pudo', 'códigos no se pudieron')} guardar: revisa la lista${told}${toldOut}`, 'err')
   }
 
   const discardAll = async () => {
@@ -626,6 +634,7 @@ export default function Scan() {
               )
             })}
             {toConfirmTypes.has('in') && notifyIn.el}
+            {toConfirmTypes.has('out') && notifyOut.el}
             <button type="button" className="link-btn to-confirm-discard" onClick={discardAll} disabled={saving}>Descartar todo</button>
           </div>
         )}

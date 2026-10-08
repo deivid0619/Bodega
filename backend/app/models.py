@@ -215,7 +215,7 @@ class ViewLink(Base):
     id = Column(Integer, primary_key=True)
     key = Column(String(64), nullable=False, unique=True)
     name = Column(String(60), nullable=False, default="")
-    # que avisos le van marcados de entrada: {"remision": bool, "in": bool}
+    # que avisos le van marcados de entrada: {"remision": bool, "entradas": bool, "salidas": bool}
     # (al registrar se puede cambiar; sin dato, marcados)
     notify = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
@@ -228,7 +228,7 @@ class Notice(Base):
     __tablename__ = "notices"
 
     id = Column(Integer, primary_key=True)
-    kind = Column(String(12), nullable=False)  # remision | in
+    kind = Column(String(12), nullable=False)  # remision | in | out
     title = Column(String(140), nullable=False)
     body = Column(String(1000), nullable=False, default="")
     url = Column(String(200), nullable=False, default="/summary")

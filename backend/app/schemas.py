@@ -52,6 +52,7 @@ class ViewLinkOut(BaseModel):
 class ViewLinkNotifyIn(BaseModel):
     remision: bool = True
     entradas: bool = True
+    salidas: bool = True
 
 
 class RecipientOut(BaseModel):
@@ -61,10 +62,11 @@ class RecipientOut(BaseModel):
     name: str
     remision: bool
     entradas: bool
+    salidas: bool
 
 
 class NoticeIn(BaseModel):
-    kind: str = Field(pattern="^(remision|in)$")
+    kind: str = Field(pattern="^(remision|in|out)$")
     title: str = Field(min_length=1, max_length=140)
     body: str = Field(default="", max_length=1000)
     url: str = Field(default="/summary", max_length=200, pattern="^/")
