@@ -64,7 +64,7 @@ async def lifespan(app: FastAPI):
         table_bins(db)
         remove_sample_product(db)
         try:
-            purge_old_photos(db)  # las fotos de mas de un mes
+            purge_old_photos(db)  # las fotos de mas de dos meses
         except Exception:
             pass
     finally:

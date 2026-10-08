@@ -17,7 +17,7 @@ Lo común a todos está en `app/core/`: configuración, base de datos, sesión, 
 | `inventario` | Las prendas (un código por talla), cuánto hay en cada ubicación, movimientos, deshacer y códigos de etiqueta mal impresos | `/api/products/*`, `/api/movements/*` |
 | `bodega` | El cuarto y sus muebles en 3D, las ubicaciones y el outlet | `/api/layout/*` |
 | `reserva` | La bodega de reserva: guardar, escanear, llevar a la bodega o despachar | `/api/reserve/*` |
-| `documentos` | Lo común a los papeles: la lista, el calendario y las fotos (un mes) | `/api/documents`, `/calendar`, `/counts`, `/{id}/photos` |
+| `documentos` | Lo común a los papeles: la lista, el calendario y las fotos (dos meses) | `/api/documents`, `/calendar`, `/counts`, `/{id}/photos` |
 | **`remisiones`** | Lo que llega de un proveedor (ver su README) | `POST /api/documents/remision`, `/recent-entries` |
 | `facturas` | Descontar una factura, el pedido que espera su factura, anexarla o deshacerlo | `POST /api/documents/factura`, `/pedido`, `/{id}/factura`, `DELETE /{id}` |
 | `conteo` | Contar una ubicación y ajustar lo que no cuadra | `POST /api/documents/conteo` |

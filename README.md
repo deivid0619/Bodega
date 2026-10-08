@@ -266,9 +266,9 @@ GitHub.
 | `CORS_ORIGINS` | Dominios del frontend que pueden llamar a la API, separados por coma |
 | `CATALOG_URL` | Opcional. Catálogo público de la tienda (por defecto el de pigmalionmoto.com); vacío lo apaga |
 | `VAPID_SUBJECT` | Opcional. Quién firma los avisos al celular (por defecto https://pigmalionmoto.com) |
-| `SUPABASE_SERVICE_KEY` | Para guardar un mes las fotos de remisiones y facturas en Supabase Storage (bucket privado `documentos`, se crea solo). La llave secreta del proyecto (`sb_secret_…`, Supabase → Settings → API Keys → Secret keys; también sirve la `service_role` de antes). Solo en Render, nunca en el repositorio. Sin ella, en el computador van a `backend/fotos-documentos` y en producción no se guardan. El Resumen muestra si se están guardando |
+| `SUPABASE_SERVICE_KEY` | Para guardar dos meses las fotos de remisiones y facturas en Supabase Storage (bucket privado `documentos`, se crea solo). La llave secreta del proyecto (`sb_secret_…`, Supabase → Settings → API Keys → Secret keys; también sirve la `service_role` de antes). Solo en Render, nunca en el repositorio. Sin ella, en el computador van a `backend/fotos-documentos` y en producción no se guardan. El Resumen muestra si se están guardando |
 | `SUPABASE_URL` | Opcional. La URL del proyecto (`https://….supabase.co`); si no se pone, se saca de `DATABASE_URL` |
-| `PHOTO_DAYS` | Opcional. Cuántos días se guardan esas fotos (por defecto 30); después se borran solas |
+| `PHOTO_DAYS` | Opcional. Cuántos días se guardan esas fotos (por defecto 60, dos meses); después se borran solas |
 | `SKIP_AUTH` | Solo desarrollo: `true` entra sin iniciar sesión. Nunca en producción |
 
 En producción, `ADMIN_PASSWORD` y `REGISTRATION_CODE` deben ser distintos a

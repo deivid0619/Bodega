@@ -1,5 +1,5 @@
 """Los documentos guardados: la lista (con busqueda), cuantos hay, el
-calendario del Resumen y las fotos del papel (un mes, como prueba)."""
+calendario del Resumen y las fotos del papel (dos meses, como prueba)."""
 import uuid
 from datetime import timedelta
 from typing import Literal, Optional
@@ -29,7 +29,7 @@ def photo_store_status(_: models.User = Depends(get_current_user)):
 async def add_photo(doc_id: int, request: Request, db: Session = Depends(get_db),
                     _: models.User = Depends(get_current_user)):
     """Guarda la foto de la remision o la factura (la app la manda ya
-    achicada, como JPG). Se guarda un mes y despues se borra sola."""
+    achicada, como JPG). Se guarda dos meses y despues se borra sola."""
     doc = db.get(models.Document, doc_id)
     if not doc or doc.kind not in ("factura", "remision"):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese documento no existe.")
@@ -55,7 +55,7 @@ async def add_photo(doc_id: int, request: Request, db: Session = Depends(get_db)
     doc.photos = photos + [{"path": path, "type": ctype, "size": len(data)}]
     db.commit()
     db.refresh(doc)
-    purge_in_background()  # de paso, las de hace mas de un mes
+    purge_in_background()  # de paso, las de hace mas de dos meses
     return doc
 
 
@@ -65,14 +65,14 @@ def get_photo(doc_id: int, index: int, db: Session = Depends(get_db), _: models.
     doc = db.get(models.Document, doc_id)
     photos = (doc.photos or []) if doc else []
     if not 0 <= index < len(photos):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Esa foto ya no está: se guardan un mes.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Esa foto ya no está: se guardan dos meses.")
     p = photos[index]
     try:
         data = photo_store.get(p["path"])
     except Exception:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "No se pudo traer la foto. Intenta otra vez.")
     if data is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Esa foto ya no está: se guardan un mes.")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Esa foto ya no está: se guardan dos meses.")
     return Response(content=data, media_type=p.get("type") or "image/jpeg",
                     headers={"Cache-Control": "private, max-age=3600"})
 

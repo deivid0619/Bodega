@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_key: str = ""
     photos_bucket: str = "documentos"
-    photo_days: int = 30
+    photo_days: int = 60
     photos_dir: str = "fotos-documentos"
     # quien manda los avisos al celular (lo piden Google y Apple)
     vapid_subject: str = "https://pigmalionmoto.com"

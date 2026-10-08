@@ -255,7 +255,7 @@ function Body() {
       })
       refreshInventory()
       const d = res.document
-      // la foto queda como prueba (un mes); si no sube, la remision igual entro
+      // la foto queda como prueba (dos meses); si no sube, la remision igual entro
       let kept = false
       if (photoFile) {
         try {
@@ -276,7 +276,7 @@ function Body() {
           d.pending ? `, faltan ${d.pending} por llegar` : ''}. ${itemsText(lines)}`,
       })
       showToast(`Remisión ${shown}: ${record ? `registro de ${plural(d.units, 'prenda', 'prendas')} (no se sumaron)` : plural(d.units, 'prenda entró', 'prendas entraron')}${d.pending ? ` · ${d.pending} pendientes` : ''}${
-        photoFile ? (kept ? ' · foto guardada un mes' : ' · la foto no se guardó: agrégala desde Resumen') : ''}${told}`, kept || !photoFile ? 'ok' : 'err')
+        photoFile ? (kept ? ' · foto guardada dos meses' : ' · la foto no se guardó: agrégala desde Resumen') : ''}${told}`, kept || !photoFile ? 'ok' : 'err')
       close()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No hay conexión. No entró nada; intenta de nuevo.', 'err')

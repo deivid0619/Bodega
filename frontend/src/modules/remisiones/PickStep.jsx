@@ -20,7 +20,7 @@ export default function PickStep({ onFile, onSkip }) {
       <SheetHeader
         eyebrow={<div className="sheet-eyebrow"><span className="tag tag-in">Entrada de mercancía</span></div>}
         title="Recibir una remisión"
-        subtitle="Toma la foto de la orden de remisión: la tienes a la vista mientras cuentas y queda guardada un mes como prueba de lo que llegó."
+        subtitle="Toma la foto de la orden de remisión: la tienes a la vista mientras cuentas y queda guardada dos meses como prueba de lo que llegó."
       />
       <input ref={camera} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
       <input ref={gallery} type="file" accept="image/*" hidden onChange={pick} />
@@ -36,7 +36,7 @@ export default function PickStep({ onFile, onSkip }) {
         <ul>
           <li>Cuenta lo que llegó: entra lo que cuentes, no lo que diga el papel.</li>
           <li>Si el proveedor quedó debiendo algo, anótalo como pendiente.</li>
-          <li>La foto queda guardada un mes con la remisión (se puede ver y descargar en Resumen) y después se borra sola. Lo que registras se queda siempre.</li>
+          <li>La foto queda guardada dos meses con la remisión (se puede ver y descargar en Resumen) y después se borra sola. Lo que registras se queda siempre.</li>
         </ul>
       </details>
     </>

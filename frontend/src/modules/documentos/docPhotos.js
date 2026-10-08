@@ -1,6 +1,6 @@
 // Fotos de remisiones y facturas: la prueba de lo que llego y lo que salio.
 // Se achican en el celular (unos 200 KB, se siguen leyendo bien) antes de
-// subirlas; el servidor las guarda un mes y despues se borran solas.
+// subirlas; el servidor las guarda dos meses y despues se borran solas.
 import { apiBlob, apiUpload } from '../../core/api'
 
 export async function shrinkPhoto(file, { max = 1600, quality = 0.72 } = {}) {

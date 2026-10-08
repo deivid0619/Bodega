@@ -29,7 +29,7 @@ def ensure_columns(engine: Engine) -> None:
 
 
 def purge_old_photos(db: Session) -> int:
-    """Las fotos de remisiones y facturas se guardan un mes: las de documentos
+    """Las fotos de remisiones y facturas se guardan dos meses: las de documentos
     mas viejos se borran (del almacenamiento y del documento). Devuelve
     cuantas se borraron. El documento se queda."""
     from datetime import datetime, timedelta, timezone

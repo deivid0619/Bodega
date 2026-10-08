@@ -77,7 +77,7 @@ function PickStep({ onFile, error, onBack }) {
           <li>Acércate hasta que la tabla llene la foto, derecha, con buena luz y sin sombras. No importa que no salga el resto de la factura.</li>
           <li>Si la tabla es larga, lee una parte y después toca “Leer otra parte de la tabla”: lo que se repite entre las dos fotos no se suma dos veces.</li>
           <li>Revisa cada línea antes de confirmar: si un código o una cantidad no se leyó bien, corrígelo.</li>
-          <li>Al revisar, toma la foto de la factura completa (puede ser de lejos): esa se guarda un mes como prueba y se ve en Resumen. Si el número no salió en la foto de cerca, lo busca en esa.</li>
+          <li>Al revisar, toma la foto de la factura completa (puede ser de lejos): esa se guarda dos meses como prueba y se ve en Resumen. Si el número no salió en la foto de cerca, lo busca en esa.</li>
           <li>Si ya descontaste esas prendas por otro lado, marca “Solo registro”: se guarda la factura sin descontar otra vez.</li>
         </ul>
       </details>
@@ -269,7 +269,7 @@ function PedidoStep({ onSaved, onBack }) {
             <Icon name="camera" size={18} />Tomar o elegir la foto
           </button>
         )}
-        <span className="field-hint">Queda con el pedido; la foto de la factura se agrega al anexarla. Las dos se guardan un mes.</span>
+        <span className="field-hint">Queda con el pedido; la foto de la factura se agrega al anexarla. Las dos se guardan dos meses.</span>
       </div>
       {notify.el}
 
@@ -410,7 +410,7 @@ function Body({ onDone }) {
       }
       const res = await api.post('/api/documents/factura', { number: number.trim(), lines, record_only: recordOnly })
       refreshInventory()
-      // las fotos quedan como prueba (un mes): primero la completa; si no
+      // las fotos quedan como prueba (dos meses): primero la completa; si no
       // suben, la factura igual quedo
       const photos = [proof, ...reads].filter(Boolean)
       const { kept } = await savePhotos(res.document.id, photos)

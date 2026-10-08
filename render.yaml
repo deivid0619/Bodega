@@ -26,7 +26,7 @@ services:
         sync: false
       - key: CORS_ORIGINS
         sync: false
-      # fotos de remisiones y facturas (un mes): Supabase Storage
+      # fotos de remisiones y facturas (dos meses): Supabase Storage
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_KEY

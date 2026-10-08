@@ -41,7 +41,7 @@ export default function StoreStatus() {
   )
 }
 
-// Donde se guardan las fotos de remisiones y facturas (un mes) y si funciona:
+// Donde se guardan las fotos de remisiones y facturas (dos meses) y si funciona:
 // para revisar que quedo bien conectado Supabase despues de poner la llave
 export function PhotoStoreStatus() {
   const { data } = usePolling('/api/documents/photo-store', { interval: 600000 })

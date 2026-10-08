@@ -28,10 +28,10 @@ const fmtDay = (iso) => {
   return new Date(y, m - 1, d).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-const DAYS = 30
+const DAYS = 60
 const fmtDate = (d) => d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })
 
-// La foto del papel: la prueba de lo que llego o salio. Se guarda un mes;
+// La foto del papel: la prueba de lo que llego o salio. Se guarda dos meses;
 // se ve en grande, se descarga y, si falta, se puede agregar.
 function Photos({ doc, onChange }) {
   const showToast = useToast()
@@ -55,7 +55,7 @@ function Photos({ doc, onChange }) {
           made.push(shot)
           if (alive) setShots([...made])
         } catch {
-          // ya no esta: se borro al mes
+          // ya no esta: se borro a los dos meses
         }
       }
     })()
@@ -76,7 +76,7 @@ function Photos({ doc, onChange }) {
     try {
       onChange(await saveDocPhoto(doc.id, f))
       revalidate('/api/documents')
-      showToast('Foto guardada: se guarda un mes')
+      showToast('Foto guardada: se guarda dos meses')
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : 'No se pudo guardar la foto.', 'err')
     } finally {
@@ -103,10 +103,10 @@ function Photos({ doc, onChange }) {
         </div>
       ) : (
         <p className="muted doc-photo-none">
-          {age < DAYS ? 'Sin foto guardada.' : 'La foto ya no está: se guardan un mes. Lo registrado se queda.'}
+          {age < DAYS ? 'Sin foto guardada.' : 'La foto ya no está: se guardan dos meses. Lo registrado se queda.'}
         </p>
       )}
-      {count > 0 && <p className="mode-hint">Se guarda un mes como prueba y después se borra sola; lo registrado se queda.</p>}
+      {count > 0 && <p className="mode-hint">Se guarda dos meses como prueba y después se borra sola; lo registrado se queda.</p>}
       {canAdd && (
         <>
           <input ref={input} type="file" accept="image/*" hidden onChange={add} />

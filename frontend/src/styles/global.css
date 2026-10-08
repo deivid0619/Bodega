@@ -757,7 +757,7 @@ button.pill:active{transform:scale(.95)}
 button.doc-item{width:100%;text-align:left;transition:background-color 120ms ease}
 button.doc-item:active{background:var(--fog)}
 .see-all{margin:10px 4px 0}
-/* la foto del papel en una remision o factura (se guarda un mes) */
+/* la foto del papel en una remision o factura (se guarda dos meses) */
 .doc-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
 .doc-photo{display:flex;flex-direction:column;gap:6px}
 .doc-photo.skeleton{min-height:180px}

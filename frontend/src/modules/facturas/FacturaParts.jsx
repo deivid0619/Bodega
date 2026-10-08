@@ -22,7 +22,7 @@ export async function savePhotos(docId, files) {
 
 export function photoNote(total, kept) {
   if (!total) return ''
-  if (kept === total) return total === 1 ? ' · foto guardada un mes' : ` · ${total} fotos guardadas un mes`
+  if (kept === total) return total === 1 ? ' · foto guardada dos meses' : ` · ${total} fotos guardadas dos meses`
   if (!kept) return total === 1 ? ' · la foto no se guardó: agrégala desde Resumen' : ' · las fotos no se guardaron: agrégalas desde Resumen'
   return ` · ${total - kept} de ${total} fotos no se guardaron: agrégalas desde Resumen`
 }
@@ -131,7 +131,7 @@ export function ReadMoreButton({ onFile }) {
 
 const thumb = (f) => (f ? URL.createObjectURL(f) : null)
 
-// La foto que queda guardada un mes: la factura completa, tomada ahi mismo
+// La foto que queda guardada dos meses: la factura completa, tomada ahi mismo
 // despues de leer (de lejos esta bien: no se vuelve a leer, salvo el numero
 // si todavia falta). Sin ella se guardan las fotos con las que se leyo.
 export function ProofPhoto({ file, onChange, reads = 0, findNumber }) {
@@ -155,7 +155,7 @@ export function ProofPhoto({ file, onChange, reads = 0, findNumber }) {
   return (
     <div className="field proof">
       {inputs}
-      <span className="field-label">Foto de la factura completa <small className="opt">se guarda un mes</small></span>
+      <span className="field-label">Foto de la factura completa <small className="opt">se guarda dos meses</small></span>
       {file ? (
         <div className="proof-row">
           {url && <img src={url} alt="La factura completa" />}

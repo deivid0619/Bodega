@@ -160,7 +160,7 @@ export function AttachBody({ pedido, onDone, onBack }) {
         <button type="button" className="btn btn-quiet btn-block" style={{ marginTop: 10 }} onClick={() => { setRead(null); setReads([]); setStep('compare') }}>
           Sin leer: escribir solo el número
         </button>
-        <p className="mode-hint">Toma la foto de cerca, solo a la tabla: la app la compara con lo que se empacó y te dice si faltó o sobró algo. Después tomas la factura completa para guardarla un mes.</p>
+        <p className="mode-hint">Toma la foto de cerca, solo a la tabla: la app la compara con lo que se empacó y te dice si faltó o sobró algo. Después tomas la factura completa para guardarla dos meses.</p>
         {onBack && <button type="button" className="link-btn" style={{ marginTop: 14 }} onClick={onBack}>Volver</button>}
       </>
     )

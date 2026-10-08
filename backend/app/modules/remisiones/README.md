@@ -14,7 +14,7 @@ Registra la mercancía que llega de un proveedor con su remisión (el papel), ya
    - **Reserva:** todo queda guardado aparte.
    - **De paso (despacho):** llega solo para despacharse en unos días.
    - **Registro:** solo se guarda el papel; lo que llegó ya se había entrado escaneando y no se suma otra vez.
-4. Se confirma. Entra todo junto, queda el documento y la foto se guarda un mes como prueba.
+4. Se confirma. Entra todo junto, queda el documento y la foto se guarda dos meses como prueba.
 
 ## Rutas (API)
 

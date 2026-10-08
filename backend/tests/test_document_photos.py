@@ -1,4 +1,4 @@
-"""Fotos de remisiones y facturas: se guardan como prueba un mes, se ven y
+"""Fotos de remisiones y facturas: se guardan como prueba dos meses, se ven y
 se descargan con sesion, y despues se borran solas (el documento queda)."""
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -34,7 +34,7 @@ def test_a_factura_photo_is_kept_a_month(tmp_path, monkeypatch):
         assert r.status_code == 200, r.text
         assert r.json()["photo_count"] == 1
         until = datetime.fromisoformat(r.json()["photos_until"].replace("Z", "+00:00"))
-        assert timedelta(days=29) < until - datetime.now(timezone.utc) <= timedelta(days=30)
+        assert timedelta(days=59) < until - datetime.now(timezone.utc) <= timedelta(days=60)
         assert len(list(tmp_path.rglob("*.jpg"))) == 1
 
         # se ve y se descarga solo con sesion
@@ -45,11 +45,11 @@ def test_a_factura_photo_is_kept_a_month(tmp_path, monkeypatch):
         r = client.post(f"/api/documents/{doc['id']}/photos", headers={**h, "Content-Type": "application/pdf"}, content=b"%PDF")
         assert r.status_code == 415
 
-        # paso un mes: la foto se borra sola y el documento queda
+        # pasaron dos meses: la foto se borra sola y el documento queda
         db = SessionLocal()
         try:
             d = db.get(models.Document, doc["id"])
-            d.created_at = datetime.now(timezone.utc) - timedelta(days=31)
+            d.created_at = datetime.now(timezone.utc) - timedelta(days=61)
             db.commit()
             assert purge_old_photos(db) >= 1
         finally:
