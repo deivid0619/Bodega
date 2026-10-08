@@ -4,8 +4,8 @@ import { useAuth } from '../../core/AuthContext'
 import { refreshInventory, useLayout, useMovements, useNeeds, usePolling, useProducts, useReserve, useTop } from '../../core/useApi'
 import { useToast } from '../../ui/ToastContext'
 import { useConfirm } from '../../ui/ConfirmContext'
-import { api, ApiError } from '../../core/api'
-import { downloadCsv, fmtTime, outletIdsOf, refKey, stockSplit } from '../../core/utils'
+import { api, apiBlob, ApiError } from '../../core/api'
+import { downloadBlob, fmtTime, outletIdsOf, refKey, stockSplit } from '../../core/utils'
 import Icon from '../../ui/Icon'
 import ResetSheet from './ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../documentos/DocumentSheet'
@@ -83,9 +83,10 @@ export default function Summary() {
       showToast('Este dispositivo no dejó copiar. Usa “Descargar”.', 'err')
     }
   }
-  const exportCsv = async (path, name) => {
+  // los Excel se arman en el servidor (con sus hojas, filtros y totales)
+  const exportXlsx = async (path, name) => {
     try {
-      downloadCsv(await api.get(path), name)
+      downloadBlob(await apiBlob(path), name)
     } catch {
       showToast('No se pudo descargar el archivo.', 'err')
     }
@@ -171,7 +172,7 @@ export default function Summary() {
             </div>
             <div className="btn-row">
               <button className="btn btn-lime" onClick={copyOrder} disabled={!kpi.toOrder}><Icon name="copy" size={18} />Copiar pedido</button>
-              <button className="btn btn-ghost" onClick={() => exportCsv('/api/reports/inventory.csv', `pedido-${today()}.csv`)}><Icon name="download" size={18} />Descargar</button>
+              <button className="btn btn-ghost" onClick={() => exportXlsx('/api/reports/pedido.xlsx', `pedido-${today()}.xlsx`)}><Icon name="download" size={18} />Descargar</button>
             </div>
           </>
         ) : (
@@ -248,11 +249,12 @@ export default function Summary() {
 
         <h2 className="h-sec" id="datos">Datos y respaldo</h2>
         <div className="stack">
-          <button className="btn btn-ink btn-block" onClick={() => exportCsv('/api/reports/inventory.csv', `inventario-${today()}.csv`)}>
-            <Icon name="download" size={18} />Descargar inventario para Excel
+          <button className="btn btn-ink btn-block" onClick={() => exportXlsx('/api/reports/inventory.xlsx', `inventario-${today()}.xlsx`)}>
+            <Icon name="download" size={18} />Descargar inventario (Excel)
           </button>
-          <button className="btn btn-ghost btn-block" onClick={() => exportCsv('/api/reports/movements.csv', `historial-${today()}.csv`)}>
-            <Icon name="download" size={18} />Descargar historial para Excel
+          <span className="field-hint" style={{ marginTop: -4 }}>Resumen, por talla, por referencia, por ubicación, la reserva y lo que hay que pedir, con filtros y totales.</span>
+          <button className="btn btn-ghost btn-block" onClick={() => exportXlsx('/api/reports/movements.xlsx', `historial-${today()}.xlsx`)}>
+            <Icon name="download" size={18} />Descargar historial (Excel)
           </button>
           <button className="btn btn-ghost btn-block" onClick={copyInventory}><Icon name="copy" size={18} />Copiar inventario</button>
           {isAdmin && (

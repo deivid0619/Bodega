@@ -169,7 +169,11 @@ const COP = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP',
 export const money = (n) => COP.format(n || 0)
 
 export function downloadCsv(text, filename) {
-  const blob = new Blob([text], { type: 'text/csv;charset=utf-8' })
+  downloadBlob(new Blob([text], { type: 'text/csv;charset=utf-8' }), filename)
+}
+
+// Guarda un archivo (Excel, CSV...) en el computador o lo abre en el celular
+export function downloadBlob(blob, filename) {
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = filename

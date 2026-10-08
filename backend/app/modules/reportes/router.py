@@ -1,20 +1,19 @@
-"""Pedidos, lo más vendido, exportar a CSV y datos de prueba."""
+"""Pedidos, lo más vendido, exportar a Excel (y CSV) y datos de prueba."""
 import csv
 import io
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.modules.catalogo import service as catalog
-from app.modules.inventario import service as inv
-from app import models
-from app.modules.avisos import push
-from app import schemas
-from app.modules.inventario import serializers as ser
+from app import models, schemas
 from app.core.database import get_db
 from app.core.deps import get_current_user, require_admin
+from app.modules.avisos import push
+from app.modules.catalogo import service as catalog
+from app.modules.inventario import serializers as ser, service as inv
+from app.modules.reportes import excel
 
 router = APIRouter(prefix="/api/reports", tags=["reportes"])
 
@@ -129,6 +128,30 @@ def inventory_csv(db: Session = Depends(get_db), _: models.User = Depends(get_cu
         rows.append([p.sku, p.name, p.size, names.get(p.location_id, p.location_id), where, p.qty, p.min_qty,
                      estado, outs.get(p.sku, 0)])
     return _csv_response(rows, f"inventario-{_today()}.csv")
+
+
+@router.get("/inventory.xlsx")
+def inventory_xlsx(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """El inventario en Excel: resumen, por talla, por referencia, por
+    ubicacion, la reserva y lo que hay que pedir."""
+    return _xlsx(excel.inventory_workbook(db, user.name), f"inventario-{_today()}.xlsx")
+
+
+@router.get("/pedido.xlsx")
+def pedido_xlsx(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """Solo lo que hay que pedir (y lo que se trae de la reserva)."""
+    return _xlsx(excel.needs_workbook(db, user.name), f"pedido-{_today()}.xlsx")
+
+
+@router.get("/movements.xlsx")
+def movements_xlsx(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """El historial en Excel (los ultimos 5000 movimientos) y por dia."""
+    return _xlsx(excel.movements_workbook(db, user.name), f"historial-{_today()}.xlsx")
+
+
+def _xlsx(data: bytes, filename: str) -> Response:
+    return Response(content=data, media_type=excel.XLSX,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 @router.get("/movements.csv")
