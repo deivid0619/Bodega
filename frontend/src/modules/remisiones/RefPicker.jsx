@@ -4,7 +4,8 @@ import Icon from '../../ui/Icon'
 import { SearchField, plural } from '../../ui/Bits'
 import { norm, shopRef } from './refs'
 
-export default function RefPicker({ refs, known, onPick, onCancel }) {
+// onScan: con el, al lado del buscador va "Escanear" (la etiqueta dice cual es)
+export default function RefPicker({ refs, known, onPick, onCancel, onScan }) {
   const [q, setQ] = useState('')
   const [shop, setShop] = useState([])
   const term = q.trim().toUpperCase()
@@ -29,7 +30,14 @@ export default function RefPicker({ refs, known, onPick, onCancel }) {
   const exact = results.some((r) => r.name === term)
   return (
     <div className="rem-pick">
-      <SearchField value={q} onChange={setQ} placeholder="Referencia o código de una talla" />
+      <div className={`rem-pick-top${onScan ? ' with-scan' : ''}`}>
+        <SearchField value={q} onChange={setQ} placeholder={onScan ? "Buscar" : "Referencia o código de una talla"} />
+        {onScan && (
+          <button type="button" className="btn btn-ink rem-pick-scan" onClick={onScan} aria-label="Escanear la etiqueta de la prenda">
+            <Icon name="scan" size={18} />Escanear
+          </button>
+        )}
+      </div>
       {(results.length > 0 || term.length >= 3) && (
         <div className="ref-results">
           {results.map((r) => (

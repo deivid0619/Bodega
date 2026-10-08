@@ -67,3 +67,6 @@
 .rem-part-add{display:flex;flex-wrap:wrap;gap:4px 14px;padding-top:2px}
 .rem-part-add .link-btn{font-size:13px;padding:6px 2px}
 .rem-part-add .link-btn:disabled{opacity:.4}
+/* "Otra referencia": buscarla o escanear su etiqueta ahi mismo */
+.rem-pick-top.with-scan{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.rem-pick-scan{height:52px;padding:0 16px}

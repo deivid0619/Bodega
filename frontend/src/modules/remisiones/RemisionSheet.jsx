@@ -66,7 +66,7 @@ function Body() {
   const [addingSize, setAddingSize] = useState(null)
   const [notes, setNotes] = useState(draft?.notes ?? '')
   const [saving, setSaving] = useState(false)
-  const [scanning, setScanning] = useState(false)
+  const [scanAt, setScanAt] = useState(null) // el escaner abierto: arriba ('top') o donde se agrega otra referencia ('pick')
   const [flash, setFlash] = useState(null) // lo ultimo que se escaneo
   const [unknown, setUnknown] = useState(null) // un codigo que no esta en ningun lado: { code, near, newRef, ref }
   const [recentIn, setRecentIn] = useState([]) // lo que ya entro escaneando de estos codigos
@@ -368,6 +368,41 @@ function Body() {
     }
   }
 
+  // el escaner (camara, codigo a mano y lo que pregunta si el codigo no existe):
+  // uno solo, arriba o donde se agrega otra referencia
+  const scanner = (
+    <div className="rem-scan">
+      <ScanBox onCode={onScan} flash={flash} hint="Cada etiqueta suma una prenda a su talla. Si el código no existe, te pregunta qué prenda es." />
+      {unknown && (
+        <div className="scan-unknown" role="dialog" aria-label="Código nuevo">
+          <div className="sheet-eyebrow"><span className="tag tag-warn">Código nuevo</span><span className="code mono">{unknown.code}</span></div>
+          <p className="mode-hint" style={{ margin: '8px 0 0' }}>No está en la bodega ni en la tienda.</p>
+          {unknown.near === null
+            ? <p className="mode-hint">Buscando uno parecido en la tienda…</p>
+            : <NearPick options={unknown.near} onPick={pickNear} />}
+          {!unknown.newRef ? (
+            <div className="btn-row" style={{ marginTop: 12 }}>
+              <button type="button" className="btn btn-ink" onClick={() => setUnknown((u) => ({ ...u, newRef: true }))}>Es una prenda nueva</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setUnknown(null)}>No contarla</button>
+            </div>
+          ) : !unknown.ref ? (
+            <>
+              <p className="mode-hint">¿De qué referencia es? Búscala o escribe el nombre si es nueva.</p>
+              <RefPicker refs={refs} known={known} onPick={(ref) => setUnknown((u) => ({ ...u, ref }))} onCancel={() => setUnknown((u) => ({ ...u, newRef: false }))} />
+            </>
+          ) : (
+            <form className="rem-add" onSubmit={(e) => { e.preventDefault(); addNew(e.currentTarget.elements.size.value) }}>
+              <span className="rem-add-ref">{unknown.ref.name}</span>
+              <input name="size" className="rem-code" defaultValue={guessSizeFromSku(unknown.code)} placeholder="Talla" autoCapitalize="characters" aria-label="Talla" />
+              <button className="btn btn-ink btn-sm">Agregar</button>
+            </form>
+          )}
+        </div>
+      )}
+      <button type="button" className="link-btn" style={{ marginTop: 10 }} onClick={() => { setScanAt(null); setUnknown(null) }}>Cerrar el escáner</button>
+    </div>
+  )
+
   if (step === 'pick') {
     return (
       <PickStep
@@ -431,39 +466,8 @@ function Body() {
       </div>
 
       <h3 className="h-sec">Lo que llegó</h3>
-      {scanning ? (
-        <div className="rem-scan">
-          <ScanBox onCode={onScan} flash={flash} hint="Cada etiqueta suma una prenda a su talla. Si el código no existe, te pregunta qué prenda es." />
-          {unknown && (
-            <div className="scan-unknown" role="dialog" aria-label="Código nuevo">
-              <div className="sheet-eyebrow"><span className="tag tag-warn">Código nuevo</span><span className="code mono">{unknown.code}</span></div>
-              <p className="mode-hint" style={{ margin: '8px 0 0' }}>No está en la bodega ni en la tienda.</p>
-              {unknown.near === null
-                ? <p className="mode-hint">Buscando uno parecido en la tienda…</p>
-                : <NearPick options={unknown.near} onPick={pickNear} />}
-              {!unknown.newRef ? (
-                <div className="btn-row" style={{ marginTop: 12 }}>
-                  <button type="button" className="btn btn-ink" onClick={() => setUnknown((u) => ({ ...u, newRef: true }))}>Es una prenda nueva</button>
-                  <button type="button" className="btn btn-ghost" onClick={() => setUnknown(null)}>No contarla</button>
-                </div>
-              ) : !unknown.ref ? (
-                <>
-                  <p className="mode-hint">¿De qué referencia es? Búscala o escribe el nombre si es nueva.</p>
-                  <RefPicker refs={refs} known={known} onPick={(ref) => setUnknown((u) => ({ ...u, ref }))} onCancel={() => setUnknown((u) => ({ ...u, newRef: false }))} />
-                </>
-              ) : (
-                <form className="rem-add" onSubmit={(e) => { e.preventDefault(); addNew(e.currentTarget.elements.size.value) }}>
-                  <span className="rem-add-ref">{unknown.ref.name}</span>
-                  <input name="size" className="rem-code" defaultValue={guessSizeFromSku(unknown.code)} placeholder="Talla" autoCapitalize="characters" aria-label="Talla" />
-                  <button className="btn btn-ink btn-sm">Agregar</button>
-                </form>
-              )}
-            </div>
-          )}
-          <button type="button" className="link-btn" style={{ marginTop: 10 }} onClick={() => { setScanning(false); setUnknown(null) }}>Cerrar el escáner</button>
-        </div>
-      ) : (
-        <button type="button" className="btn btn-ink btn-block" onClick={() => setScanning(true)}>
+      {scanAt === 'top' ? scanner : (
+        <button type="button" className="btn btn-ink btn-block" onClick={() => setScanAt('top')}>
           <Icon name="scan" size={18} />Escanear lo que llegó
         </button>
       )}
@@ -496,8 +500,9 @@ function Body() {
           )}
         </section>
       ))}
-      {picking ? (
-        <RefPicker refs={refs} known={known} onPick={pickRef} onCancel={blocks.length ? () => setPicking(false) : null} />
+      {scanAt === 'pick' ? scanner : picking ? (
+        <RefPicker refs={refs} known={known} onPick={pickRef} onCancel={blocks.length ? () => setPicking(false) : null}
+                   onScan={() => setScanAt('pick')} />
       ) : (
         <button type="button" className="btn btn-ghost btn-block" style={{ marginTop: 12 }} onClick={() => setPicking(true)}>
           <Icon name="plus" size={18} stroke={2.2} />Otra referencia en esta remisión
