@@ -13,7 +13,14 @@ export default function FromPick({ places, value, qty, onChange, disabled }) {
     return (
       <div className="from-pick from-one" role="note" aria-label="De dónde sale">
         <span>Sale de</span>
-        {only ? <b>{only.name}<i className="mono">{only.id}</i><small>hay {only.qty}</small></b> : <b>ninguna ubicación: no hay</b>}
+        {only ? (
+          <b>
+            {only.name}
+            {/* "Canasta C-2-10" ya trae el codigo: no se repite */}
+            {!only.name.includes(only.id) && <i className="mono">{only.id}</i>}
+            <small>hay {only.qty}</small>
+          </b>
+        ) : <b>ninguna ubicación: no hay</b>}
       </div>
     )
   }

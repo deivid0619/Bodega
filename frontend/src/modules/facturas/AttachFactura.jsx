@@ -12,8 +12,9 @@ import { PhotoButtons, ProofPhoto, ReadMoreButton, ReadingStep, photoNote, readF
 const label = (p, sku) => (p ? `${p.name}${p.size ? ` · ${p.size}` : ''}` : sku)
 
 // Anexar la factura a un pedido que ya se desconto: su numero y su foto. Si
-// la foto se lee, se compara con lo que se empaco: lo que la factura trae de
-// mas se descuenta ahora y lo del pedido que no va puede volver a su lugar.
+// la foto se lee, se compara con lo que se empaco. Anexar no cambia el
+// inventario: solo si se elige, lo que la factura trae de mas se descuenta
+// ahora y lo del pedido que no va vuelve a su lugar.
 export function AttachBody({ pedido, onDone, onBack }) {
   const showToast = useToast()
   const { data: products } = useProducts()
@@ -29,7 +30,7 @@ export function AttachBody({ pedido, onDone, onBack }) {
   const [error, setError] = useState('')
   const [number, setNumber] = useState('')
   const [read, setRead] = useState(null) // lo que leyo la foto: { qty: Map sku -> cantidad, unknown: [codigos] }
-  const [extra, setExtra] = useState({}) // sku -> { off, from }: lo que la factura trae de mas
+  const [extra, setExtra] = useState({}) // sku -> { on, from }: lo que la factura trae de mas (on: se descuenta)
   const [back, setBack] = useState({}) // sku -> true: lo del pedido que no va y vuelve a su lugar
   const [dup, setDup] = useState(null)
   const [saving, setSaving] = useState(false)
@@ -109,7 +110,7 @@ export function AttachBody({ pedido, onDone, onBack }) {
   const same = rows.filter((r) => r.p === r.f)
   const more = rows.filter((r) => r.f > r.p) // la factura trae mas: falto descontar
   const less = rows.filter((r) => r.p > r.f) // se empaco mas de lo que dice la factura
-  const deduct = more.filter((r) => !extra[r.sku]?.off)
+  const deduct = more.filter((r) => extra[r.sku]?.on)
   const short = deduct.find((r) => !r.product || outAvailable(r.product, outlet, extra[r.sku]?.from) < r.f - r.p)
   const missingFrom = deduct.filter((r) => r.product && fromMissing(extra[r.sku]?.from, r.f - r.p, placesOf(r.product, outlet))).length
   const returning = less.filter((r) => back[r.sku])
@@ -119,10 +120,11 @@ export function AttachBody({ pedido, onDone, onBack }) {
       : short ? `No alcanza para descontar ${label(short.product, short.sku)}: quítala o corrige.`
         : missingFrom ? 'Falta elegir de dónde sale lo que se descuenta.'
           : ''
-  const summary = read
-    ? [same.length && `${same.length} ${same.length === 1 ? 'coincide' : 'coinciden'}`, deduct.length && `${deduct.length} se ${deduct.length === 1 ? 'descuenta' : 'descuentan'}`,
-       returning.length && `${returning.length} ${returning.length === 1 ? 'vuelve' : 'vuelven'}`].filter(Boolean).join(' · ')
-    : `Se anexa tal cual se empacó: ${plural(pedido.units, 'prenda', 'prendas')}`
+  const changes = [deduct.length && `${deduct.length} se ${deduct.length === 1 ? 'descuenta' : 'descuentan'} ahora`,
+                   returning.length && `${returning.length} ${returning.length === 1 ? 'vuelve' : 'vuelven'} a su lugar`].filter(Boolean)
+  const summary = changes.length ? changes.join(' · ')
+    : read ? 'Solo se anexa la factura: el inventario no cambia.'
+      : `Se anexa tal cual se empacó (${plural(pedido.units, 'prenda', 'prendas')}): el inventario no cambia.`
 
   const confirm = async () => {
     setSaving(true)
@@ -160,7 +162,7 @@ export function AttachBody({ pedido, onDone, onBack }) {
         <button type="button" className="btn btn-quiet btn-block" style={{ marginTop: 10 }} onClick={() => { setRead(null); setReads([]); setStep('compare') }}>
           Sin leer: escribir solo el número
         </button>
-        <p className="mode-hint">Toma la foto de cerca, solo a la tabla: la app la compara con lo que se empacó y te dice si faltó o sobró algo. Después tomas la factura completa para guardarla dos meses.</p>
+        <p className="mode-hint">Toma la foto de cerca, solo a la tabla: la app la compara con lo que se empacó y te dice si faltó o sobró algo. Después tomas la factura completa para guardarla dos meses. Anexar no cambia el inventario, a menos que tú lo elijas.</p>
         {onBack && <button type="button" className="link-btn" style={{ marginTop: 14 }} onClick={onBack}>Volver</button>}
       </>
     )
@@ -197,12 +199,12 @@ export function AttachBody({ pedido, onDone, onBack }) {
                 {r.f > r.p && (
                   <div className="cmp-act">
                     <label className="cmp-switch">
-                      <span>Faltó descontar {r.f - r.p}: {x.off ? 'no se descuenta' : 'se descuenta ahora'}</span>
-                      <button type="button" className="switch" role="switch" aria-checked={!x.off} aria-label={`Descontar ${r.f - r.p} de ${label(r.product, r.sku)}`}
-                              onClick={() => setExtra((e) => ({ ...e, [r.sku]: { ...x, off: !x.off } }))} />
+                      <span>La factura trae {r.f - r.p} más: {x.on ? 'se descuenta ahora' : 'no se descuenta'}</span>
+                      <button type="button" className="switch" role="switch" aria-checked={!!x.on} aria-label={`Descontar ahora ${r.f - r.p} de ${label(r.product, r.sku)}`}
+                              onClick={() => setExtra((e) => ({ ...e, [r.sku]: { ...x, on: !x.on } }))} />
                     </label>
-                    {!x.off && !r.product && <small className="warn">No está en la bodega: no se puede descontar.</small>}
-                    {!x.off && r.product && places.length > 0 && (
+                    {x.on && !r.product && <small className="warn">No está en la bodega: no se puede descontar.</small>}
+                    {x.on && r.product && places.length > 0 && (
                       <FromPick places={places} value={x.from} qty={r.f - r.p} onChange={(v) => setExtra((e) => ({ ...e, [r.sku]: { ...x, from: v } }))} />
                     )}
                   </div>
