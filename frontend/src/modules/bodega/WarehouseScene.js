@@ -900,12 +900,15 @@ export class WarehouseScene {
     const perRow = Math.max(1, Math.min(piles, Math.floor((W + 0.02) / BW)))
     const front = perRow
     const rowsN = Math.ceil(piles / perRow)
-    const step = rowsN > 1 ? Math.max(BD, (D - BD) / (rowsN - 1)) : 0
+    // las canastas de la mesa son mas grandes que las de la pared: llenan el
+    // largo y el fondo de la mesa (sin hueco en el medio)
+    const cw = Math.max(BW, (W - 0.02) / perRow)
+    const cd = rowsN > 1 ? Math.max(BD, (D - 0.02) / rowsN) : BD
     const spot = (pile) => {
       const r = Math.floor((pile - 1) / perRow)
       const j = (pile - 1) % perRow
       const inRow = Math.min(perRow, piles - r * perRow)
-      return { x: -((inRow - 1) / 2) * BW + j * BW, z: D / 2 - BD / 2 - r * step, isBack: r > 0 }
+      return { x: -((inRow - 1) / 2) * cw + j * cw, z: D / 2 - 0.01 - cd / 2 - r * cd, isBack: r > 0 }
     }
     const crates = this._inst(this.geo.crate, mat.crate, slots.length, g)
     const rims = this._inst(this.geo.crateRim, mat.crateRim, slots.length, g)
@@ -916,21 +919,21 @@ export class WarehouseScene {
       const { level, pile } = loc
       const { x, z, isBack } = spot(pile)
       const y = 0.004 + (levels - level) * ch
-      this._setI(crates, i, x, y, z)
-      this._setI(rims, i, x, y, z)
+      this._setI(crates, i, x, y, z, cw / BW, 1, cd / BD)
+      this._setI(rims, i, x, y, z, cw / BW, 1, cd / BD)
       for (let l = 0; l < 4; l++) {
         this._hide(folds, i * 4 + l)
         folds.setColorAt(i * 4 + l, this._col.setHex(0x222326))
       }
       // la etiqueta va en la cara que se ve: adelante o atras
-      cells.push({ x, y: y + BH * 0.5, z: isBack ? z - BD * 0.44 - 0.004 : z + BD * 0.44 + 0.004, r: level, c: pile, back: isBack, out: !!loc.outlet })
-      this._locHit(g, loc.id, BW, BH, BD, x, y + BH / 2, z)
-      locs.push({ id: loc.id, kind: 'bin', c: new THREE.Vector3(x, y + BH / 2, z), s: new THREE.Vector3(BW, BH, BD), i, x, y, z, crate: true, folds })
+      cells.push({ x, y: y + BH * 0.5, z: isBack ? z - cd * 0.44 - 0.004 : z + cd * 0.44 + 0.004, r: level, c: pile, back: isBack, out: !!loc.outlet })
+      this._locHit(g, loc.id, cw, BH, cd, x, y + BH / 2, z)
+      locs.push({ id: loc.id, kind: 'bin', c: new THREE.Vector3(x, y + BH / 2, z), s: new THREE.Vector3(cw, BH, cd), i, x, y, z, crate: true, folds })
     })
     const labels = this._labelMesh(el, cells, 0.15, 0.05, { cols: piles, rows: levels })
     g.add(labels)
     for (const L of locs) L.labels = labels
-    return { w: Math.max(W, front * BW), h: 0.98, d: D, locs }
+    return { w: Math.max(W, front * cw), h: 0.98, d: D, locs }
   }
 
   _buildLadder(el, g) {
