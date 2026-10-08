@@ -24,7 +24,7 @@ src/
 | `facturas` | Descontar una factura (leerla con la cámara: `ocr`, `facturaParser`), armar un pedido y anexar la factura |
 | `documentos` | Detalle de una remisión o factura con sus fotos (`DocumentSheet`), el calendario (`DocCalendar`) y subir fotos (`docPhotos`) |
 | `conteo` | Contar una ubicación (`Count`) |
-| `reserva` | La reserva (`Reserve`), llevar a la bodega o despachar, agregar a mano y "Abastecimiento disponible" (`RestockHint`) |
+| `reserva` | La reserva (`Reserve`), llevar a la bodega o despachar, buscar la prenda (`ProductSearch`: bodega, reserva y tienda con sus tallas) o agregar a mano y "Abastecimiento disponible" (`RestockHint`) |
 | `despacho` | Lo que está de paso (`Passing`, `ParcelSheet`) |
 | `resumen` | Resumen, su índice, el estado de la tienda y "Empezar de cero" |
 | `reportes` | Reportes (`Reports`) |

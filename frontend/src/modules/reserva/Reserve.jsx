@@ -186,7 +186,7 @@ export default function Reserve() {
           <Icon name="scan" size={20} stroke={2.2} />Escanear para la reserva
         </button>
         <button className="btn btn-ghost btn-block" style={{ marginTop: 8 }} onClick={() => setAdding(true)}>
-          <Icon name="plus" size={18} stroke={2.4} />Agregar a mano (sin etiqueta)
+          <Icon name="search" size={18} stroke={2.4} />Buscar la prenda o agregar a mano
         </button>
 
         {passingUnits > 0 && (

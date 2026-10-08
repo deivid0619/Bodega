@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { api, ApiError } from '../../core/api'
 import NearPick from '../../ui/NearPick'
+import ProductSearch from './ProductSearch'
 import { useToast } from '../../ui/ToastContext'
 import Sheet, { SheetHeader, useSheet } from '../../ui/Sheet'
 
 // sku: un codigo escaneado que no esta en la bodega ni en la tienda (hay
-// que escribir la referencia). Sin sku: agregar a mano; si se escribe un
-// codigo, se busca solo como al escanear.
+// que escribir la referencia). Sin sku: se busca la prenda por nombre (la
+// lista de la bodega, la reserva y la tienda) o se agrega a mano; si se
+// escribe un codigo, se busca solo como al escanear.
 function Form({ sku: scanned = '', defaultQty = 1, onCreated }) {
   const showToast = useToast()
   const { close } = useSheet()
@@ -19,13 +21,14 @@ function Form({ sku: scanned = '', defaultQty = 1, onCreated }) {
   const [found, setFound] = useState(null)
   const [near, setNear] = useState([]) // codigos casi iguales en la tienda
   const [photo, setPhoto] = useState(null)
+  const [picks, setPicks] = useState(0) // al elegir de la lista, el buscador se limpia
 
   const lookNear = (code) => api.get(`/api/catalog/near/${encodeURIComponent(code)}`).then(setNear).catch(() => setNear([]))
   // escaneado y no encontrado: puede estar en la tienda con un codigo casi igual
   useEffect(() => { if (scanned) lookNear(scanned) }, [scanned])
 
-  const identify = async () => {
-    const code = sku.trim().toUpperCase()
+  const identify = () => identifyCode(sku.trim().toUpperCase())
+  const identifyCode = async (code) => {
     if (!code || code === scanned) return
     try {
       const who = await api.get(`/api/reserve/identify/${encodeURIComponent(code)}`)
@@ -37,6 +40,19 @@ function Form({ sku: scanned = '', defaultQty = 1, onCreated }) {
       setFound(null)
       lookNear(code)
     }
+  }
+
+  // elegida de la lista: con codigo se identifica como al escanearla; sin
+  // codigo (una de la reserva sin etiqueta) se llenan la referencia y la talla
+  const pickFound = (o) => {
+    setPicks((n) => n + 1)
+    setError('')
+    setName(o.name)
+    setSize(o.size || '')
+    setPhoto(o.image)
+    setSku(o.sku || '')
+    if (o.sku) identifyCode(o.sku)
+    else setFound(null)
   }
 
   const pickNear = (o) => {
@@ -83,8 +99,14 @@ function Form({ sku: scanned = '', defaultQty = 1, onCreated }) {
           ? near.length && !found
             ? 'Este código no está igual en la tienda: elige la parecida o escribe la referencia y la talla.'
             : 'Este código no está en la bodega ni en la tienda: escribe la referencia y la talla.'
-          : 'Mercancía guardada aparte, sin ubicación todavía. Después la envías a un perchero o canasta.'}
+          : 'Busca la prenda y toca la talla, o escríbela a mano. Queda guardada aparte, sin ubicación todavía.'}
       />
+      {!scanned && (
+        <div className="field" style={{ marginTop: 0, marginBottom: 14 }}>
+          <span className="field-label">Buscar la prenda</span>
+          <ProductSearch key={picks} onPick={pickFound} autoFocus={!picks} />
+        </div>
+      )}
       {/* como al registrar una prenda: la foto y el nombre de la tienda */}
       {found && (
         <div className="shop-hit" style={{ marginBottom: 14 }}>

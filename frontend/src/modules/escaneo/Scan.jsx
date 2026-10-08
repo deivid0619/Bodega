@@ -7,6 +7,7 @@ import { useConfirm } from '../../ui/ConfirmContext'
 import { locationGroups } from '../../core/locationGroups'
 import NewProductModal from '../inventario/NewProductModal'
 import NewReserveModal from '../reserva/NewReserveModal'
+import { ProductSearchSheet } from '../reserva/ProductSearch'
 import FacturaSheet from '../facturas/FacturaSheet'
 import RemisionSheet from '../remisiones/RemisionSheet'
 import ParcelSheet from '../despacho/ParcelSheet'
@@ -129,6 +130,7 @@ export default function Scan() {
   const [mode, setMode] = useState(() => (new URLSearchParams(window.location.search).get('modo') === 'reserva' ? 'reserve' : 'in'))
   const [qty, setQty] = useState(1)
   const [manual, setManual] = useState('')
+  const [searching, setSearching] = useState(false) // buscar la prenda por nombre (reserva)
   const [pendingSku, setPendingSku] = useState(null)
   const [newReserve, setNewReserve] = useState(null) // { sku, qty }: no esta en la bodega ni en la tienda
   const [lastMove, setLastMove] = useState(null)
@@ -722,6 +724,11 @@ export default function Scan() {
           <button className="btn btn-ink" onClick={submitManual} disabled={!manual.trim()}>{staged ? 'Agregar' : 'Registrar'}</button>
         </div>
         <p className="mode-hint">Con un lector USB o Bluetooth: toca el campo y escanea.</p>
+        {mode === 'reserve' && (
+          <button type="button" className="btn btn-ghost btn-block scan-search-btn" onClick={() => setSearching(true)}>
+            <Icon name="search" size={18} stroke={2.4} />Buscar la prenda por nombre
+          </button>
+        )}
 
 
         {lastMove && mv && (
@@ -780,6 +787,13 @@ export default function Scan() {
       {factura && <FacturaSheet onClose={() => setFactura(false)} />}
       {remision && <RemisionSheet onClose={() => setRemision(false)} />}
       {parcel && <ParcelSheet defaultLocation={place || undefined} onClose={() => setParcel(false)} />}
+      {searching && (
+        <ProductSearchSheet
+          subtitle={staged ? 'Toca la talla: queda en la lista como si la escanearas.' : 'Toca la talla: se guarda en la reserva como si la escanearas.'}
+          onClose={() => setSearching(false)}
+          onPick={(o) => handleCode(o.sku)}
+        />
+      )}
       {newReserve && (
         <NewReserveModal
           sku={newReserve.sku}
