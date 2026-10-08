@@ -10,18 +10,25 @@ import { buildRefs } from '../remisiones/refs'
 // parte del codigo. Sale la lista de lo que hay en la bodega, en la reserva y
 // en la tienda, cada referencia con sus tallas; tocar una talla la elige.
 // needCode: solo las tallas que tienen codigo (para usarlas como un escaneo).
+// onlyBodega: solo lo registrado en la bodega (salidas y conteos: lo de la
+// tienda o solo de la reserva no se puede sacar ni contar); inStock: solo las
+// tallas que hay. focus: que cantidad se dice primero en cada talla.
 // onPick({ sku, name, size, image })
 
-const where = (s) => (s.reserva > 0 ? `${s.reserva} en reserva` : s.bodega > 0 ? `${s.bodega} en bodega` : s.shop ? 'de la tienda' : 'no hay')
+const where = (s, focus) => {
+  const res = s.reserva > 0 && `${s.reserva} en reserva`
+  const bod = s.bodega > 0 && `${s.bodega} en bodega`
+  return (focus === 'bodega' ? bod || res : res || bod) || (s.shop ? 'de la tienda' : 'no hay')
+}
 
-export default function ProductSearch({ onPick, needCode = false, autoFocus = false }) {
+export default function ProductSearch({ onPick, needCode = false, autoFocus = false, onlyBodega = false, inStock = false, focus = 'reserva' }) {
   const { data: products } = useProducts()
   const { data: reserve } = useReserve()
   const [q, setQ] = useState('')
   const [shop, setShop] = useState({ term: '', list: [] })
   const term = q.trim().toUpperCase().replace(/\s+/g, ' ')
 
-  const refs = useMemo(() => buildRefs(products || [], reserve || []), [products, reserve])
+  const refs = useMemo(() => buildRefs(products || [], onlyBodega ? [] : reserve || []), [products, reserve, onlyBodega])
   const images = useMemo(() => {
     const m = new Map()
     for (const p of [...(products || []), ...(reserve || [])]) if (p.image_url && !m.has(p.name)) m.set(p.name, p.image_url)
@@ -30,14 +37,14 @@ export default function ProductSearch({ onPick, needCode = false, autoFocus = fa
 
   // la tienda: al dejar de escribir un momento
   useEffect(() => {
-    if (term.length < 3) return undefined
+    if (term.length < 3 || onlyBodega) return undefined
     const t = setTimeout(() => {
       api.get(`/api/catalog/search?q=${encodeURIComponent(term)}&limit=6`)
         .then((list) => setShop({ term, list }))
         .catch(() => setShop({ term, list: [] }))
     }, 250)
     return () => clearTimeout(t)
-  }, [term])
+  }, [term, onlyBodega])
 
   const rows = useMemo(() => {
     if (term.length < 2) return []
@@ -68,11 +75,11 @@ export default function ProductSearch({ onPick, needCode = false, autoFocus = fa
       }
     }
     return [...byName.values(), ...extra]
-      .map((r) => ({ ...r, sizes: r.sizes.filter((s) => !needCode || s.sku).sort((a, b) => sizeRank(a.size) - sizeRank(b.size)) }))
+      .map((r) => ({ ...r, sizes: r.sizes.filter((s) => (!needCode || s.sku) && (!inStock || s.bodega > 0)).sort((a, b) => sizeRank(a.size) - sizeRank(b.size)) }))
       .filter((r) => r.sizes.length)
-  }, [term, refs, images, shop, needCode])
+  }, [term, refs, images, shop, needCode, inStock])
 
-  const waiting = term.length >= 3 && shop.term !== term
+  const waiting = term.length >= 3 && !onlyBodega && shop.term !== term
 
   return (
     <div className="psearch">
@@ -91,10 +98,10 @@ export default function ProductSearch({ onPick, needCode = false, autoFocus = fa
               <div className="ps-sizes">
                 {r.sizes.map((s) => (
                   <button type="button" key={s.sku || s.size} className="ps-size"
-                          aria-label={`Elegir ${r.name} talla ${s.size || 'única'} (${where(s)})`}
+                          aria-label={`Elegir ${r.name} talla ${s.size || 'única'} (${where(s, focus)})`}
                           onClick={() => onPick({ sku: s.sku || null, name: r.name, size: s.size, image: r.image || null })}>
                     <b>{s.size || 'Única'}</b>
-                    {!r.shop && <small>{where(s)}</small>}
+                    {!r.shop && <small>{where(s, focus)}</small>}
                   </button>
                 ))}
               </div>
@@ -110,20 +117,21 @@ export default function ProductSearch({ onPick, needCode = false, autoFocus = fa
 }
 
 // El buscador en una hoja (al escanear): elegir una talla la cierra
-function SheetBody({ title, subtitle, onPick }) {
+function SheetBody({ title, subtitle, onPick, ...rest }) {
   const { close } = useSheet()
   return (
     <>
       <SheetHeader title={title} subtitle={subtitle} />
-      <ProductSearch needCode autoFocus onPick={(o) => { close(); onPick(o) }} />
+      <ProductSearch needCode autoFocus {...rest} onPick={(o) => { close(); onPick(o) }} />
     </>
   )
 }
 
-export function ProductSearchSheet({ onClose, title = 'Buscar la prenda', subtitle, onPick }) {
+// rest: onlyBodega, inStock, focus (como en ProductSearch)
+export function ProductSearchSheet({ onClose, title = 'Buscar la prenda', ...rest }) {
   return (
     <Sheet modal onClose={onClose} label={title}>
-      <SheetBody title={title} subtitle={subtitle} onPick={onPick} />
+      <SheetBody title={title} {...rest} />
     </Sheet>
   )
 }

@@ -19,7 +19,7 @@ src/
 | `auth` | Entrar (`Login`), enlaces "solo ver" (`ViewLink`) |
 | `bodega` | La bodega 3D (`Warehouse`, `WarehouseScene`, `WarehouseCanvas`), una ubicación (`LocationSheet`) y el editor de muebles (`EditPanel`) |
 | `inventario` | Inventario, ficha de la prenda (`ProductModal`), nueva prenda, mover entre ubicaciones y detalle de un movimiento |
-| `escaneo` | Escanear (`Scan`): entradas, salidas, conteo y reserva; el lector (`useBarcodeScanner`, `Viewfinder`, `barcode`) y `ScanBox` |
+| `escaneo` | Escanear (`Scan`): entradas, salidas, conteo y reserva, también buscando la prenda por nombre (`ProductSearch` de reserva); el lector (`useBarcodeScanner`, `Viewfinder`, `barcode`) y `ScanBox` |
 | **`remisiones`** | Recibir una remisión (ver su README) |
 | `facturas` | Descontar una factura (leerla con la cámara: `ocr`, `facturaParser`), armar un pedido y anexar la factura |
 | `documentos` | Detalle de una remisión o factura con sus fotos (`DocumentSheet`), el calendario (`DocCalendar`) y subir fotos (`docPhotos`) |

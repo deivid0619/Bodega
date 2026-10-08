@@ -131,7 +131,7 @@ export default function Scan() {
   const [mode, setMode] = useState(() => (new URLSearchParams(window.location.search).get('modo') === 'reserva' ? 'reserve' : 'in'))
   const [qty, setQty] = useState(1)
   const [manual, setManual] = useState('')
-  const [searching, setSearching] = useState(false) // buscar la prenda por nombre (reserva)
+  const [searching, setSearching] = useState(false) // buscar la prenda por nombre, sin escanear
   const [pendingSku, setPendingSku] = useState(null)
   const [newReserve, setNewReserve] = useState(null) // { sku, qty }: no esta en la bodega ni en la tienda
   const [lastMove, setLastMove] = useState(null)
@@ -726,11 +726,9 @@ export default function Scan() {
           <button className="btn btn-ink" onClick={submitManual} disabled={!manual.trim()}>{staged ? 'Agregar' : 'Registrar'}</button>
         </div>
         <p className="mode-hint">Con un lector USB o Bluetooth: toca el campo y escanea.</p>
-        {mode === 'reserve' && (
-          <button type="button" className="btn btn-ghost btn-block scan-search-btn" onClick={() => setSearching(true)}>
-            <Icon name="search" size={18} stroke={2.4} />Buscar la prenda por nombre
-          </button>
-        )}
+        <button type="button" className="btn btn-ghost btn-block scan-search-btn" onClick={() => setSearching(true)}>
+          <Icon name="search" size={18} stroke={2.4} />Buscar la prenda por nombre
+        </button>
 
 
         {lastMove && mv && (
@@ -791,7 +789,12 @@ export default function Scan() {
       {parcel && <ParcelSheet defaultLocation={place || undefined} onClose={() => setParcel(false)} />}
       {searching && (
         <ProductSearchSheet
-          subtitle={staged ? 'Toca la talla: queda en la lista como si la escanearas.' : 'Toca la talla: se guarda en la reserva como si la escanearas.'}
+          subtitle={staged ? 'Toca la talla: queda en la lista como si la escanearas.'
+            : `Toca la talla: ${mode === 'reserve' ? 'se guarda en la reserva' : mode === 'out' ? 'sale' : mode === 'set' ? 'se cuenta' : 'entra'} como si la escanearas.`}
+          // entrada: tambien lo de la tienda (se registra como al escanearlo); salida y conteo: lo de la bodega
+          onlyBodega={mode === 'out' || mode === 'set'}
+          inStock={mode === 'out'}
+          focus={mode === 'reserve' ? 'reserva' : 'bodega'}
           onClose={() => setSearching(false)}
           onPick={(o) => handleCode(o.sku)}
         />
