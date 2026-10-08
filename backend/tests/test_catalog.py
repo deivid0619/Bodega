@@ -3,8 +3,8 @@ precio; el valor del inventario sale a precio de tienda. La tienda se
 simula: las pruebas no salen a internet."""
 from fastapi.testclient import TestClient
 
-from app import catalog
-from app.config import settings
+from app.modules.catalogo import service as catalog
+from app.core.config import settings
 from app.main import app
 
 SHOP = [{

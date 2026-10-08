@@ -10,10 +10,10 @@ os.environ.setdefault("ADMIN_PASSWORD", "admin1234")
 from fastapi.testclient import TestClient
 
 from app import models
-from app.config import settings
-from app.database import SessionLocal
+from app.core.config import settings
+from app.core.database import SessionLocal
 from app.main import app
-from app.migrations import backfill_stock
+from app.core.migrations import backfill_stock
 
 
 def _login(client):

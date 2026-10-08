@@ -5,8 +5,8 @@ import json
 
 from fastapi.testclient import TestClient
 
-from app import push
-from app.config import settings
+from app.modules.avisos import push
+from app.core.config import settings
 from app.main import app
 
 KEYS = {"p256dh": "B" * 87, "auth": "A" * 22}

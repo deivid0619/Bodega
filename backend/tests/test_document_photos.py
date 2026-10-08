@@ -6,10 +6,10 @@ from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 
 from app import models
-from app.config import settings
-from app.database import SessionLocal
+from app.core.config import settings
+from app.core.database import SessionLocal
 from app.main import app
-from app.migrations import purge_old_photos
+from app.core.migrations import purge_old_photos
 
 
 def _h(client):
@@ -63,7 +63,7 @@ def test_a_factura_photo_is_kept_a_month(tmp_path, monkeypatch):
 
 
 def test_where_the_photos_go(monkeypatch):
-    from app import photo_store
+    from app.modules.documentos import photo_store
     # la URL del proyecto sale sola de la base de datos de Supabase
     monkeypatch.setattr(settings, "supabase_url", "")
     monkeypatch.setattr(settings, "database_url", "postgresql://postgres.abcdefghijklmnopqrst:clave@aws-0-us-east-1.pooler.supabase.com:6543/postgres")

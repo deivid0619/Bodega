@@ -2,7 +2,7 @@
 (ni con lo que hay que pedir) y es lo primero que sale."""
 from fastapi.testclient import TestClient
 
-from app.config import settings
+from app.core.config import settings
 from app.main import app
 
 

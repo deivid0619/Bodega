@@ -3,10 +3,10 @@ crea sola, y la que quedo se quita una vez si nunca se uso."""
 from fastapi.testclient import TestClient
 
 from app import models
-from app.config import settings
-from app.database import SessionLocal
+from app.core.config import settings
+from app.core.database import SessionLocal
 from app.main import app
-from app.migrations import remove_sample_product
+from app.core.migrations import remove_sample_product
 
 SAMPLE = "P-WPM210200L"
 

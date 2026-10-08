@@ -3,11 +3,11 @@ distribucion que ya existia las recibe una sola vez."""
 from fastapi.testclient import TestClient
 
 from app import models
-from app.database import SessionLocal
-from app.layout_logic import table_slots
+from app.core.database import SessionLocal
+from app.modules.bodega.logic import table_slots
 from app.main import app
-from app.config import settings
-from app.migrations import table_bins
+from app.core.config import settings
+from app.core.migrations import table_bins
 
 
 def _h(client):

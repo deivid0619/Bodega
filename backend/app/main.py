@@ -1,5 +1,5 @@
 """Punto de entrada de la API. Crea las tablas, siembra los datos iniciales
-y expone los routers bajo /api."""
+y expone las rutas de cada modulo (app/modules) bajo /api."""
 import logging
 import time
 from contextlib import asynccontextmanager
@@ -9,13 +9,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
-from . import models
-from .config import settings
-from .database import Base, SessionLocal, engine
-from .catalog import warm as warm_catalog
-from .migrations import backfill_stock, ensure_columns, purge_old_photos, remove_sample_product, table_bins
-from .routers import auth, catalog, documents, layout, movements, notices, parcels, products, push, reports, reserve
-from .seed import seed
+from app import models  # noqa: F401  (registra todas las tablas)
+from app.core.config import settings
+from app.core.database import Base, SessionLocal, engine
+from app.core.migrations import backfill_stock, ensure_columns, purge_old_photos, remove_sample_product, table_bins
+from app.core.seed import seed
+from app.modules.auth import router as auth
+from app.modules.avisos import router as avisos, router_push as avisos_push
+from app.modules.bodega import router as bodega
+from app.modules.catalogo import router as catalogo
+from app.modules.catalogo.service import warm as warm_catalog
+from app.modules.conteo import router as conteo
+from app.modules.despacho import router as despacho
+from app.modules.documentos import router as documentos
+from app.modules.facturas import router as facturas
+from app.modules.inventario import router_movements as movimientos, router_products as productos
+from app.modules.remisiones import router as remisiones
+from app.modules.reportes import router as reportes
+from app.modules.reserva import router as reserva
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -71,17 +82,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(auth.router)
-app.include_router(layout.router)
-app.include_router(products.router)
-app.include_router(movements.router)
-app.include_router(reports.router)
-app.include_router(reserve.router)
-app.include_router(documents.router)
-app.include_router(parcels.router)
-app.include_router(catalog.router)
-app.include_router(push.router)
-app.include_router(notices.router)
+# cada modulo trae sus rutas (ver app/modules/README.md)
+for module in (auth, bodega, productos, movimientos, reportes, reserva, documentos, remisiones, facturas, conteo,
+               despacho, catalogo, avisos_push, avisos):
+    app.include_router(module.router)
 
 
 @app.get("/api/health")

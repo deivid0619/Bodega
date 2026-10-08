@@ -10,9 +10,9 @@ from datetime import datetime
 
 from fastapi.testclient import TestClient
 
-from app.config import settings
+from app.core.config import settings
 from app.main import app
-from app.serializers import BOGOTA
+from app.modules.inventario.serializers import BOGOTA
 
 
 def _h(client):
