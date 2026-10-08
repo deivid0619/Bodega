@@ -31,9 +31,9 @@ export function ProductThumb({ src, alt = '', size }) {
   )
 }
 
-export function Stepper({ value, onMinus, onPlus, minusLabel = 'Restar 1', plusLabel = 'Sumar 1', disabledMinus, disabledPlus, large, small, children }) {
+export function Stepper({ value, onMinus, onPlus, minusLabel = 'Restar 1', plusLabel = 'Sumar 1', disabledMinus, disabledPlus, large, small, changed, children }) {
   return (
-    <div className={`stepper ${large ? 'lg' : small ? 'sm' : ''}`}>
+    <div className={`stepper ${large ? 'lg' : small ? 'sm' : ''}${changed ? ' changed' : ''}`}>
       <button type="button" onClick={onMinus} aria-label={minusLabel} disabled={disabledMinus}>
         <Icon name="minus" size={large ? 20 : small ? 15 : 17} stroke={2.4} />
       </button>

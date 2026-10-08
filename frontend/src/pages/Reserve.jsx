@@ -14,11 +14,19 @@ import { Count, Empty, PageHead, ProductThumb, Stepper, plural } from '../compon
 // reserva: se lleva con un toque a su ubicacion principal.
 function RestockCard({ task, onDone }) {
   const showToast = useToast()
+  const confirm = useConfirm()
   const { product: p, reserve: r } = task
   const [qty, setQty] = useState(task.suggest)
   const [busy, setBusy] = useState(false)
 
   const bring = async () => {
+    // se confirma antes: un toque sin querer no mueve nada
+    if (!(await confirm({
+      title: `¿Llevar ${plural(qty, 'prenda', 'prendas')} a ${p.location_id}?`,
+      body: `${p.name}${p.size ? ` · talla ${p.size}` : ''}: salen de la reserva (quedan ${r.qty - qty}) y entran a la bodega en ${p.location_name || p.location_id}.`,
+      confirmLabel: 'Sí, llevar',
+      danger: false,
+    }))) return
     setBusy(true)
     try {
       await api.post(`/api/reserve/${r.id}/transfer`, { qty, location_id: p.location_id, sku: p.sku })

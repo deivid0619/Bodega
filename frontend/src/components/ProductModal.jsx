@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { useAuth } from '../context/AuthContext'
 import { useToast } from './ToastContext'
 import { useConfirm } from './ConfirmContext'
-import { applyLocally, bumpStock, useLayout, useReserve } from '../hooks/useApi'
+import { useLayout, useReserve } from '../hooks/useApi'
 import { outletIdsOf, reserveIndex, stockSplit } from '../utils'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import MoveSheet from './MoveSheet'
 import Icon from './Icon'
 import { Count, ProductThumb, Stepper, StockMeter } from './Bits'
 import RestockHint from './RestockHint'
+import { StagedBar, changedLabel, useStagedSteps } from './StagedSteps'
 
 function LocationSelect({ value, onChange, locations, currentName }) {
   return (
@@ -48,22 +49,12 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sku])
 
-  // cada toque se ve en el acto; lo del servidor solo se toma cuando llega
-  // la respuesta del ultimo toque (antes cada respuesta devolvia el numero
-  // a un valor viejo y parecia que se demoraba en sumar o restar)
-  const taps = useRef(0)
-  const bump = async (type, locationId) => {
-    setProduct((p) => applyLocally(p, type, 1, locationId))
-    taps.current += 1
-    try {
-      const res = await bumpStock(sku, type === 'in' ? 1 : -1, locationId)
-      taps.current -= 1
-      if (!taps.current && res) setProduct(res.product)
-    } catch (e) {
-      taps.current -= 1
-      showToast(e instanceof ApiError ? e.message : 'No se pudo registrar.', 'err')
-      api.get(`/api/products/${encodeURIComponent(sku)}`).then(setProduct).catch(() => {})
-    }
+  // los + y − quedan marcados hasta tocar "Guardar" (un toque sin querer no cuenta)
+  const staged = useStagedSteps(() => (product ? `${product.name}${product.size ? ` · ${product.size}` : ''}` : sku))
+  const stepsSaved = (results) => {
+    const last = results[results.length - 1]
+    if (last?.product) setProduct(last.product)
+    else api.get(`/api/products/${encodeURIComponent(sku)}`).then(setProduct).catch(() => {})
   }
 
   const save = async () => {
@@ -161,12 +152,16 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
               {s.location_id === product.location_id && <small>Principal</small>}
             </div>
             <div className="prow-actions">
-              <Stepper value={s.qty} onMinus={() => bump('out', s.location_id)} onPlus={() => bump('in', s.location_id)} minusLabel="Registrar salida de 1" plusLabel="Registrar entrada de 1" disabledMinus={s.qty === 0} />
-              {s.qty > 0 && <button className="link-btn" onClick={() => setMoving(s.location_id)}><Icon name="arrowRight" size={14} stroke={2.2} />Mover</button>}
+              <Stepper value={s.qty + staged.delta(sku, s.location_id)} changed={!!staged.delta(sku, s.location_id)}
+                       onMinus={() => staged.step(sku, s.location_id, -1)} onPlus={() => staged.step(sku, s.location_id, 1)}
+                       minusLabel="Una menos (se guarda con Guardar)" plusLabel="Una más (se guarda con Guardar)" disabledMinus={s.qty + staged.delta(sku, s.location_id) <= 0} />
+              {staged.delta(sku, s.location_id) !== 0 && <small className="stepper-was">{changedLabel(staged.delta(sku, s.location_id))} · antes {s.qty}</small>}
+              {s.qty > 0 && !staged.delta(sku, s.location_id) && <button className="link-btn" onClick={() => setMoving(s.location_id)}><Icon name="arrowRight" size={14} stroke={2.2} />Mover</button>}
             </div>
           </div>
         ))}
       </div>
+      <StagedBar staged={staged} onSaved={stepsSaved} />
 
       <h3 className="h-sec">Datos de la prenda</h3>
       <label className="field" style={{ marginTop: 0 }}>

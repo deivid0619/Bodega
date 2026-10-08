@@ -1,6 +1,6 @@
 import { forwardRef, useState } from 'react'
 import { api, ApiError } from '../api'
-import { bumpStock, usePolling } from '../hooks/useApi'
+import { usePolling } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader } from './Sheet'
 import MoveSheet from './MoveSheet'
@@ -8,6 +8,7 @@ import ParcelSheet, { parcelIcon, parcelName, waited } from './ParcelSheet'
 import Icon from './Icon'
 import { ProductThumb, Stepper, plural } from './Bits'
 import RestockHint from './RestockHint'
+import { StagedBar, changedLabel, useStagedSteps } from './StagedSteps'
 
 // Lo que hay EN esta ubicacion: un codigo puede estar aqui y en otras.
 export function itemsAt(products, locationId) {
@@ -53,13 +54,11 @@ const LocationSheet = forwardRef(function LocationSheet(
     setOutletNow(null)
   }
 
-  const bump = async (sku, type) => {
-    try {
-      await bumpStock(sku, type === 'in' ? 1 : -1, locationId)
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'No se pudo registrar.', 'err')
-    }
-  }
+  // los + y − quedan marcados hasta tocar "Guardar" (un toque sin querer no cuenta)
+  const staged = useStagedSteps((sku) => {
+    const p = products.find((x) => x.sku === sku)
+    return p ? `${p.name}${p.size ? ` · ${p.size}` : ''}` : sku
+  })
 
   return (
     <Sheet ref={ref} onClose={onClose} size="half" label={`Ubicación ${locationId}`}>
@@ -96,7 +95,9 @@ const LocationSheet = forwardRef(function LocationSheet(
       )}
       {items.length ? (
         <div>
-          {items.map(({ p, here }) => {
+          {items.map(({ p, here: saved }) => {
+            const d = staged.delta(p.sku, locationId)
+            const here = saved + d
             const low = isLow(p)
             const elsewhere = (p.stock || []).filter((s) => s.location_id !== locationId)
             return (
@@ -115,8 +116,10 @@ const LocationSheet = forwardRef(function LocationSheet(
                   )}
                 </button>
                 <div className="prow-actions">
-                  <Stepper value={here} onMinus={() => bump(p.sku, 'out')} onPlus={() => bump(p.sku, 'in')} minusLabel="Registrar salida de 1" plusLabel="Registrar entrada de 1" disabledMinus={here === 0} />
-                  {here > 0 && (
+                  <Stepper value={here} changed={!!d} onMinus={() => staged.step(p.sku, locationId, -1)} onPlus={() => staged.step(p.sku, locationId, 1)}
+                           minusLabel="Una menos (se guarda con Guardar)" plusLabel="Una más (se guarda con Guardar)" disabledMinus={here <= 0} />
+                  {d !== 0 && <small className="stepper-was">{changedLabel(d)} · antes {saved}</small>}
+                  {!d && saved > 0 && (
                     <button className="link-btn" onClick={() => setMoving(p)}><Icon name="arrowRight" size={14} stroke={2.2} />Mover</button>
                   )}
                 </div>
@@ -128,6 +131,7 @@ const LocationSheet = forwardRef(function LocationSheet(
       ) : (
         <p className="muted" style={{ padding: '6px 0 4px' }}>Escanea prendas con esta ubicación elegida y aparecen aquí.</p>
       )}
+      <StagedBar staged={staged} />
       {canEditOutlet ? (
         <div className="ctl outlet-ctl loc-outlet">
           <span>Outlet<small>Lo que haya en esta ubicación no cuenta en el inventario</small></span>
