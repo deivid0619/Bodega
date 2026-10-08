@@ -18,6 +18,7 @@ import { beep } from '../lib/feedback'
 import { asksFrom, fmtTime, fromMissing, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../utils'
 import FromPick from '../components/FromPick'
 import { itemsText, sendNotice, useNotifyPick } from '../components/Notices'
+import LocationPicker from '../components/LocationPicker'
 
 const MODES = [
   { m: 'in', label: 'Entrada', icon: 'boxIn', hint: 'Cada código suma prendas a su ubicación.' },
@@ -666,16 +667,10 @@ export default function Scan() {
           </Stepper>
         </div>
 
-        {mode !== 'reserve' && <label className="field">
+        {mode !== 'reserve' && <div className="field">
           <span className="field-label">¿Dónde?</span>
-          <select className="input" value={place || ''} onChange={(e) => setPlace(e.target.value)}>
-            <option value="">Automática: la ubicación principal de cada código</option>
-            {groups.map((g) => (
-              <optgroup key={g.label} label={g.label}>
-                {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
+          <LocationPicker value={place || ''} onChange={setPlace} groups={groups} ariaLabel="¿Dónde?"
+                          emptyLabel="Automática: la ubicación principal de cada código" />
           <span className="field-hint">
             {mode === 'out'
               ? place
@@ -683,7 +678,7 @@ export default function Scan() {
                 : staged ? 'Si la prenda está en varios lugares, en la lista eliges de cuál salió.' : 'Sale primero de la ubicación principal y, si no alcanza, de donde haya.'
               : place ? `Lo que escanees ${mode === 'set' ? 'se cuenta' : 'entra'} en ${place}.` : `Cada código ${mode === 'set' ? 'se cuenta' : 'entra'} en su ubicación principal.`}
           </span>
-        </label>}
+        </div>}
 
         <div className="manual">
           <input

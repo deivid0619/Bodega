@@ -4,6 +4,7 @@ import { moveBetween } from '../hooks/useApi'
 import { useToast } from './ToastContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
+import LocationPicker from './LocationPicker'
 import { Stepper } from './Bits'
 
 function Form({ product, from, locations, onMoved }) {
@@ -42,17 +43,11 @@ function Form({ product, from, locations, onMoved }) {
             <Stepper value={qty} onMinus={() => setQty((q) => Math.max(1, q - 1))} onPlus={() => setQty((q) => Math.min(here, q + 1))} disabledMinus={qty <= 1} large />
           </div>
         </div>
-        <label className="field">
+        <div className="field">
           <span className="field-label">A dónde</span>
-          <select className="input" value={to} onChange={(e) => { setTo(e.target.value); setError('') }}>
-            <option value="">Elige la ubicación…</option>
-            {locations.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.filter((l) => l.id !== from).map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </optgroup>
-            ))}
-          </select>
-        </label>
+          <LocationPicker value={to} onChange={(v) => { setTo(v); setError('') }} ariaLabel="A dónde" placeholder="Elige la ubicación…"
+                          groups={locations.map((g) => ({ ...g, options: g.options.filter((l) => l.id !== from) })).filter((g) => g.options.length)} />
+        </div>
         {error && <p className="form-err" role="alert">{error}</p>}
         <div className="btn-row">
           <button type="button" className="btn btn-ghost" onClick={() => close()}>Cancelar</button>

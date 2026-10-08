@@ -10,6 +10,7 @@ import { useToast } from './ToastContext'
 import { useConfirm } from './ConfirmContext'
 import Sheet, { SheetHeader, useSheet } from './Sheet'
 import Icon from './Icon'
+import LocationPicker from './LocationPicker'
 import { Empty, Stepper } from './Bits'
 
 // Lo que esta de paso sin ser inventario: una caja suelta, una canasta, una
@@ -215,19 +216,12 @@ function Form({ parcel, defaultLocation, showMap }) {
         {TODO.map((t) => <button key={t} type="button" className="chip" onClick={() => addTodo(t)}>{t}</button>)}
       </div>
 
-      <label className="field">
+      <div className="field">
         <span className="field-label">¿Dónde quedó?</span>
-        <select className="input" value={place} onChange={(e) => setPlace(e.target.value)}>
-          <option value={DISPATCH}>Despacho (de paso)</option>
-          {place !== DISPATCH && !known && layout && <option value={place}>{parcel?.location_name || place}</option>}
-          {groups.map((g) => (
-            <optgroup key={g.label} label={g.label}>
-              {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </optgroup>
-          ))}
-        </select>
+        <LocationPicker value={place} onChange={setPlace} ariaLabel="¿Dónde quedó?" fallbackLabel={parcel?.location_name || place}
+                        groups={[{ label: 'De paso', options: [{ id: DISPATCH, name: 'Despacho (de paso)' }] }, ...groups]} />
         <span className="field-hint">No cuenta como inventario: queda en Resumen, en “Por despachar”, hasta que salga.</span>
-      </label>
+      </div>
       {editing && showMap && known && (
         <button type="button" className="link-btn parcel-map" onClick={() => { close(); navigate(`/?loc=${encodeURIComponent(place)}`) }}>
           <Icon name="pin" size={14} stroke={2.2} />Ver {place} en la bodega

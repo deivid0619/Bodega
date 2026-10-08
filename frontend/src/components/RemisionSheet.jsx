@@ -15,6 +15,7 @@ import ScanBox from './ScanBox'
 import NearPick from './NearPick'
 import { useCrop } from './PhotoCrop'
 import { itemsText, sendNotice, useNotifyPick } from './Notices'
+import LocationPicker from './LocationPicker'
 
 // la plantilla de remision de Pigmalion trae estas tallas
 const TEMPLATE = ['S', 'M', 'L', 'XL', '2XL', '3XL', '4XL']
@@ -701,14 +702,8 @@ function Body() {
                 return (
                   <div key={b.id} className={`rem-place${needsPlace?.id === b.id ? ' need' : ''}`}>
                     <span className="rem-place-name">{b.name}</span>
-                    <select className="input" value={b.place} onChange={(e) => setPlace(b.id, e.target.value)} aria-label={`Ubicación de ${b.name}`}>
-                      <option value="">{autoLabel(b)}</option>
-                      {groups.map((g) => (
-                        <optgroup key={g.label} label={g.label}>
-                          {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                        </optgroup>
-                      ))}
-                    </select>
+                    <LocationPicker value={b.place} onChange={(v) => setPlace(b.id, v)} groups={groups}
+                                    emptyLabel={autoLabel(b)} ariaLabel={`Ubicación de ${b.name}`} />
                     {arrived.length > 0 && (
                       <button type="button" className="link-btn rem-split-toggle" onClick={() => toggleSplit(b.id)}>
                         {b.split ? 'Todo a la bodega (no repartir)' : 'Repartir: una parte a la reserva'}

@@ -12,18 +12,11 @@ import Icon from './Icon'
 import { Count, ProductThumb, Stepper, StockMeter } from './Bits'
 import RestockHint from './RestockHint'
 import { StagedBar, changedLabel, useStagedSteps } from './StagedSteps'
+import LocationPicker from './LocationPicker'
 
+// elegir la ubicacion buscandola (no una lista larga): ver LocationPicker
 function LocationSelect({ value, onChange, locations, currentName }) {
-  return (
-    <select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
-      {!locations.some((g) => g.options.some((l) => l.id === value)) && <option value={value}>{currentName}</option>}
-      {locations.map((group) => (
-        <optgroup key={group.label} label={group.label}>
-          {group.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-        </optgroup>
-      ))}
-    </select>
-  )
+  return <LocationPicker value={value} onChange={onChange} groups={locations} fallbackLabel={currentName} />
 }
 
 function Body({ sku, locations, onChanged, onLocate, onShowAll }) {

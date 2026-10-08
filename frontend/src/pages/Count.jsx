@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import LocationPicker from '../components/LocationPicker'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from '../api'
 import { refreshInventory, useLayout, useProducts } from '../hooks/useApi'
@@ -62,18 +63,11 @@ function PickLocation({ groups, onPick }) {
   }, [])
   return (
     <>
-      <label className="field" style={{ marginTop: 0 }}>
+      <div className="field" style={{ marginTop: 0 }}>
         <span className="field-label">¿Qué ubicación vas a contar?</span>
-        <select className="input" value="" onChange={(e) => onPick(e.target.value)}>
-          <option value="" disabled>Elige la ubicación</option>
-          {groups.map((g) => (
-            <optgroup key={g.label} label={g.label}>
-              {g.options.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </optgroup>
-          ))}
-        </select>
+        <LocationPicker value="" onChange={(v) => v && onPick(v)} groups={groups} ariaLabel="Ubicación para contar" />
         <span className="field-hint">También puedes tocar una ubicación en la bodega 3D y elegir «Contar esta ubicación».</span>
-      </label>
+      </div>
       {recent?.length > 0 && (
         <>
           <h2 className="h-sec">Contadas hace poco</h2>
