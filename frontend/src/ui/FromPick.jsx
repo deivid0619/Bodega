@@ -1,12 +1,22 @@
 import { Stepper } from './Bits'
-import { isSplit, splitTotal } from '../core/utils'
+import { asksFrom, isSplit, splitTotal } from '../core/utils'
 
 // "¿De donde sale?": en una salida de una prenda que esta en varios lugares
 // (o en el outlet), se elige de cual salio para que cada canasta quede bien.
 // value: undefined (sin elegir), '' (donde sea), el id de una ubicacion (sale
 // de ahi primero; si no alcanza, el resto de donde haya) o repartido:
 // { 'C-1-1': 2, 'P-A2': 1 } (cuantas de cada una).
+// Si esta en un solo lugar no hay nada que elegir, pero se dice de donde sale.
 export default function FromPick({ places, value, qty, onChange, disabled }) {
+  if (!asksFrom(places)) {
+    const only = places[0]
+    return (
+      <div className="from-pick from-one" role="note" aria-label="De dónde sale">
+        <span>Sale de</span>
+        {only ? <b>{only.name}<i className="mono">{only.id}</i><small>hay {only.qty}</small></b> : <b>ninguna ubicación: no hay</b>}
+      </div>
+    )
+  }
   const split = isSplit(value)
   const chosen = !split && places.find((x) => x.id === value)
   const rest = chosen ? qty - chosen.qty : 0
@@ -20,7 +30,7 @@ export default function FromPick({ places, value, qty, onChange, disabled }) {
       </span>
       {!split && places.map((x) => (
         <button key={x.id} type="button" className={x.outlet ? 'outlet' : ''} aria-pressed={value === x.id} disabled={disabled}
-                aria-label={`${x.id}, hay ${x.qty}${x.outlet ? ', outlet' : ''}`} onClick={() => onChange(x.id)}>
+                title={x.name} aria-label={`${x.name}, hay ${x.qty}${x.outlet ? ', outlet' : ''}`} onClick={() => onChange(x.id)}>
           {x.id}<b>{x.qty}</b>{x.outlet && <em>outlet</em>}
         </button>
       ))}
@@ -30,8 +40,9 @@ export default function FromPick({ places, value, qty, onChange, disabled }) {
           {split ? 'De un solo lugar' : 'Repartir'}
         </button>
       )}
+      {chosen && rest <= 0 && <small>{chosen.name}</small>}
       {chosen && rest > 0 && (
-        <small>De {chosen.id} salen {chosen.qty}; {rest === 1 ? 'la otra' : `las otras ${rest}`}, de donde haya.</small>
+        <small>De {chosen.name} salen {chosen.qty}; {rest === 1 ? 'la otra' : `las otras ${rest}`}, de donde haya.</small>
       )}
       {split && (
         <div className="from-split">

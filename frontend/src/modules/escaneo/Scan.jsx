@@ -15,7 +15,7 @@ import { PageHead, Stepper, plural } from '../../ui/Bits'
 import { useBarcodeScanner } from './useBarcodeScanner'
 import Viewfinder, { PhotoRead } from './Viewfinder'
 import { beep } from '../../core/feedback'
-import { asksFrom, fmtTime, fromMissing, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../../core/utils'
+import { fmtTime, fromMissing, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../../core/utils'
 import FromPick from '../../ui/FromPick'
 import { itemsText, sendNotice, useNotifyPick } from '../avisos/Notices'
 import LocationPicker from '../../ui/LocationPicker'
@@ -336,7 +336,7 @@ export default function Scan() {
     const list = toConfirmRef.current
     const old = list.find((l) => l.key === key)
     // donde hay (para preguntar de donde sale) y cuanto se puede sacar
-    const stock = (p.stock || []).map((st) => ({ location_id: st.location_id, qty: st.qty }))
+    const stock = (p.stock || []).map((st) => ({ location_id: st.location_id, location_name: st.location_name, qty: st.qty }))
     const from = old?.from
     const have = mode === 'out' ? outAvailable({ stock }, outlet, loc || from) : null
     const r = mode === 'in' ? reserveFor(p, rIndex)[0] : null
@@ -645,7 +645,7 @@ export default function Scan() {
                         }}>
                   <Icon name="x" size={16} stroke={2.4} />
                 </button>
-                {asksFrom(places) && (
+                {places.length > 0 && (
                   <FromPick places={places} value={l.from} qty={l.qty} disabled={saving} onChange={(v) => setFrom(l.key, v)} />
                 )}
                 {l.type === 'in' && l.res && (

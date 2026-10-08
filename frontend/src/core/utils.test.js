@@ -53,7 +53,10 @@ describe('de donde sale una salida', () => {
 
   it('lista donde hay, con el outlet al final, y pregunta si hay varias', () => {
     expect(placesOf(p, outlet)).toEqual([
-      { id: 'C-1-1', qty: 3, outlet: false }, { id: 'C-2-4', qty: 2, outlet: false }, { id: 'O-1-1', qty: 4, outlet: true }])
+      { id: 'C-1-1', name: 'C-1-1', qty: 3, outlet: false }, { id: 'C-2-4', name: 'C-2-4', qty: 2, outlet: false },
+      { id: 'O-1-1', name: 'O-1-1', qty: 4, outlet: true }])
+    // con el nombre de la ubicacion, para decir de donde sale
+    expect(placesOf({ stock: [{ location_id: 'C-8-4', location_name: 'Canasta C-8-4', qty: 3 }] })[0].name).toBe('Canasta C-8-4')
     expect(asksFrom(placesOf({ stock: [{ location_id: 'C-1-1', qty: 3 }] }, outlet))).toBe(false)
     expect(asksFrom(placesOf({ stock: [{ location_id: 'O-1-1', qty: 3 }] }, outlet))).toBe(true)
     expect(asksFrom(placesOf(p, outlet))).toBe(true)

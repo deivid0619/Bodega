@@ -105,7 +105,7 @@ export function outletIdsOf(layout) {
 // Donde hay de un codigo: [{ id, qty, outlet }], lo del outlet al final
 export function placesOf(p, outlet) {
   return (p?.stock || []).filter((s) => s.qty > 0)
-    .map((s) => ({ id: s.location_id, qty: s.qty, outlet: !!outlet?.has(s.location_id) }))
+    .map((s) => ({ id: s.location_id, name: s.location_name || s.location_id, qty: s.qty, outlet: !!outlet?.has(s.location_id) }))
     .sort((a, b) => a.outlet - b.outlet || b.qty - a.qty)
 }
 

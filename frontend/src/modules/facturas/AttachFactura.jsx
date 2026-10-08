@@ -5,7 +5,7 @@ import { useToast } from '../../ui/ToastContext'
 import Sheet, { SheetHeader, useSheet } from '../../ui/Sheet'
 import Icon from '../../ui/Icon'
 import { plural } from '../../ui/Bits'
-import { asksFrom, fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../../core/utils'
+import { fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../../core/utils'
 import FromPick from '../../ui/FromPick'
 import { PhotoButtons, ProofPhoto, ReadMoreButton, ReadingStep, photoNote, readFactura, savePhotos } from './FacturaParts'
 
@@ -202,7 +202,7 @@ export function AttachBody({ pedido, onDone, onBack }) {
                               onClick={() => setExtra((e) => ({ ...e, [r.sku]: { ...x, off: !x.off } }))} />
                     </label>
                     {!x.off && !r.product && <small className="warn">No está en la bodega: no se puede descontar.</small>}
-                    {!x.off && r.product && asksFrom(places) && (
+                    {!x.off && r.product && places.length > 0 && (
                       <FromPick places={places} value={x.from} qty={r.f - r.p} onChange={(v) => setExtra((e) => ({ ...e, [r.sku]: { ...x, from: v } }))} />
                     )}
                   </div>

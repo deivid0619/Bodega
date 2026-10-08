@@ -8,7 +8,7 @@ import { SearchField, Stepper, plural } from '../../ui/Bits'
 import { cleanCode, matchLine, sameLine } from './facturaParser'
 import { saveDocPhoto } from '../documentos/docPhotos'
 import { beep } from '../../core/feedback'
-import { asksFrom, fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../../core/utils'
+import { fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../../core/utils'
 import FromPick from '../../ui/FromPick'
 import ScanBox from '../escaneo/ScanBox'
 import { AttachBody } from './AttachFactura'
@@ -247,7 +247,7 @@ function PedidoStep({ onSaved, onBack }) {
                     onPlus={() => update(l.sku, { qty: l.qty + 1 })}
                     disabledMinus={l.qty <= 1}
                   />
-                  {asksFrom(places) && <FromPick places={places} value={l.from} qty={l.qty} onChange={(v) => update(l.sku, { from: v })} />}
+                  {places.length > 0 && <FromPick places={places} value={l.from} qty={l.qty} onChange={(v) => update(l.sku, { from: v })} />}
                 </div>
               )
             })}
@@ -510,7 +510,7 @@ function Body({ onDone }) {
                 onPlus={() => update(r.id, { qty: r.qty + 1 })}
                 disabledMinus={r.qty <= 1}
               />
-              {!recordOnly && r.include && asksFrom(places) && (
+              {!recordOnly && r.include && places.length > 0 && (
                 <FromPick places={places} value={r.from} qty={r.qty} onChange={(v) => update(r.id, { from: v })} />
               )}
             </div>
