@@ -5,7 +5,7 @@ import { refreshInventory, useLayout, useMovements, useNeeds, usePolling, usePro
 import { useToast } from '../../ui/ToastContext'
 import { useConfirm } from '../../ui/ConfirmContext'
 import { api, apiBlob, ApiError } from '../../core/api'
-import { downloadBlob, fmtTime, outletIdsOf, refKey, stockSplit } from '../../core/utils'
+import { downloadBlob, outletIdsOf, refKey, stockSplit } from '../../core/utils'
 import Icon from '../../ui/Icon'
 import ResetSheet from './ResetSheet'
 import DocumentSheet, { DocumentsSheet } from '../documentos/DocumentSheet'
@@ -16,9 +16,9 @@ import MovementSheet, { pairOf } from '../inventario/MovementSheet'
 import PassingSection from '../despacho/Passing'
 import StoreStatus, { PhotoStoreStatus } from './StoreStatus'
 import { Count, Empty, PageHead, plural } from '../../ui/Bits'
+import MovesList, { lastGroupText } from './MovesList'
+import NeedsList from './NeedsList'
 
-const LABEL = { in: 'Entrada', out: 'Salida', set: 'Conteo', new: 'Registro nuevo', move: 'Traslado' }
-const qtyText = (m) => (m.type === 'out' ? `−${m.qty}` : m.type === 'set' ? `=${m.after}` : m.type === 'move' ? `↔${m.qty}` : `+${m.qty}`)
 const today = () => new Date().toISOString().slice(0, 10)
 
 export default function Summary() {
@@ -42,15 +42,13 @@ export default function Summary() {
   const [filter, setFilter] = useState('all')
   const { data: moves } = useMovements(filter)
   // los movimientos van plegados: se abren cuando se quieren ver (y se
-  // recuerda en este celular), de a 10
+  // recuerda en este celular), agrupados por referencia y tanda
   const [movesOpen, setMovesOpen] = useState(() => {
     try { return localStorage.getItem('bodega_resumen_movimientos') === 'abierto' } catch { return false }
   })
-  const [movesShown, setMovesShown] = useState(10)
   const toggleMoves = () => {
     const next = !movesOpen
     setMovesOpen(next)
-    setMovesShown(10)
     try { localStorage.setItem('bodega_resumen_movimientos', next ? 'abierto' : 'cerrado') } catch { /* sin almacenamiento */ }
   }
   const [resetting, setResetting] = useState(false)
@@ -126,7 +124,7 @@ export default function Summary() {
     <section className="page sum-page" aria-label="Resumen">
       <div className="page-inner">
         <PageHead title="Resumen" lede={date.charAt(0).toUpperCase() + date.slice(1)} />
-        <SummaryIndex onJump={(id) => { if (id === 'movimientos' && !movesOpen) { setMovesOpen(true); setMovesShown(10) } }} />
+        <SummaryIndex onJump={(id) => { if (id === 'movimientos' && !movesOpen) setMovesOpen(true) }} />
 
         <div className="kpis">
           <div className="kpi dark"><b>{products ? <Count value={kpi.units} /> : '–'}</b><span>prendas en bodega</span></div>
@@ -150,26 +148,7 @@ export default function Summary() {
           <div className="skeleton" />
         ) : needs.length ? (
           <>
-            <div className="card panel">
-              {needs.map((n) => (
-                <div className="need" key={n.product.sku}>
-                  <div className="need-t">
-                    <b>{n.product.name}{n.product.size ? ` · ${n.product.size}` : ''}</b>
-                    <small>Hay {n.product.qty} · mínimo {n.product.min_qty}{n.product.stock?.length ? ` · ${n.product.stock.map((s) => s.location_id).join(', ')}` : ''}</small>
-                    {n.in_reserve > 0 && (
-                      <button className="link-btn need-link" onClick={() => navigate('/reserve')}>
-                        <Icon name="reserve" size={14} stroke={2.2} />{n.in_reserve} en la reserva: traerlas
-                      </button>
-                    )}
-                  </div>
-                  {n.order_qty > 0 ? (
-                    <div className="need-q"><b>{n.order_qty}</b><span>pedir</span></div>
-                  ) : (
-                    <div className="need-q dark"><b>{Math.min(n.in_reserve, Math.max(1, n.product.min_qty * 2 - n.product.qty))}</b><span>traer</span></div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <NeedsList needs={needs} onReserve={() => navigate('/reserve')} />
             <div className="btn-row">
               <button className="btn btn-lime" onClick={copyOrder} disabled={!kpi.toOrder}><Icon name="copy" size={18} />Copiar pedido</button>
               <button className="btn btn-ghost" onClick={() => exportXlsx('/api/reports/pedido.xlsx', `pedido-${today()}.xlsx`)}><Icon name="download" size={18} />Descargar</button>
@@ -205,42 +184,26 @@ export default function Summary() {
             <Icon name="arrowRight" size={16} stroke={2.4} />
           </button>
         </h2>
-        {!movesOpen && moves?.[0] && (
-          <button type="button" className="move-last" onClick={toggleMoves}>
-            <span>Último: <b>{qtyText(moves[0])} {moves[0].product_name}{moves[0].product_size ? ` · ${moves[0].product_size}` : ''}</b></span>
-            <small>{moves[0].user_name} · {fmtTime(moves[0].created_at)}</small>
-          </button>
-        )}
+        {!movesOpen && moves?.[0] && (() => {
+          const last = lastGroupText(moves)
+          return (
+            <button type="button" className="move-last" onClick={toggleMoves}>
+              <span>Último: <b>{last.what}</b> · {last.sizes}</span>
+              <small>{last.meta}</small>
+            </button>
+          )
+        })()}
         {movesOpen && (
         <div id="movimientos-lista">
         <div className="chips" style={{ marginTop: 0 }} role="toolbar" aria-label="Filtrar movimientos">
           {[['all', 'Todo'], ['in', 'Entradas'], ['out', 'Salidas'], ['set', 'Conteos']].map(([f, label]) => (
-            <button key={f} className="chip" aria-pressed={filter === f} onClick={() => { setFilter(f); setMovesShown(10) }}>{label}</button>
+            <button key={f} className="chip" aria-pressed={filter === f} onClick={() => setFilter(f)}>{label}</button>
           ))}
         </div>
         {!moves ? (
           <div className="skeleton" />
         ) : moves.length ? (
-          <>
-          <ul className="moves card panel" style={{ marginTop: 8 }}>
-            {moves.slice(0, movesShown).map((m) => (
-              <li key={m.id} className={`move ${m.type} openable`} role="button" tabIndex={0} aria-label={`Ver el detalle: ${m.product_name}`}
-                  onClick={() => setMoveOpen(m)} onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), setMoveOpen(m))}>
-                <div className="move-q">{qtyText(m)}</div>
-                <div className="move-t">
-                  <b>{m.product_name}{m.product_size ? ` · ${m.product_size}` : ''}</b>
-                  <small>{m.note || LABEL[m.type] || m.type} · {m.type === 'move' ? `${m.location_id} → ${m.to_location_id}` : m.location_id} · {m.user_name}</small>
-                </div>
-                <time dateTime={m.created_at} title={new Date(m.created_at).toLocaleString('es-CO')}>{fmtTime(m.created_at)}</time>
-              </li>
-            ))}
-          </ul>
-          {moves.length > movesShown && (
-            <button type="button" className="link-btn see-all" onClick={() => setMovesShown((n) => n + 10)}>
-              Ver más ({moves.length - movesShown})<Icon name="arrowRight" size={14} stroke={2.4} />
-            </button>
-          )}
-          </>
+          <MovesList key={filter} moves={moves} onOpen={setMoveOpen} />
         ) : (
           <Empty icon="summary" title="Sin movimientos">Lo que se escanee o se ajuste aparece aquí, con quién lo hizo.</Empty>
         )}

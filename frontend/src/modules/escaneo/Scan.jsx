@@ -762,7 +762,7 @@ export default function Scan() {
         {session.length ? (
           <ul className="moves card panel">
             {session.map((m) => (
-              <li key={m.id} className={`move ${m.type}`}>
+              <li key={m.id} className={`move ${m.type === 'move' ? 't-move' : m.type}`}>
                 <div className="move-q">{qtyText(m)}</div>
                 <div className="move-t">
                   <b>{m.product_name}{m.product_size ? ` · ${m.product_size}` : ''}</b>
