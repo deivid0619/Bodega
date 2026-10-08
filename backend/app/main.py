@@ -12,6 +12,7 @@ from sqlalchemy.exc import OperationalError
 from app import models  # noqa: F401  (registra todas las tablas)
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
+from app.core.idempotency import Idempotency
 from app.core.migrations import backfill_stock, ensure_columns, purge_old_photos, remove_sample_product, table_bins
 from app.core.seed import seed
 from app.modules.auth import router as auth
@@ -74,6 +75,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Bodega API", version="1.0.0", lifespan=lifespan)
 
+# el mismo cambio no se guarda dos veces (lo que se registro sin señal se
+# reintenta); va por dentro de CORS para que la respuesta repetida tambien lleve
+# sus encabezados
+app.add_middleware(Idempotency)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,

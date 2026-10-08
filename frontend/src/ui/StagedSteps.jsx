@@ -60,6 +60,7 @@ export function useStagedSteps(describe = (sku) => sku) {
     setSaving(false)
     setDeltas({})
     if (failed) showToast(failed instanceof ApiError ? failed.message : 'No se pudo guardar todo. Revisa los números.', 'err')
+    else if (results.some((r) => r.queued)) showToast(`Sin señal: ${summary(list)} quedó guardado en el celular y se sube solo`)
     else showToast(`Guardado: ${summary(list)}`)
     return results
   }

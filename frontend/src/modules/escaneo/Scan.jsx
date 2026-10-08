@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, ApiError } from '../../core/api'
-import { moveStock, refreshInventory, setReserveQty, useLayout, useReserve } from '../../core/useApi'
+import { api, ApiError, isNetworkError } from '../../core/api'
+import { cachedProduct, moveStock, refreshInventory, setReserveQty, undoQueued, useLayout, useReserve } from '../../core/useApi'
 import { useToast } from '../../ui/ToastContext'
 import { useConfirm } from '../../ui/ConfirmContext'
 import { locationGroups } from '../../core/locationGroups'
@@ -109,6 +109,7 @@ function ScanHit({ hit, tally, onUndo }) {
           {!hit.pending && hit.type === 'in' && hit.inReserve > 0 && (
             <small className="vf-hit-warn">Hay {hit.inReserve} en la reserva: si vienen de allá, deshaz y envíalas desde Reserva</small>
           )}
+          {hit.queued && <small className="vf-hit-warn">Sin señal: quedó guardado en el celular y se sube solo</small>}
           {hit.label && <small>Etiqueta {hit.label} · se usó el código bueno {hit.sku}</small>}
           {hit.repeat && <small className="vf-hit-warn">Otra vez la misma prenda: ¿la contaste dos veces?</small>}
         </span>
@@ -143,7 +144,7 @@ export default function Scan() {
     setHit((prev) => ({
       id: res.movement.id, type: res.movement.type, qty: parts.reduce((s, m) => s + m.qty, 0), image: res.product.image_url,
       inReserve: reserveCheck ? reserveFor(res.product, rIndex).reduce((t, it) => t + it.qty, 0) : 0,
-      sku: res.product.sku, name: res.product.name, size: res.product.size, total: res.product.qty, at,
+      sku: res.product.sku, name: res.product.name, size: res.product.size, total: res.product.qty, at, queued: !!res.queued,
       repeat: !!prev && !prev.err && prev.sku === res.product.sku && at - prev.at < 8000,
     }))
   }
@@ -237,7 +238,14 @@ export default function Scan() {
       }
       if (staged) {
         // no se guarda nada todavia: solo se busca la prenda para la lista
-        const p = await api.get(`/api/products/${encodeURIComponent(sku)}`)
+        // (sin señal, en lo guardado en el celular)
+        let p
+        try {
+          p = await api.get(`/api/products/${encodeURIComponent(sku)}`)
+        } catch (err) {
+          p = isNetworkError(err) ? cachedProduct(sku) : null
+          if (!p) throw err
+        }
         beep(true)
         stage(p)
         // una etiqueta con el codigo mal ya corregida: se dice cual se uso
@@ -260,7 +268,8 @@ export default function Scan() {
         return
       }
       beep(false)
-      const msg = e instanceof ApiError ? e.message : 'No hay conexión con el servidor. Intenta otra vez.'
+      const msg = e instanceof ApiError && !isNetworkError(e) ? e.message
+        : 'Sin señal y ese código no está guardado en el celular: escanéalo cuando vuelva la señal.'
       setHit({ err: msg, at: Date.now() })
       showToast(msg, 'err')
     }
@@ -377,6 +386,7 @@ export default function Scan() {
     const entered = [] // lo que entro y lo que salio, para los avisos
     const left = []
     let units = 0
+    let offline = 0 // sin señal: quedaron en el celular
     for (const l of lines) {
       // una salida: primero de donde se eligio y, si ahi no alcanza, el resto de donde haya
       const parts = l.type === 'out' ? outParts(l.qty, l.loc || l.from || '', l) : [{ qty: l.qty, loc: l.loc }]
@@ -396,7 +406,9 @@ export default function Scan() {
             done += l.qty - take
           }
         } else for (const part of parts) {
-          record(await moveStock(l.sku, l.type, part.qty, part.loc || undefined))
+          const r = await moveStock(l.sku, l.type, part.qty, part.loc || undefined)
+          record(r)
+          if (r?.queued) offline += part.qty
           done += part.qty
         }
       } catch (e) {
@@ -423,7 +435,8 @@ export default function Scan() {
       kind: 'out', ids: notifyOut.ids, names: notifyOut.names,
       title: `Salieron ${plural(outUnits, 'prenda', 'prendas')}`, body: itemsText(left),
     }) : ''
-    if (!failed.length) showToast(`Guardado: ${plural(units, 'prenda', 'prendas')}${told}${toldOut}`)
+    if (!failed.length && offline) showToast(`Sin señal: ${plural(offline, 'prenda quedó guardada', 'prendas quedaron guardadas')} en el celular y se suben solas`)
+    else if (!failed.length) showToast(`Guardado: ${plural(units, 'prenda', 'prendas')}${told}${toldOut}`)
     else showToast(`${units ? `Se guardaron ${units}. ` : ''}${plural(failed.length, 'código no se pudo', 'códigos no se pudieron')} guardar: revisa la lista${told}${toldOut}`, 'err')
   }
 
@@ -487,6 +500,20 @@ export default function Scan() {
   }
 
   const undo = async (id) => {
+    if (String(id).startsWith('q-')) {
+      // todavia no se subia: se quita de la fila del celular
+      const mvq = session.find((m) => m.id === id)
+      if (mvq && undoQueued(mvq)) {
+        count([mvq], -1, mvq.before)
+        setSession((s) => s.filter((m) => m.id !== id))
+        if (lastMove?.movement?.id === id) setLastMove(null)
+        if (hit?.id === id) setHit(null)
+        showToast('Deshecho: no se va a subir')
+      } else {
+        showToast('Ya se subió: deshazlo desde Resumen › Movimientos.', 'err')
+      }
+      return
+    }
     try {
       const product = await api.post(`/api/movements/${id}/undo`)
       refreshInventory()

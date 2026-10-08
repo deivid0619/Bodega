@@ -6,17 +6,36 @@
 // cache al instante y el servidor confirma por detras; con el servidor lejos,
 // esperar cada respuesta hacia que todo se sintiera lento en el celular.
 // Con la app en segundo plano no se consulta nada.
+//
+// Sin señal: lo ultimo que dijo el servidor queda guardado (offline.js) y se
+// muestra al abrir; lo que se registra espera en outbox.js y se ve en la
+// pantalla encima de lo guardado hasta que se sube.
 import { useEffect, useReducer } from 'react'
-import { api, isViewOnly } from './api'
+import { api, isNetworkError, isViewOnly } from './api'
 import { useAuth } from './AuthContext'
+import { readCache, writeCache } from './offline'
+import * as outbox from './outbox'
 
 const store = new Map()
 let ownerToken = null
 let epoch = 0 // sube con cada cambio optimista: una respuesta vieja no lo pisa
 
 function entry(path) {
-  if (!store.has(path)) store.set(path, { data: null, json: '', error: null, subs: new Set(), refs: 0, timer: null, inflight: null })
+  if (!store.has(path)) {
+    // lo ultimo guardado en el celular, mientras llega lo del servidor (o si no hay señal)
+    const cached = readCache(path)
+    const data = cached ? withPending(path, cached) : null
+    store.set(path, { data, json: data ? JSON.stringify(data) : '', error: null, subs: new Set(), refs: 0, timer: null, inflight: null })
+  }
   return store.get(path)
+}
+
+// lo que se registro sin señal y todavia no se sube, encima de lo que dijo el servidor
+function withPending(path, data) {
+  if (!path.startsWith('/api/products') || !Array.isArray(data)) return data
+  const ops = outbox.pendingOps()
+  if (!ops.length) return data
+  return data.map((p) => ops.reduce((acc, op) => (op.sku === acc.sku ? applyLocally(acc, op.type, op.qty, op.location_id) : acc), p))
 }
 
 function set(e, data) {
@@ -34,7 +53,8 @@ function fetchPath(path) {
   e.inflight = api.get(path)
     .then((res) => {
       e.error = null
-      if (started === epoch) set(e, res)
+      writeCache(path, JSON.stringify(res)) // tal cual lo dijo el servidor
+      if (started === epoch) set(e, withPending(path, res))
     })
     .catch((err) => {
       e.error = err
@@ -185,6 +205,7 @@ async function confirm(sku, request) {
     const res = await enqueue(sku, request)
     const left = pendingBySku.get(sku) - 1
     pendingBySku.set(sku, left)
+    if (res?.queued) return res // sin señal: lo de la pantalla se queda y se sube solo
     // con varios toques seguidos, solo la ultima respuesta trae el estado final
     // (una etiqueta corregida responde con el codigo bueno: tambien ese)
     if (left === 0) mutate('/api/products', (list) => list.map((p) => (p.sku === sku || p.sku === res.product?.sku ? res.product : p)))
@@ -205,8 +226,70 @@ export function moveStock(sku, type, qty = 1, locationId) {
   return optimistic(
     sku,
     (p) => applyLocally(p, type, qty, locationId),
-    () => api.post('/api/movements', { sku, type, qty, ...(locationId ? { location_id: locationId } : {}) }),
+    () => postMovement({ sku, type, qty, ...(locationId ? { location_id: locationId } : {}) }),
   )
+}
+
+// La prenda como esta en la pantalla (lo guardado, con lo de sin señal)
+export function cachedProduct(sku) {
+  for (const [path, e] of store) {
+    if (!path.startsWith('/api/products') || !Array.isArray(e.data)) continue
+    const p = e.data.find((x) => x.sku === sku)
+    if (p) return p
+  }
+  return (readCache('/api/products') || []).find((x) => x.sku === sku) || null
+}
+
+const VERB = { in: 'Entrada', out: 'Salida', set: 'Conteo' }
+
+// Manda un movimiento; sin señal queda en la fila (se sube solo) y responde
+// como el servidor, con lo que se ve en la pantalla
+async function postMovement(body) {
+  const id = outbox.newId()
+  try {
+    return await api.post('/api/movements', body, { requestId: id })
+  } catch (err) {
+    if (!isNetworkError(err)) throw err
+    const p = cachedProduct(body.sku) || { sku: body.sku, name: body.sku, size: '', qty: 0, stock: [], location_id: body.location_id || '' }
+    const loc = body.location_id || p.location_id
+    outbox.enqueue({
+      id, path: '/api/movements', body,
+      label: `${VERB[body.type] || 'Movimiento'} ${body.type === 'set' ? `(quedan ${body.qty})` : body.qty} · ${p.name}${p.size ? ` ${p.size}` : ''} · ${loc}`,
+      op: { sku: body.sku, type: body.type, qty: body.qty, location_id: body.location_id },
+    })
+    const delta = body.type === 'in' ? body.qty : body.type === 'out' ? -body.qty : 0
+    return {
+      queued: true,
+      product: p,
+      movement: {
+        id: `q-${id}`, queued: true, sku: p.sku, type: body.type, qty: body.qty, before: p.qty - delta, after: p.qty,
+        location_id: loc, location_name: loc, to_location_id: null, note: 'Sin señal: se sube solo',
+        product_name: p.name, product_size: p.size || '', user_name: '', created_at: new Date().toISOString(),
+      },
+    }
+  }
+}
+
+// Se quito algo de la fila (sin subirlo): la pantalla vuelve a lo guardado
+// con lo que sigue pendiente
+export function redrawPending() {
+  for (const [path, e] of store) {
+    if (!path.startsWith('/api/products')) continue
+    const cached = readCache(path)
+    if (cached) set(e, withPending(path, cached))
+    else if (e.refs > 0) fetchPath(path)
+  }
+}
+
+// "Deshacer" de algo que todavia no se subio: se quita de la fila
+export function undoQueued(movement) {
+  const id = String(movement.id).slice(2)
+  if (!outbox.isPending(id)) return false
+  outbox.discard(id)
+  const back = movement.type === 'in' ? 'out' : movement.type === 'out' ? 'in' : null
+  if (back) mutate('/api/products', (list) => list.map((p) => (p.sku === movement.sku ? applyLocally(p, back, movement.qty, movement.location_id) : p)))
+  else revalidate('/api/products')
+  return true
 }
 
 // Toques seguidos en + / − de un mismo codigo y ubicacion se juntan en un
@@ -243,7 +326,7 @@ async function flushBump(key, sku, locationId) {
   }
   const body = { sku, type: b.net > 0 ? 'in' : 'out', qty: Math.abs(b.net), ...(locationId ? { location_id: locationId } : {}) }
   try {
-    const res = await confirm(sku, () => api.post('/api/movements', body))
+    const res = await confirm(sku, () => postMovement(body))
     b.waiters.forEach((w) => w.resolve(res))
   } catch (err) {
     b.waiters.forEach((w) => w.reject(err))
@@ -284,3 +367,6 @@ export function refreshInventory() {
   revalidate('/api/reserve')
   revalidate('/api/reports/dispatch') // lo que esta en Despacho esperando salir
 }
+
+// lo que se registro sin señal ya se subio: lo de la pantalla, del servidor
+outbox.onSynced(() => refreshInventory())

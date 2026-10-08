@@ -32,11 +32,14 @@ class ApiError extends Error {
   }
 }
 
-async function request(path, { method = 'GET', body, isForm } = {}) {
+// requestId: la llave del cambio (X-Request-Id). Si se reintenta con la misma
+// (lo que se registro sin señal), el servidor no lo aplica dos veces.
+async function request(path, { method = 'GET', body, isForm, requestId } = {}) {
   if (blocked(method, path)) throw new ApiError(VIEW_ONLY, 403)
   const headers = {}
   if (!isForm && body !== undefined) headers['Content-Type'] = 'application/json'
   if (authToken) headers['Authorization'] = `Bearer ${authToken}`
+  if (requestId) headers['X-Request-Id'] = requestId
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -90,10 +93,14 @@ export const apiBlob = async (path) => (await raw(path)).blob()
 
 export const api = {
   get: (path) => request(path),
-  post: (path, body) => request(path, { method: 'POST', body: body ?? {} }),
+  post: (path, body, opts) => request(path, { method: 'POST', body: body ?? {}, ...opts }),
   patch: (path, body) => request(path, { method: 'PATCH', body }),
   put: (path, body) => request(path, { method: 'PUT', body }),
   delete: (path) => request(path, { method: 'DELETE' }),
 }
 
 export { ApiError }
+
+// sin señal (o el servidor no responde): lo que se registra puede esperar en
+// el celular y subirse despues
+export const isNetworkError = (e) => e instanceof TypeError || (e instanceof ApiError && e.status >= 502 && e.status <= 504)

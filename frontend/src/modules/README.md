@@ -4,10 +4,12 @@
 src/
   main.jsx, App.jsx   arranque y rutas de la app
   core/               lo común: api (sesión y llamadas), AuthContext, useApi (caché y
-                      sondeo), utils, locationGroups, motion, install, feedback
+                      sondeo), utils, locationGroups, motion, install, feedback,
+                      offline (lo último que se vio, guardado para abrir sin señal) y
+                      outbox (lo que se registra sin señal y se sube solo después)
   ui/                 piezas de pantalla compartidas: Sheet, Icon, Bits, Modal,
                       ToastContext, ConfirmContext, NavBar, LocationPicker, PhotoCrop,
-                      PhotoZoom, StagedSteps, FromPick, NearPick
+                      PhotoZoom, StagedSteps, FromPick, NearPick, OfflineBar
   modules/<modulo>/   cada parte de la app con sus pantallas y su lógica
   styles/global.css   estilos generales (cada módulo puede traer los suyos)
 ```

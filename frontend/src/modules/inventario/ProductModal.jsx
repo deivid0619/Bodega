@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, ApiError } from '../../core/api'
+import { api, ApiError, isNetworkError } from '../../core/api'
 import { useAuth } from '../../core/AuthContext'
 import { useToast } from '../../ui/ToastContext'
 import { useConfirm } from '../../ui/ConfirmContext'
-import { useLayout, useReserve } from '../../core/useApi'
+import { cachedProduct, useLayout, useReserve } from '../../core/useApi'
 import { outletIdsOf, reserveIndex, stockSplit } from '../../core/utils'
 import Sheet, { SheetHeader, useSheet } from '../../ui/Sheet'
 import MoveSheet from './MoveSheet'
@@ -33,12 +33,18 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
   const [moving, setMoving] = useState(null)
 
   useEffect(() => {
+    const show = (p) => {
+      setProduct(p)
+      setForm({ name: p.name, size: p.size, min_qty: p.min_qty, location_id: p.location_id })
+    }
     api.get(`/api/products/${encodeURIComponent(sku)}`)
-      .then((p) => {
-        setProduct(p)
-        setForm({ name: p.name, size: p.size, min_qty: p.min_qty, location_id: p.location_id })
+      .then(show)
+      .catch((e) => {
+        // sin señal: como quedo guardada en el celular
+        const cached = isNetworkError(e) && cachedProduct(sku)
+        if (cached) show(cached)
+        else showToast('No se pudo cargar ese código.', 'err')
       })
-      .catch(() => showToast('No se pudo cargar ese código.', 'err'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sku])
 

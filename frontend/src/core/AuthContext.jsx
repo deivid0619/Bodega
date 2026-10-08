@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { api, setAuthToken, setUnauthorizedHandler, setViewOnly } from './api'
+import { api, isNetworkError, setAuthToken, setUnauthorizedHandler, setViewOnly } from './api'
+import { clearCache, readUser, writeUser } from './offline'
 
 const AuthContext = createContext(null)
 const STORAGE_KEY = 'bodega_token'
@@ -36,6 +37,7 @@ export function AuthProvider({ children }) {
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY)
+    clearCache() // nada de esta cuenta queda guardado en el celular
     if (SKIP_AUTH) return // sin login no hay de donde salir
     setAuthToken(null)
     setViewOnly(false)
@@ -49,6 +51,7 @@ export function AuthProvider({ children }) {
     setViewOnly(data.user?.role === 'viewer')
     setToken(data.access_token)
     setUser(data.user)
+    writeUser(data.user)
   }, [])
 
   const enterView = useCallback(async (key, welcome = true) => {
@@ -103,11 +106,20 @@ export function AuthProvider({ children }) {
       setReady(true)
       return
     }
-    api
+    const me = () => api
       .get('/api/auth/me')
-      .then(setUser)
-      .catch(() => expired())
-      .finally(() => setReady(true))
+      .then((u) => {
+        setUser(u)
+        writeUser(u)
+      })
+      .catch((e) => {
+        // sin señal no se cierra la sesion: se sigue con el usuario guardado
+        if (isNetworkError(e)) setUser((cur) => cur || readUser() || { name: '', role: 'operator' })
+        else expired()
+      })
+    me().finally(() => setReady(true))
+    window.addEventListener('online', me) // al volver la señal, se confirma
+    return () => window.removeEventListener('online', me)
   }, [token, expired])
 
   // se abrio un enlace para ver (la llave sale de la direccion), o hay uno

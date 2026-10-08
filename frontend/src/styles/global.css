@@ -1213,3 +1213,11 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .bc-sel{margin-top:8px}
 .bc-agenda-day .h-sec{margin-top:18px}
 @media (hover:hover) and (pointer:fine){.bc-doc:hover{filter:brightness(.94)}}
+
+/* sin señal: la barra de arriba (sin señal, cambios por subir, lo que fallo) */
+.offline-bar{flex:none;position:relative;z-index:24;display:flex;align-items:center;gap:8px;width:100%;min-height:38px;padding:7px 16px;font:700 13px/1.25 var(--font);text-align:left}
+.offline-bar span{flex:1;min-width:0}
+.offline-bar small{flex:none;font-weight:700;text-decoration:underline;text-underline-offset:2px}
+.offline-bar.off{background:var(--amber-soft);color:#7A3606}
+.offline-bar.sync{background:var(--lime-soft);color:var(--ink)}
+.offline-bar.err{background:var(--red-soft);color:var(--red)}

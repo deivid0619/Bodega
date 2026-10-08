@@ -3,6 +3,7 @@ import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { WELCOME, useAuth } from './core/AuthContext'
 import NavBar from './ui/NavBar'
 import NotificationBell from './modules/avisos/NotificationBell'
+import OfflineBar from './ui/OfflineBar'
 import Icon, { BrandMark } from './ui/Icon'
 import Sheet, { SheetHeader } from './ui/Sheet'
 import { useMovementNotifications } from './modules/avisos/useMovementNotifications'
@@ -122,6 +123,7 @@ function Shell() {
           <AccountMenu />
         </div>
       </header>
+      <OfflineBar />
       <main>
         <Routes>
           <Route path="/" element={<Suspense fallback={<div className="page full wh" />}><Warehouse /></Suspense>} />
