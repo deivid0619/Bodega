@@ -210,7 +210,8 @@ function PedidoStep({ onSaved, onBack }) {
         title="Armar pedido"
         subtitle="Escanea o busca lo que vas empacando. Al terminar, toca “Pedido empacado” y se descuenta todo junto."
       />
-      <ScanBox onCode={onCode} flash={flash} hint="Cada etiqueta suma una. Con un lector USB o Bluetooth: toca el campo y escanea." />
+      {/* una a la vez: lee una prenda y espera a que toques "Escanear siguiente" */}
+      <ScanBox single onCode={onCode} flash={flash} hint="Escanea una prenda y toca «Escanear siguiente» para la próxima. Con un lector USB o Bluetooth: toca el campo y escanea." />
       <div style={{ marginTop: 14 }}>
         <SearchField value={q} onChange={setQ} placeholder="O busca la referencia o el código" />
         {found.length > 0 && (

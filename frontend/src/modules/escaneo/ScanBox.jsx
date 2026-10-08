@@ -7,8 +7,10 @@ import Icon from '../../ui/Icon'
 // codigo a mano o con un lector USB/Bluetooth, y lo ultimo que se leyo
 // encima del visor. Cada lectura llama a onCode con el codigo.
 // flash: { text, err, at } (lo que se acaba de leer)
-export default function ScanBox({ onCode, flash, hint }) {
-  const scanner = useBarcodeScanner(onCode)
+// single: una prenda a la vez (despues de cada lectura la camara espera a que
+// se toque "Escanear siguiente")
+export default function ScanBox({ onCode, flash, hint, single = false }) {
+  const scanner = useBarcodeScanner(onCode, { single })
   const { stop, start, status } = scanner
   const [manual, setManual] = useState('')
   const camOn = status === 'on'
