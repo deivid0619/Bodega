@@ -1275,3 +1275,17 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 /* Mover prendas: a otra ubicacion o a la reserva */
 .move-dest{margin-bottom:8px}
 .move-dest button{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+/* Reserva: "Para llevar a la bodega" contraido y el buscador de lo guardado */
+.res-tasks-head{width:100%;display:flex;align-items:center;gap:12px;margin-top:18px;padding:14px 16px;text-align:left;transition:transform 160ms var(--ease-out)}
+.res-tasks-head:active{transform:scale(.99)}
+.res-tasks-t{flex:1;min-width:0}
+.res-tasks-t b{display:block;font-size:15px;font-weight:800;letter-spacing:-.01em}
+.res-tasks-t b small{margin-left:6px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.res-tasks-t > small{display:block;margin-top:3px;font-size:12.5px;color:var(--graphite);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res-tasks-head.open .res-tasks-t > small{white-space:normal}
+.res-tasks-chev{flex:none;color:var(--muted);transition:transform 200ms var(--ease-out)}
+.res-tasks-head.open .res-tasks-chev{transform:rotate(90deg)}
+.res-tasks{margin-top:10px}
+.res-search{margin:2px 0 10px}
+.res-found{margin:-4px 0 8px}
+@media (prefers-reduced-motion:reduce){.res-tasks-chev{transition:none}}

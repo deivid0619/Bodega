@@ -8,8 +8,11 @@ import { locationGroups } from '../../core/locationGroups'
 import NewReserveModal from './NewReserveModal'
 import ReserveTransferModal from './ReserveTransferModal'
 import Icon from '../../ui/Icon'
-import { Count, Empty, PageHead, ProductThumb, Stepper, plural } from '../../ui/Bits'
+import { Count, Empty, PageHead, ProductThumb, SearchField, Stepper, plural } from '../../ui/Bits'
 import { StagedBar, changedLabel, useStagedSteps } from '../../ui/StagedSteps'
+
+// para buscar sin tildes ni mayusculas
+const fold = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase()
 
 // Una talla agotada o en su minimo en la bodega que tiene prendas en la
 // reserva: se lleva con un toque a su ubicacion principal.
@@ -86,6 +89,19 @@ export default function Reserve() {
   const tasks = (restock || []).filter((t) => !done.has(`${t.product.sku}:${t.product.qty}`))
 
   const zeros = (items || []).filter((i) => i.qty <= 0)
+
+  // "Para llevar a la bodega" va contraido: una linea con el resumen y se abre al tocarla
+  const [tasksOpen, setTasksOpen] = useState(false)
+  const taskUnits = tasks.reduce((t, x) => t + (x.suggest || 0), 0)
+  const taskNames = [...new Set(tasks.map((t) => `${t.product.name}${t.product.size ? ` ${t.product.size}` : ''}`))]
+
+  // buscar en lo guardado: por la referencia, la talla o el codigo (palabras en cualquier orden)
+  const [q, setQ] = useState('')
+  const words = fold(q).split(/\s+/).filter(Boolean)
+  const shownItems = (items || []).filter((i) => {
+    const hay = fold(`${i.name} ${i.size || ''} ${i.sku || ''}`)
+    return words.every((w) => hay.includes(w))
+  })
 
   // los + y − de cada una no se guardan al tocarlos: se guardan con "Guardar"
   // (un toque sin querer no suma ni resta nada)
@@ -167,9 +183,15 @@ export default function Reserve() {
 
         {tasks.length > 0 && (
           <>
-            <h2 className="h-sec">Para llevar a la bodega <small>{plural(tasks.length, 'talla', 'tallas')}</small></h2>
-            <p className="mode-hint" style={{ margin: '-4px 0 10px' }}>Están agotadas o en su mínimo en la bodega y aquí hay guardadas.</p>
-            <div className="list">
+            <button type="button" className={`card res-tasks-head${tasksOpen ? ' open' : ''}`} aria-expanded={tasksOpen} onClick={() => setTasksOpen((v) => !v)}>
+              <span className="res-tasks-t">
+                <b>Para llevar a la bodega <small>{plural(tasks.length, 'talla', 'tallas')}{taskUnits ? ` · ${plural(taskUnits, 'prenda', 'prendas')}` : ''}</small></b>
+                <small>{tasksOpen ? 'Están agotadas o en su mínimo en la bodega y aquí hay guardadas.'
+                  : `${taskNames.slice(0, 2).join(', ')}${taskNames.length > 2 ? ` y ${taskNames.length - 2} más` : ''}`}</small>
+              </span>
+              <Icon name="arrowRight" size={18} stroke={2.4} className="res-tasks-chev" />
+            </button>
+            {tasksOpen && <div className="list res-tasks">
               {tasks.map((t) => (
                 <RestockCard
                   key={`${t.reserve.id}-${t.product.sku}`}
@@ -177,7 +199,7 @@ export default function Reserve() {
                   onDone={() => setDone((s) => new Set(s).add(`${t.product.sku}:${t.product.qty}`))}
                 />
               ))}
-            </div>
+            </div>}
           </>
         )}
 
@@ -201,6 +223,12 @@ export default function Reserve() {
         )}
 
         <h2 className="h-sec">Lo que hay guardado</h2>
+        {items?.length > 0 && (
+          <SearchField value={q} onChange={setQ} placeholder="Buscar referencia, talla o código" className="res-search" aria-label="Buscar en la reserva" />
+        )}
+        {words.length > 0 && shownItems.length > 0 && (
+          <p className="mode-hint res-found">{shownItems.length === items.length ? 'Todas coinciden' : `${shownItems.length} de ${items.length}`}</p>
+        )}
         {zeros.length > 1 && (
           <div className="res-zeros">
             <span>{plural(zeros.length, 'referencia se acabó', 'referencias se acabaron')} (en 0)</span>
@@ -212,8 +240,10 @@ export default function Reserve() {
         <div className="list">
           {!items ? (
             [0, 1].map((i) => <div key={i} className="skeleton" />)
+          ) : items.length && !shownItems.length ? (
+            <Empty icon="search" title="Nada coincide">No hay nada guardado con «{q.trim()}». Prueba con otra palabra.</Empty>
           ) : items.length ? (
-            items.map((item) => {
+            shownItems.map((item) => {
               const d = staged.delta(String(item.id))
               const shown = item.qty + d
               return (
