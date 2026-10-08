@@ -13,7 +13,7 @@ from app import models  # noqa: F401  (registra todas las tablas)
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.idempotency import Idempotency
-from app.core.migrations import backfill_stock, ensure_columns, purge_old_photos, remove_sample_product, table_bins, table_bins_nine
+from app.core.migrations import backfill_stock, ensure_columns, purge_old_photos, remove_sample_product, table_bins, table_sides
 from app.core.seed import seed
 from app.modules.auth import router as auth
 from app.modules.avisos import router as avisos, router_push as avisos_push
@@ -62,7 +62,7 @@ async def lifespan(app: FastAPI):
         seed(db)
         backfill_stock(db)
         table_bins(db)
-        table_bins_nine(db)
+        table_sides(db)
         remove_sample_product(db)
         try:
             purge_old_photos(db)  # las fotos de mas de dos meses

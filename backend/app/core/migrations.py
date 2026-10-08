@@ -55,16 +55,15 @@ def purge_old_photos(db: Session) -> int:
 
 def table_bins(db: Session) -> None:
     """2026-10-05: las canastas debajo de la mesa blanca tambien guardan
-    prendas (9: una fila de 3 pilas de 3 al frente; al principio se puso 18).
-    Se aplica una sola vez a la distribucion que ya existe; si despues se
-    cambia en el editor, no se vuelve a tocar."""
+    prendas (18: 6 pilas de 3). Se aplica una sola vez a la distribucion que
+    ya existe; si despues se cambia en el editor, no se vuelve a tocar."""
     key = "layout_mesa_18_canastas"
     if db.get(models.AppSetting, key):
         return
     tables = db.query(models.Element).filter(models.Element.type == "table").all()
     if len(tables) == 1 and not (tables[0].params or {}).get("bins"):
         table = tables[0]
-        table.params = {**(table.params or {}), "bins": 9}
+        table.params = {**(table.params or {}), "bins": 18}
         if not table.code:
             used = {e.code for e in db.query(models.Element).all() if e.code}
             table.code = next((c for c in "MNOPQRSTUVWXYZ" if c not in used), "M2")
@@ -72,37 +71,23 @@ def table_bins(db: Session) -> None:
     db.commit()
 
 
-def table_bins_nine(db: Session) -> None:
-    """2026-10-08: la mesa del medio tiene 9 canastas (una fila de 3 pilas al
-    frente, atras libre), no 18, y su frente mira hacia donde se ve la bodega
-    (estaba al reves: girada 180). Una sola vez: si sigue sin girar, se gira;
-    si sigue con las 18 de antes y las pilas 4 a 6 estan vacias, queda con 9
-    (M-1-1 ... M-3-3 siguen siendo las mismas). Si alguna de esas tiene
-    prendas no se toca: se mueven y se cambia en el editor ("Canastas
-    debajo")."""
-    key = "layout_mesa_9_canastas"
+def table_sides(db: Session) -> None:
+    """2026-10-08: la mesa del medio son 18 canastas, 6 pilas de 3 en dos filas
+    de 3 con las esquinas compartidas: los lados de 3 pilas miran a las
+    estanterias D-E (M-x-1 a M-x-3) y A-B (M-x-4 a M-x-6), los de 2 a C y a
+    G-H-I. Estaba girada 90 (los lados de 3 miraban a C y G-H-I) y un arreglo
+    de esa manana la dejo en 9: se corrige una sola vez, si sigue como la dejo
+    la app (sin cambios en el editor). Las canastas M-x-1 a M-x-3 y lo que
+    tengan siguen iguales; las M-x-4 a M-x-6 vuelven (vacias)."""
+    key = "layout_mesa_lados"
     if db.get(models.AppSetting, key):
         return
     tables = db.query(models.Element).filter(models.Element.type == "table").all()
-    if len(tables) == 1 and not tables[0].rot:
-        tables[0].rot = 2
-    if len(tables) == 1 and (tables[0].params or {}).get("bins") == 18 and tables[0].code:
+    if len(tables) == 1:
         table = tables[0]
-        extra = [f"{table.code}-{level}-{pile}" for level in (1, 2, 3) for pile in (4, 5, 6)]
-        busy = db.query(models.Stock).filter(models.Stock.location_id.in_(extra), models.Stock.qty > 0).first()
-        if not busy:
-            table.params = {**(table.params or {}), "bins": 9}
-            # una prenda cuya ubicacion principal era una de esas (sin prendas
-            # ahi) pasa a donde tenga mas; si no tiene en ningun lado, a la de
-            # su mismo nivel en la pila 3
-            for p in db.query(models.Product).filter(models.Product.location_id.in_(extra)).all():
-                rows = db.query(models.Stock).filter(models.Stock.sku == p.sku, models.Stock.qty > 0).all()
-                p.location_id = (max(rows, key=lambda r: r.qty).location_id if rows
-                                 else f"{table.code}-{p.location_id.split('-')[1]}-3")
-            # lo anotado de paso que estuviera en esas canastas pasa a Despacho
-            for parcel in db.query(models.Parcel).filter(models.Parcel.done_at.is_(None),
-                                                         models.Parcel.location_id.in_(extra)).all():
-                parcel.location_id = "DESPACHO"
+        if ((table.params or {}).get("bins"), table.rot or 0) in {(9, 2), (18, 2), (18, 0)}:
+            table.params = {**(table.params or {}), "bins": 18}
+            table.rot = 3
     db.add(models.AppSetting(key=key, value="hecho"))
     db.commit()
 
