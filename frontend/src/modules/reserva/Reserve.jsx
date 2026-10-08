@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError } from '../../core/api'
 import { mutate, refreshInventory, revalidate, setReserveQty, useLayout, usePolling, useReserve, useRestock } from '../../core/useApi'
@@ -9,6 +9,7 @@ import NewReserveModal from './NewReserveModal'
 import ReserveTransferModal from './ReserveTransferModal'
 import Icon from '../../ui/Icon'
 import { Count, Empty, PageHead, ProductThumb, Stepper, plural } from '../../ui/Bits'
+import { StagedBar, changedLabel, useStagedSteps } from '../../ui/StagedSteps'
 
 // Una talla agotada o en su minimo en la bodega que tiene prendas en la
 // reserva: se lleva con un toque a su ubicacion principal.
@@ -86,6 +87,23 @@ export default function Reserve() {
 
   const zeros = (items || []).filter((i) => i.qty <= 0)
 
+  // los + y − de cada una no se guardan al tocarlos: se guardan con "Guardar"
+  // (un toque sin querer no suma ni resta nada)
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const byId = (id) => (itemsRef.current || []).find((i) => String(i.id) === id)
+  const staged = useStagedSteps(
+    (id) => {
+      const i = byId(id)
+      return i ? `${i.name}${i.size ? ` · ${i.size}` : ''}` : 'reserva'
+    },
+    (id, _loc, d) => {
+      const i = byId(id)
+      if (!i) throw new Error('Esa ya no está en la reserva.')
+      return setReserveQty(i, Math.max(0, i.qty + d))
+    },
+  )
+
   // quitar una de la lista (con Deshacer, por si fue sin querer)
   const remove = async (item) => {
     const ok = await confirm({
@@ -96,6 +114,7 @@ export default function Reserve() {
       confirmLabel: 'Sí, quitar',
     })
     if (!ok) return
+    staged.forget(String(item.id))
     mutate('/api/reserve', (list) => list.filter((i) => i.id !== item.id))
     try {
       await api.delete(`/api/reserve/${item.id}`)
@@ -136,22 +155,8 @@ export default function Reserve() {
     revalidate('/api/reserve')
   }
 
-  const bump = async (item, delta) => {
-    const next = item.qty + delta
-    if (next < 0) return
-    try {
-      await setReserveQty(item, next)
-      // se acabo: se ofrece quitarla de la lista
-      if (next === 0) {
-        showToast(`${item.name}${item.size ? ` ${item.size}` : ''} quedó en 0`, 'ok', { label: 'Quitarla', onClick: () => remove({ ...item, qty: 0 }) })
-      }
-    } catch (e) {
-      showToast(e instanceof ApiError ? e.message : 'No se pudo ajustar.', 'err')
-    }
-  }
-
   return (
-    <section className="page" aria-label="Bodega de reserva">
+    <section className={`page${staged.changes.length ? ' has-staged' : ''}`} aria-label="Bodega de reserva">
       <div className="page-inner">
         <PageHead title="Reserva" lede="Mercancía guardada aparte. De aquí se surte la bodega principal." />
 
@@ -208,7 +213,10 @@ export default function Reserve() {
           {!items ? (
             [0, 1].map((i) => <div key={i} className="skeleton" />)
           ) : items.length ? (
-            items.map((item) => (
+            items.map((item) => {
+              const d = staged.delta(String(item.id))
+              const shown = item.qty + d
+              return (
               <article className={`card res-card ${item.qty <= 0 ? 'empty' : ''}`} key={item.id}>
                 <ProductThumb size="sm" src={item.image_url} alt={item.name} />
                 <div style={{ minWidth: 0 }}>
@@ -223,8 +231,11 @@ export default function Reserve() {
                   <Icon name="trash" size={18} stroke={1.9} />
                 </button>
                 <div className="res-actions">
-                  <Stepper value={item.qty} onMinus={() => bump(item, -1)} onPlus={() => bump(item, 1)} disabledMinus={item.qty === 0} />
-                  {item.qty > 0 ? (
+                  <Stepper value={shown} changed={!!d} onMinus={() => staged.step(String(item.id), '', -1)} onPlus={() => staged.step(String(item.id), '', 1)}
+                           minusLabel="Una menos (se guarda con Guardar)" plusLabel="Una más (se guarda con Guardar)" disabledMinus={shown <= 0} />
+                  {d !== 0 ? (
+                    <small className="stepper-was">{changedLabel(d)} · antes {item.qty}</small>
+                  ) : item.qty > 0 ? (
                     <button className="btn btn-ink btn-sm" onClick={() => setSending(item)}>
                       Sacar<Icon name="arrowRight" size={17} stroke={2.2} />
                     </button>
@@ -235,13 +246,15 @@ export default function Reserve() {
                   )}
                 </div>
               </article>
-            ))
+              )
+            })
           ) : (
             <Empty icon="reserve" title="La reserva está vacía">Agrega la mercancía que tengas guardada aparte para no perderle el rastro.</Empty>
           )}
         </div>
       </div>
 
+      <StagedBar staged={staged} floating />
       {adding && <NewReserveModal onClose={() => setAdding(false)} onCreated={refreshInventory} />}
       {sending && layout && (
         <ReserveTransferModal item={sending} locations={groups} onClose={() => setSending(null)} onDone={refreshInventory} />
