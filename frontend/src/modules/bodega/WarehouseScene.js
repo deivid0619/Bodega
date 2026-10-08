@@ -894,14 +894,16 @@ export class WarehouseScene {
     const mat = this.mat, ch = BH * 0.98
     const levels = Math.max(...slots.map((l) => l.level))
     const piles = Math.max(...slots.map((l) => l.pile))
-    // la mitad de las pilas al frente y la otra mitad atras
-    const front = piles > 1 ? Math.ceil(piles / 2) : 1
-    const back = piles - front
+    // como en la bodega: una fila de pilas pegada al frente de la mesa (las
+    // de las puntas son tambien los costados) y atras libre. Si hay mas pilas
+    // de las que caben a lo largo, las demas van en filas hacia atras.
+    const perRow = Math.max(1, Math.min(piles, Math.floor((W + 0.02) / BW)))
+    const front = perRow
     const spot = (pile) => {
-      const isBack = pile > front
-      const row = isBack ? back : front
-      const j = isBack ? pile - front - 1 : pile - 1
-      return { x: -((row - 1) / 2) * BW + j * BW, z: back ? (isBack ? -BD / 2 : BD / 2) : 0, isBack }
+      const r = Math.floor((pile - 1) / perRow)
+      const j = (pile - 1) % perRow
+      const inRow = Math.min(perRow, piles - r * perRow)
+      return { x: -((inRow - 1) / 2) * BW + j * BW, z: D / 2 - BD / 2 - r * BD, isBack: r > 0 }
     }
     const crates = this._inst(this.geo.crate, mat.crate, slots.length, g)
     const rims = this._inst(this.geo.crateRim, mat.crateRim, slots.length, g)

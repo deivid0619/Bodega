@@ -300,8 +300,9 @@ DEFAULT_LAYOUT = [
     {"id": "e7", "type": "bins", "code": "G", "x": -1.2, "z": -3.24, "rot": 0, "y0": 1.4, "params": {"cols": 5, "rows": 1}},
     {"id": "e8", "type": "bins", "code": "H", "x": -1.2, "z": -3.24, "rot": 0, "y0": 0.7, "params": {"cols": 10, "rows": 1}},
     {"id": "e9", "type": "bins", "code": "I", "x": -1.2, "z": -3.24, "rot": 0, "y0": 0, "params": {"cols": 5, "rows": 1}},
-    # debajo de la mesa blanca: 18 canastas (6 pilas de 3)
-    {"id": "e10", "type": "table", "code": "M", "x": 0, "z": 0, "rot": 0, "y0": 0, "params": {"w": 1.3, "bins": 18}},
+    # debajo de la mesa blanca: 9 canastas (una fila de 3 pilas de 3, al frente;
+    # girada para que el frente mire hacia donde se ve la bodega)
+    {"id": "e10", "type": "table", "code": "M", "x": 0, "z": 0, "rot": 2, "y0": 0, "params": {"w": 1.3, "bins": 9}},
 ]
 DEFAULT_ROOM = {"width": 8.4, "depth": 7.0}
 
