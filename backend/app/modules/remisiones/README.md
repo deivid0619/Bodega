@@ -10,7 +10,7 @@ Registra la mercancía que llega de un proveedor con su remisión (el papel), ya
 1. Se toma la foto del papel (opcional) y se recorta.
 2. Se agrega lo que llegó, referencia por referencia y talla por talla. Se puede escanear la etiqueta, buscar en la bodega o en la tienda en línea, o escribirlo.
 3. Se elige **dónde queda**:
-   - **Bodega:** cada referencia en su ubicación. Una talla se puede repartir, por ejemplo 5 a la bodega y 15 a la reserva.
+   - **Bodega:** cada referencia en su ubicación. Una talla se puede repartir en varias ubicaciones y la reserva, con una línea por cada una: por ejemplo, de 45 riñoneras, 15 a C-1-1, 15 a C-1-2, 10 a C-2-1 y 5 a la reserva.
    - **Reserva:** todo queda guardado aparte.
    - **De paso (despacho):** llega solo para despacharse en unos días.
    - **Registro:** solo se guarda el papel; lo que llegó ya se había entrado escaneando y no se suma otra vez.

@@ -130,3 +130,48 @@ def test_remision_enters_counted_stock_once():
         assert "No entró nada" in r.json()["detail"]
         assert _qty(client, h, "REM-S") == 6
         assert client.get("/api/products/REM-NUEVA", headers=h).status_code == 404
+
+
+def test_remision_split_across_locations():
+    """Lo que llego se reparte: 45 rinoneras nuevas en tres canastas y la
+    reserva; una talla ya registrada, en dos canastas. Cada parte queda en la
+    suya y el documento las guarda por separado."""
+    import uuid
+
+    with TestClient(app) as client:
+        h = _h(client)
+        tag = uuid.uuid4().hex[:6].upper()
+        new, old = f"RIN-{tag}", f"RIN-{tag}-M"
+        r = client.post("/api/products", headers=h, json={"sku": old, "name": f"BOLSO PRUEBA {tag}", "size": "M", "location_id": "F-1-1", "qty": 1})
+        assert r.status_code == 201, r.text
+        ref = f"RINONERA PRUEBA {tag}"
+        body = {"number": f"REP {tag}", "destination": "bodega", "lines": [
+            {"name": ref, "size": "", "sku": new, "qty": 15, "location_id": "F-6-1"},
+            {"name": ref, "size": "", "sku": new, "qty": 15, "location_id": "F-7-1"},
+            {"name": ref, "size": "", "sku": new, "qty": 10, "location_id": "F-8-1"},
+            {"name": ref, "size": "", "sku": new, "qty": 5, "to_reserve": True},
+            {"name": f"BOLSO PRUEBA {tag}", "size": "M", "sku": old, "qty": 2, "location_id": "F-6-1"},
+            {"name": f"BOLSO PRUEBA {tag}", "size": "M", "sku": old, "qty": 3},  # el resto: a su ubicacion
+        ]}
+        r = client.post("/api/documents/remision", headers=h, json=body)
+        assert r.status_code == 201, r.text
+        doc = r.json()["document"]
+        assert doc["units"] == 50
+
+        p = client.get(f"/api/products/{new}", headers=h).json()
+        assert p["qty"] == 40
+        assert sorted((s["location_id"], s["qty"]) for s in p["stock"]) == [("F-6-1", 15), ("F-7-1", 15), ("F-8-1", 10)]
+        reserve = [i for i in client.get("/api/reserve", headers=h).json() if i["sku"] == new]
+        assert [i["qty"] for i in reserve] == [5]
+
+        p = client.get(f"/api/products/{old}", headers=h).json()
+        assert sorted((s["location_id"], s["qty"]) for s in p["stock"]) == [("F-1-1", 4), ("F-6-1", 2)]
+        assert sorted((l["sku"], l["location_id"] or "reserva", l["qty"]) for l in doc["lines"]) == sorted([
+            (new, "F-6-1", 15), (new, "F-7-1", 15), (new, "F-8-1", 10), (new, "reserva", 5),
+            (old, "F-6-1", 2), (old, "F-1-1", 3)])
+
+        # se deja todo como estaba (otras pruebas cambian esos muebles)
+        for sku in (new, old):
+            assert client.delete(f"/api/products/{sku}", headers=h).status_code == 204
+        for i in reserve:
+            assert client.delete(f"/api/reserve/{i['id']}", headers=h).status_code == 204

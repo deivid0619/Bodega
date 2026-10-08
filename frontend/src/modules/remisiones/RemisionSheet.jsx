@@ -10,17 +10,18 @@ import { useToast } from '../../ui/ToastContext'
 import { useConfirm } from '../../ui/ConfirmContext'
 import Sheet, { SheetHeader, useSheet } from '../../ui/Sheet'
 import Icon from '../../ui/Icon'
-import { Stepper, plural } from '../../ui/Bits'
+import { plural } from '../../ui/Bits'
 import ScanBox from '../escaneo/ScanBox'
 import NearPick from '../../ui/NearPick'
 import PhotoZoom from '../../ui/PhotoZoom'
 import { itemsText, sendNotice, useNotifyPick } from '../avisos/Notices'
 import LocationPicker from '../../ui/LocationPicker'
-import { blockId, buildRefs, localToday, newRow, norm, rowsOf, shopRef } from './refs'
+import { RESERVA, blockId, buildRefs, localToday, newRow, norm, partsTotal, rowsOf, shopRef, splitRow } from './refs'
 import PickStep from './PickStep'
 import { agoText, clearDraft, readDraft, readDraftPhoto, saveDraftPhoto, writeDraft } from './draft'
 import RefPicker from './RefPicker'
 import SizeRow from './SizeRow'
+import SplitRow from './SplitRow'
 import './remisiones.css'
 
 // Recibir una remision: la foto, lo que llego (por referencia y talla),
@@ -52,7 +53,11 @@ function Body() {
   const [number, setNumber] = useState(draft?.number ?? '')
   const [supplier, setSupplier] = useState(draft?.supplier ?? '')
   const [date, setDate] = useState(draft?.date ?? localToday)
-  const [blocks, setBlocks] = useState(() => (draft?.blocks || []).map((b) => ({ ...b, id: blockId() })))
+  const [blocks, setBlocks] = useState(() => (draft?.blocks || []).map((b) => ({
+    ...b,
+    id: blockId(),
+    rows: b.rows.map(({ toRes, ...r }) => (toRes > 0 && !r.parts ? { ...r, parts: [{ key: blockId(), loc: RESERVA, qty: toRes }] } : r)),
+  })))
   const [picking, setPicking] = useState(draft ? !!draft.picking : true)
   const [showPending, setShowPending] = useState(!!draft?.showPending)
   const [dest, setDest] = useState(draft?.dest ?? 'bodega')
@@ -221,9 +226,16 @@ function Body() {
     said(u.ref.name, size.trim().toUpperCase(), addScanned({ name: u.ref.name, size, sku: null, code: u.code, ref: u.ref }))
   }
 
-  // repartir: de cada talla, cuantas van a la reserva (el resto a la bodega)
-  const toggleSplit = (bid) => setBlocks((bs) => bs.map((b) => (b.id !== bid ? b
-    : { ...b, split: !b.split, rows: b.split ? b.rows.map((r) => ({ ...r, toRes: 0 })) : b.rows })))
+  // repartir: de cada talla, cuantas van a cada ubicacion (o a la reserva);
+  // el resto entra a la ubicacion de la referencia. Al abrirlo, cada talla que
+  // llego trae una parte vacia para llenar.
+  const toggleSplit = (bid) => setBlocks((bs) => bs.map((b) => (b.id !== bid ? b : {
+    ...b,
+    split: !b.split,
+    rows: b.rows.map((r) => (b.split ? { ...r, parts: [] }
+      : r.qty > 0 && !r.parts?.length ? { ...r, parts: [{ key: blockId(), loc: '', qty: 0 }] } : r)),
+  })))
+  const setParts = (bid, size, parts) => setRow(bid, size, { parts })
   const removeBlock = (bid) => {
     setBlocks((bs) => {
       const left = bs.filter((b) => b.id !== bid)
@@ -232,13 +244,17 @@ function Body() {
     })
   }
 
+  // repartida: una linea por ubicacion (el servidor junta la misma talla si va al mismo lugar)
+  const splitting = (b) => dest === 'bodega' && !!b.split
   const lines = blocks.flatMap((b) => b.rows
     .filter((r) => r.qty > 0 || r.pending > 0)
     .flatMap((r) => {
-      const base = { name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, isNew: b.isNew, place: b.place }
-      const res = dest === 'bodega' && b.split ? Math.min(r.toRes || 0, r.qty) : 0
-      const out = r.qty - res > 0 || r.pending > 0 ? [{ ...base, qty: r.qty - res, pending: r.pending }] : []
-      return res > 0 ? [...out, { ...base, qty: res, pending: 0, toReserve: true }] : out
+      const base = { name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, isNew: b.isNew }
+      const { parts, rest } = splitRow(r, splitting(b))
+      const out = rest > 0 || r.pending > 0 ? [{ ...base, place: b.place, qty: Math.max(0, rest), pending: r.pending }] : []
+      return [...out, ...parts.map((x) => (x.loc === RESERVA
+        ? { ...base, place: '', qty: x.qty, pending: 0, toReserve: true }
+        : { ...base, place: x.loc, qty: x.qty, pending: 0 }))]
     }))
   const units = lines.reduce((t, l) => t + l.qty, 0)
   const pend = lines.reduce((t, l) => t + l.pending, 0)
@@ -265,21 +281,32 @@ function Body() {
   const needsPlace = dest === 'bodega'
     ? blocks.find((b) => !b.place && homeless(b) && b.rows.some((r) => {
       const code = r.sku || cleanCode(r.code) // de la tienda o escrito
-      return r.qty > 0 && code && !known.get(code)
+      return splitRow(r, splitting(b)).rest > 0 && code && !known.get(code) // lo repartido ya tiene su ubicacion
     }))
     : null
+  // repartida: que no pase de lo que llego y que cada parte diga a donde va
+  const overSplit = blocks.find((b) => splitting(b) && b.rows.some((r) => partsTotal(r.parts) > r.qty))
+  const unplaced = blocks.find((b) => splitting(b) && b.rows.some((r) => r.qty > 0 && (r.parts || []).some((x) => x.qty > 0 && !x.loc)))
   // lo que dice "automatica" en cada referencia: donde estan hoy sus tallas
   const autoLabel = (b) => {
     const here = [...new Set(b.rows.map((r) => known.get(r.sku)).filter(Boolean).map((p) => p.location_name || p.location_id))]
     if (here.length) return `Automática: donde ya está (${here.slice(0, 2).join(', ')}${here.length > 2 ? '…' : ''})`
     return homeless(b) ? 'Elige dónde guardarla' : 'Automática: con sus otras tallas'
   }
+  // a donde va lo que no se repartio ("Quedan 5 → ...")
+  const mainLabel = (b) => {
+    if (b.place) return groups.flatMap((g) => g.options).find((o) => o.id === b.place)?.name || b.place
+    const auto = autoLabel(b)
+    return auto.startsWith('Automática: ') ? auto.slice(12) : 'la ubicación de arriba (elígela)'
+  }
 
   const problem = dup ? 'Esta remisión ya entró.'
       : !blocks.length ? 'Elige la referencia que llegó.'
         : !units && !pend ? 'Pon cuántas llegaron de cada talla.'
           : clash ? 'Un código escrito es de otra referencia.'
-            : needsPlace ? `Elige dónde guardar ${needsPlace.name}.`
+            : overSplit ? `En ${overSplit.name} repartiste más de las que llegaron.`
+              : unplaced ? `Elige la ubicación de cada parte de ${unplaced.name}.`
+              : needsPlace ? `Elige dónde guardar ${needsPlace.name}.`
               : noCode ? `Las prendas de paso necesitan su código (talla ${noCode.size || 'única'}).`
                 : ''
 
@@ -539,40 +566,15 @@ function Body() {
                                     emptyLabel={autoLabel(b)} ariaLabel={`Ubicación de ${b.name}`} />
                     {arrived.length > 0 && (
                       <button type="button" className="link-btn rem-split-toggle" onClick={() => toggleSplit(b.id)}>
-                        {b.split ? 'Todo a la bodega (no repartir)' : 'Repartir: una parte a la reserva'}
+                        <Icon name={b.split ? 'x' : 'pin'} size={14} stroke={2.4} />
+                        {b.split ? 'No repartir: todo a la ubicación de arriba' : 'Repartir en varias ubicaciones'}
                       </button>
                     )}
-                    {b.split && arrived.map((r) => {
-                      const toRes = Math.min(r.toRes || 0, r.qty)
-                      const set = (n) => setRow(b.id, r.size, (x) => ({ toRes: Math.max(0, Math.min(x.qty, n)) }))
-                      return (
-                        <div className="rem-split-row" key={r.size}>
-                          <span>
-                            <b>Talla {r.size || 'única'} · llegaron {r.qty}</b>
-                            <small>{r.qty - toRes} a la bodega · {toRes} a la reserva</small>
-                          </span>
-                          <Stepper
-                            onMinus={() => set(toRes - 1)}
-                            onPlus={() => set(toRes + 1)}
-                            disabledMinus={toRes === 0}
-                            disabledPlus={toRes >= r.qty}
-                            minusLabel={`Una menos a la reserva, talla ${r.size || 'única'}`}
-                            plusLabel={`Una más a la reserva, talla ${r.size || 'única'}`}
-                            small
-                          >
-                            <input
-                              type="number"
-                              inputMode="numeric"
-                              aria-label={`A la reserva, talla ${r.size || 'única'}`}
-                              value={toRes || ''}
-                              placeholder="0"
-                              onChange={(e) => set(Math.floor(+e.target.value) || 0)}
-                            />
-                          </Stepper>
-                        </div>
-                      )
-                    })}
-                    {b.split && <small className="rem-split-hint">Escribe cuántas van a la reserva; el resto entra a la ubicación de arriba.</small>}
+                    {b.split && arrived.map((r) => (
+                      <SplitRow key={r.size} row={r} size={r.size} mainLabel={mainLabel(b)} groups={groups}
+                                onChange={(parts) => setParts(b.id, r.size, parts)} />
+                    ))}
+                    {b.split && <small className="rem-split-hint">Pon cuántas van a cada canasta o percha (o a la reserva). Las que no repartas entran a la ubicación de arriba.</small>}
                   </div>
                 )
               })}

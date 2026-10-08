@@ -51,3 +51,13 @@ export function shopRef(g, known) {
     })),
   }
 }
+
+// Repartir una talla en varias ubicaciones: sus partes { key, loc, qty }
+// (loc RESERVA = esa parte va a la reserva). Lo que no se reparte (rest) entra
+// a la ubicacion de la referencia.
+export const RESERVA = '@reserva'
+export const partsTotal = (parts) => (parts || []).reduce((t, p) => t + (p.qty > 0 ? p.qty : 0), 0)
+export function splitRow(row, split) {
+  const parts = split ? (row.parts || []).filter((p) => p.qty > 0) : []
+  return { parts, rest: row.qty - partsTotal(parts) }
+}
