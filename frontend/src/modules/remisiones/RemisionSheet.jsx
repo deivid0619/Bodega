@@ -565,7 +565,7 @@ function Body() {
               {blocks.map((b) => {
                 const arrived = b.rows.filter((r) => r.qty > 0)
                 return (
-                  <div key={b.id} className={`rem-place${needsPlace?.id === b.id ? ' need' : ''}`}>
+                  <div key={b.id} className={`rem-place${needsPlace?.id === b.id ? ' rem-place-need' : ''}`}>
                     <span className="rem-place-name">{b.name}</span>
                     <LocationPicker value={b.place} onChange={(v) => setPlace(b.id, v)} groups={groups}
                                     emptyLabel={autoLabel(b)} ariaLabel={`Ubicación de ${b.name}`} />

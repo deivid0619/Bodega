@@ -10,7 +10,12 @@ export default function SizeRow({ row, dest, showPending, prevPending, known, on
       <div className="sz">{row.size || 'U'}</div>
       <div className="rem-row-t">
         {row.sku ? (
-          <small><span className="mono">{row.sku}</span> · hay {row.have}{row.inReserve ? ` · ${row.inReserve} en reserva` : ''}</small>
+          <small>
+            <span className="mono">{row.sku}</span>
+            {/* de la tienda y todavia no registrada: no es que haya 0, es nueva */}
+            {known.has(row.sku) || row.inReserve ? ` · hay ${row.have}` : ' · nueva en la bodega'}
+            {row.inReserve ? ` · ${row.inReserve} en reserva` : ''}
+          </small>
         ) : (
           <small className={row.qty > 0 && dest === 'bodega' ? 'warn' : ''}>
             {row.qty > 0 && dest === 'bodega' && noCode ? 'Sin código: queda en la reserva' : 'Talla sin código todavía'}

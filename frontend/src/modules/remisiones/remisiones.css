@@ -30,8 +30,9 @@
 .rem-places{display:grid;gap:8px;margin-top:2px}
 .rem-place{display:grid;grid-template-columns:minmax(0,1fr);gap:8px;padding:10px 12px 12px;border-radius:var(--r-md);background:var(--fog);transition:box-shadow 160ms ease}
 .rem-place-name{font-weight:700;font-size:14px;line-height:1.25;letter-spacing:-.01em}
-.rem-place.need{background:var(--amber-soft);box-shadow:inset 0 0 0 1.5px var(--amber)}
-.rem-place.need .rem-place-name::after{content:' · elige dónde';color:#A9480A}
+/* (no .need: ese nombre ya es de las filas de Por reponer y desarmaba la caja) */
+.rem-place.rem-place-need{background:var(--amber-soft);box-shadow:inset 0 0 0 1.5px var(--amber)}
+.rem-place-need .rem-place-name::after{content:' · elige dónde';color:#A9480A}
 .rem-scan{margin-bottom:6px}
 .scan-unknown .rem-pick{margin-top:8px}
 .rem-add-ref{flex:none;max-width:45%;align-self:center;font-weight:700;font-size:13px;line-height:1.2}
