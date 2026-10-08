@@ -3,6 +3,7 @@ import { usePolling } from '../../core/useApi'
 import { DocItem } from './DocumentSheet'
 import Icon from '../../ui/Icon'
 import { plural } from '../../ui/Bits'
+import BigCalendar from './BigCalendar'
 
 const pad = (n) => String(n).padStart(2, '0')
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -29,6 +30,7 @@ export default function DocsSection({ onOpen, onList }) {
   const today = isoDay(new Date())
   const [month, setMonth] = useState(today.slice(0, 7))
   const [day, setDay] = useState(today)
+  const [big, setBig] = useState(false) // el calendario en grande
   const { data: cal } = usePolling(`/api/documents/calendar?month=${month}`, { interval: 60000 })
   const { data: counts } = usePolling('/api/documents/counts', { interval: 60000 })
   const { data: rems } = usePolling(`/api/documents?kind=remision&day=${day}&limit=50`, { interval: 60000 })
@@ -51,7 +53,10 @@ export default function DocsSection({ onOpen, onList }) {
 
   return (
     <>
-      <h2 className="h-sec" id="documentos">Remisiones y facturas <small>toca un día</small></h2>
+      <h2 className="h-sec" id="documentos">
+        Remisiones y facturas <small>toca un día</small>
+        <button type="button" className="link-btn h-sec-act" onClick={() => setBig(true)}><Icon name="expand" size={15} stroke={2.2} />Ver en grande</button>
+      </h2>
       {counts?.espera > 0 && (
         <button type="button" className="doc-card wait-card" onClick={() => onList('espera')}>
           <span className="doc-ico"><Icon name="receipt" size={22} /></span>
@@ -100,6 +105,7 @@ export default function DocsSection({ onOpen, onList }) {
           <span><i className="out" />Salió con factura</span>
         </div>
       </div>
+      {big && <BigCalendar month={month} onOpen={onOpen} onClose={() => setBig(false)} />}
 
       <div className="cal-sel">
         <b>{cap(selDate.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }))}{day === today ? ' · hoy' : ''}</b>

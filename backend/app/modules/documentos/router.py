@@ -123,6 +123,7 @@ def list_documents(kind: Optional[Literal["factura", "remision", "conteo"]] = No
                    search: Optional[str] = Query(default=None, alias="q", max_length=60),
                    before: Optional[int] = None,
                    day: Optional[str] = Query(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+                   month: Optional[str] = Query(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
                    status_: Optional[Literal["espera"]] = Query(default=None, alias="status"),
                    db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     q = db.query(models.Document).order_by(models.Document.id.desc())
@@ -141,6 +142,11 @@ def list_documents(kind: Optional[Literal["factura", "remision", "conteo"]] = No
         except ValueError:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Fecha inválida.")
         q = q.filter(models.Document.created_at >= start, models.Document.created_at < start + timedelta(days=1))
+    if month:
+        # las de un mes (el calendario en grande), hora de Colombia
+        y, m = map(int, month.split("-"))
+        q = q.filter(models.Document.created_at >= local_midnight(y, m),
+                     models.Document.created_at < local_midnight(y + (m == 12), m % 12 + 1))
     term = fold(" ".join((search or "").split()))
     if term:
         # se busca aqui y no en la base: asi da igual si se escribe con

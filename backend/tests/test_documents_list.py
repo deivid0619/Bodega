@@ -137,3 +137,17 @@ def test_remision_split_between_bodega_and_reserve():
         assert _stock(client, h, "REP-M") == {"F-2-1": 3}
         res = [i for i in client.get("/api/reserve", headers=h).json() if i["sku"] == "REP-M"]
         assert [i["qty"] for i in res] == [2]
+
+
+def test_list_by_month_for_the_big_calendar():
+    with TestClient(app) as client:
+        h = _h(client)
+        r = client.post("/api/documents/remision", headers=h, json={"number": "MES CAL 1", "destination": "registro",
+                                                                  "lines": [{"name": "PRUEBA MES", "size": "M", "qty": 2}]})
+        assert r.status_code == 201, r.text
+        month = datetime.now(BOGOTA).strftime("%Y-%m")
+        found = client.get(f"/api/documents?kind=remision&month={month}&limit=200", headers=h).json()
+        assert any(d["number"] == "MESCAL1" for d in found)
+        # otro mes: no esta
+        assert not any(d["number"] == "MESCAL1" for d in client.get("/api/documents?kind=remision&month=2001-01", headers=h).json())
+        assert client.get("/api/documents?month=2026-13", headers=h).status_code == 422
