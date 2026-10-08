@@ -342,6 +342,16 @@ export function moveBetween(sku, from, to, qty) {
   )
 }
 
+// De una ubicacion de la bodega a la reserva: sale de ahi y se suma a lo que
+// haya de ese codigo en la reserva (queda "A la reserva" en el historial; no
+// cuenta como venta). Devuelve la prenda como queda.
+export async function moveToReserve(sku, from, qty) {
+  const item = await api.post('/api/reserve/return', { sku, qty, location_id: from })
+  refreshInventory()
+  const product = await api.get(`/api/products/${encodeURIComponent(sku)}`).catch(() => null)
+  return { item, product }
+}
+
 export async function setReserveQty(item, qty) {
   const key = `reserve-${item.id}`
   mutate('/api/reserve', (list) => list.map((i) => (i.id === item.id ? { ...i, qty } : i)))

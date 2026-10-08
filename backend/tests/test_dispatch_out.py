@@ -89,3 +89,30 @@ def test_dispatch_straight_from_the_reserve():
         assert client.post(f"/api/reserve/{it['id']}/dispatch", headers=h, json={"qty": 8}).json()["reserve"]["qty"] == 0
         assert all(i["id"] != it["id"] for i in client.get("/api/reserve", headers=h).json())
         client.delete(f"/api/products/DIR-{tag}", headers=h)
+
+
+def test_from_a_basket_to_the_reserve():
+    """De la bodega a la reserva (Mover prendas → La reserva): salen de esa
+    canasta, se suman a la reserva y no cuentan como venta."""
+    with TestClient(app) as client:
+        h = _h(client)
+        tag = uuid.uuid4().hex[:5].upper()
+        sku = f"GUA-{tag}-M"
+        r = client.post("/api/products", headers=h, json={"sku": sku, "name": f"GUANTES RESERVA {tag}", "size": "M",
+                                                       "location_id": "F-5-1", "qty": 5})
+        assert r.status_code == 201, r.text
+        r = client.post("/api/reserve/return", headers=h, json={"sku": sku, "qty": 2, "location_id": "F-5-1"})
+        assert r.status_code == 200, r.text
+        assert r.json()["qty"] == 2
+        p = client.get(f"/api/products/{sku}", headers=h).json()
+        assert p["qty"] == 3 and [(s["location_id"], s["qty"]) for s in p["stock"]] == [("F-5-1", 3)]
+        # otra vez: se suma a la misma linea de la reserva
+        assert client.post("/api/reserve/return", headers=h, json={"sku": sku, "qty": 1, "location_id": "F-5-1"}).json()["qty"] == 3
+        # no se puede sacar mas de lo que hay en la canasta
+        assert client.post("/api/reserve/return", headers=h, json={"sku": sku, "qty": 9, "location_id": "F-5-1"}).status_code == 400
+        moves = [m for m in client.get("/api/movements?limit=20", headers=h).json() if m["sku"] == sku and m["type"] == "out"]
+        assert moves and all(m["note"] == "A la reserva" for m in moves)
+        # se deja como estaba
+        item = next(i for i in client.get("/api/reserve", headers=h).json() if i["sku"] == sku)
+        assert client.delete(f"/api/reserve/{item['id']}", headers=h).status_code == 204
+        assert client.delete(f"/api/products/{sku}", headers=h).status_code == 204
