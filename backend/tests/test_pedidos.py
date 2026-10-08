@@ -133,3 +133,62 @@ def test_lo_que_ya_entro_escaneando():
         got = client.get("/api/documents/recent-entries?skus=REC-M,NO-EXISTE&days=3", headers=h).json()
         assert [(g["sku"], g["qty"]) for g in got] == [("REC-M", 3)]
         assert client.get("/api/documents/recent-entries?skus=NO-EXISTE", headers=h).json() == []
+
+
+def _reserve_qty(client, h, sku):
+    return sum(i["qty"] for i in client.get("/api/reserve", headers=h).json() if i["sku"] == sku)
+
+
+def test_pedido_saca_de_la_reserva_lo_que_no_esta_en_la_bodega():
+    """Lo que se empaca y no esta en la bodega (o no alcanza) sale de la
+    reserva; al deshacer el pedido o devolverlo en la factura vuelve alla."""
+    import uuid
+
+    with TestClient(app) as client:
+        h = _h(client)
+        tag = uuid.uuid4().hex[:5].upper()
+        zero, one, solo = f"RES-{tag}-0", f"RES-{tag}-1", f"RES-{tag}-S"
+        _new(client, h, zero, "F-1-1", 0, name=f"CHAQUETA RESERVA {tag}")
+        _new(client, h, one, "F-1-1", 1, name=f"CHAQUETA RESERVA {tag}", size="L")
+        for sku, size, qty in [(zero, "M", 4), (one, "L", 5)]:
+            assert client.post("/api/reserve", headers=h, json={"sku": sku, "name": f"CHAQUETA RESERVA {tag}", "size": size, "qty": qty}).status_code == 201
+        # solo en la reserva (no registrada en la bodega)
+        assert client.post("/api/reserve", headers=h, json={"sku": solo, "name": f"CASCO RESERVA {tag}", "size": "U", "qty": 2}).status_code == 201
+
+        # no alcanza ni con la reserva: no sale nada
+        r = client.post("/api/documents/pedido", headers=h, json={"lines": [{"sku": zero, "qty": 9}, {"sku": one, "qty": 1}]})
+        assert r.status_code == 400 and "reserva" in r.json()["detail"]
+        assert _reserve_qty(client, h, zero) == 4 and _stock(client, h, one) == {"F-1-1": 1}
+
+        r = client.post("/api/documents/pedido", headers=h, json={"lines": [
+            {"sku": zero, "qty": 2}, {"sku": one, "qty": 3}, {"sku": solo, "qty": 1}], "notes": "prueba reserva"})
+        assert r.status_code == 201, r.text
+        doc = r.json()["document"]
+        assert doc["units"] == 6
+        lines = sorted((l["sku"], l["location_id"], l["qty"]) for l in doc["lines"])
+        assert lines == sorted([(zero, "RESERVA", 2), (one, "F-1-1", 1), (one, "RESERVA", 2), (solo, "RESERVA", 1)])
+        # de la bodega salio lo que habia; el resto, de la reserva
+        assert _reserve_qty(client, h, zero) == 2 and _reserve_qty(client, h, one) == 3 and _reserve_qty(client, h, solo) == 1
+        assert _stock(client, h, zero) == {} and _stock(client, h, one) == {}
+        # la que no estaba registrada quedo registrada (sin prendas en la bodega)
+        assert client.get(f"/api/products/{solo}", headers=h).json()["qty"] == 0
+        # en el historial es una salida del pedido
+        outs = [m for m in client.get("/api/movements?limit=50", headers=h).json() if m["sku"] == zero and m["type"] == "out"]
+        assert outs and outs[0]["note"].startswith("Pedido ")
+
+        # al anexar la factura, lo de la reserva que no va vuelve a la reserva
+        r = client.post(f"/api/documents/{doc['id']}/factura", headers=h, json={"number": f"FRES{tag}", "returns": [{"sku": zero, "qty": 1}]})
+        assert r.status_code == 200, r.text
+        assert _reserve_qty(client, h, zero) == 3
+
+        # un pedido deshecho devuelve a la reserva lo que salio de alla
+        r = client.post("/api/documents/pedido", headers=h, json={"lines": [{"sku": one, "qty": 2}]})
+        assert r.status_code == 201, r.text
+        assert _reserve_qty(client, h, one) == 1
+        assert client.delete(f"/api/documents/{r.json()['document']['id']}", headers=h).status_code == 204
+        assert _reserve_qty(client, h, one) == 3
+
+        # la factura directa tambien saca de la reserva lo que no esta en la bodega
+        r = client.post("/api/documents/factura", headers=h, json={"number": f"FRESB{tag}", "lines": [{"sku": zero, "qty": 1}]})
+        assert r.status_code == 201, r.text
+        assert _reserve_qty(client, h, zero) == 2

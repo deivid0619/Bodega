@@ -7,6 +7,7 @@ import Icon from '../../ui/Icon'
 import { plural } from '../../ui/Bits'
 import { fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf } from '../../core/utils'
 import FromPick from '../../ui/FromPick'
+import { useInReserve } from './reserveOut'
 import { PhotoButtons, ProofPhoto, ReadMoreButton, ReadingStep, photoNote, readFactura, savePhotos } from './FacturaParts'
 
 const label = (p, sku) => (p ? `${p.name}${p.size ? ` · ${p.size}` : ''}` : sku)
@@ -21,6 +22,7 @@ export function AttachBody({ pedido, onDone, onBack }) {
   const { data: layout } = useLayout()
   const outlet = outletIdsOf(layout)
   const bySku = useMemo(() => new Map((products || []).map((p) => [p.sku, p])), [products])
+  const inRes = useInReserve() // lo que no alcanza en la bodega sale de la reserva
   const [step, setStep] = useState('pick') // pick | reading | compare
   const [stage, setStage] = useState('preparing')
   const [progress, setProgress] = useState(0)
@@ -111,7 +113,7 @@ export function AttachBody({ pedido, onDone, onBack }) {
   const more = rows.filter((r) => r.f > r.p) // la factura trae mas: falto descontar
   const less = rows.filter((r) => r.p > r.f) // se empaco mas de lo que dice la factura
   const deduct = more.filter((r) => extra[r.sku]?.on)
-  const short = deduct.find((r) => !r.product || outAvailable(r.product, outlet, extra[r.sku]?.from) < r.f - r.p)
+  const short = deduct.find((r) => !r.product || outAvailable(r.product, outlet, extra[r.sku]?.from) + inRes(r.product) < r.f - r.p)
   const missingFrom = deduct.filter((r) => r.product && fromMissing(extra[r.sku]?.from, r.f - r.p, placesOf(r.product, outlet))).length
   const returning = less.filter((r) => back[r.sku])
 
@@ -204,6 +206,9 @@ export function AttachBody({ pedido, onDone, onBack }) {
                               onClick={() => setExtra((e) => ({ ...e, [r.sku]: { ...x, on: !x.on } }))} />
                     </label>
                     {x.on && !r.product && <small className="warn">No está en la bodega: no se puede descontar.</small>}
+                    {x.on && r.product && !places.length && inRes(r.product) > 0 && (
+                      <div className="from-pick from-one" role="note" aria-label="De dónde sale"><span>Sale de</span><b>la reserva<small>hay {inRes(r.product)}</small></b></div>
+                    )}
                     {x.on && r.product && places.length > 0 && (
                       <FromPick places={places} value={x.from} qty={r.f - r.p} onChange={(v) => setExtra((e) => ({ ...e, [r.sku]: { ...x, from: v } }))} />
                     )}

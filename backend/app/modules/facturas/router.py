@@ -35,17 +35,30 @@ def _merge_out(db: Session, lines: list[schemas.DocumentLineIn]) -> dict[tuple[s
 def _take_out(db: Session, merged: dict, user: models.User, note: str) -> tuple[list[tuple[str, str, int]], dict[str, int]]:
     """Descuenta todo: primero lo que sale de una ubicacion elegida y despues
     lo de "donde haya", para que no se lleve lo de la canasta que se eligio.
-    Devuelve de donde salio cada parte (sku, ubicacion, cantidad) y cuantas
-    habia de cada codigo antes (para el aviso de bajo minimo)."""
+    Lo de "donde haya" que no alcanza en la bodega sale de la reserva (lo
+    que estaba guardado aparte tambien se empaca). Devuelve de donde salio
+    cada parte (sku, ubicacion o RESERVA, cantidad) y cuantas habia de cada
+    codigo antes (para el aviso de bajo minimo)."""
     parts: list[tuple[str, str, int]] = []
     first_before: dict[str, int] = {}
     for (sku, loc), qty in sorted(merged.items(), key=lambda kv: kv[0][1] is None):
         try:
-            _, movs = inv.apply_movement(db, sku, "out", qty, user, location_id=loc, note=note, commit=False)
+            if loc:
+                _, movs = inv.apply_movement(db, sku, "out", qty, user, location_id=loc, note=note, commit=False)
+                first_before.setdefault(sku, movs[0].before)
+                parts += [(sku, m.location_id, m.qty) for m in movs]
+                continue
+            here = min(qty, inv.usable_out(db, sku))
+            if here:
+                _, movs = inv.apply_movement(db, sku, "out", here, user, note=note, commit=False)
+                first_before.setdefault(sku, movs[0].before)
+                parts += [(sku, m.location_id, m.qty) for m in movs]
+            if qty > here:
+                movs = inv.out_from_reserve(db, sku, qty - here, user, note)
+                first_before.setdefault(sku, movs[0].before)
+                parts.append((sku, inv.RESERVE_LOC, qty - here))
         except inv.InventoryError as e:
             raise inv.InventoryError(f"{sku}: {e}") from e
-        first_before.setdefault(sku, movs[0].before)
-        parts += [(sku, m.location_id, m.qty) for m in movs]
     return parts, first_before
 
 
@@ -186,8 +199,11 @@ def attach_factura(doc_id: int, payload: schemas.AttachIn, background: Backgroun
                 if l["sku"] != sku or l["qty"] <= 0 or left <= 0:
                     continue
                 back = min(left, l["qty"])
-                inv.apply_movement(db, sku, "in", back, user, location_id=l.get("location_id"),
-                                   note=f"Devuelta de la factura {number}", commit=False)
+                if l.get("location_id") == inv.RESERVE_LOC:
+                    inv.back_to_reserve(db, sku, back)  # habia salido de la reserva: vuelve alla
+                else:
+                    inv.apply_movement(db, sku, "in", back, user, location_id=l.get("location_id"),
+                                       note=f"Devuelta de la factura {number}", commit=False)
                 l["qty"] -= back
                 left -= back
             if left > 0:
@@ -228,7 +244,9 @@ def cancel_pedido(doc_id: int, db: Session = Depends(get_db), user: models.User 
     paths = [p["path"] for p in doc.photos or []]
     try:
         for l in doc.lines or []:
-            if l["qty"] > 0:
+            if l["qty"] > 0 and l.get("location_id") == inv.RESERVE_LOC:
+                inv.back_to_reserve(db, l["sku"], l["qty"])  # habia salido de la reserva: vuelve alla
+            elif l["qty"] > 0:
                 inv.apply_movement(db, l["sku"], "in", l["qty"], user, location_id=l.get("location_id"),
                                    note="Pedido deshecho", commit=False)
         # sus salidas ya no esperan factura: el historial dice que se deshizo

@@ -156,6 +156,66 @@ def add_to_reserve(db: Session, name: str, size: str, sku: str | None, qty: int)
     return item
 
 
+RESERVE_LOC = "RESERVA"  # en las lineas de un pedido o factura: esa parte salio de la reserva
+
+
+def reserve_items(db: Session, sku: str, name: str = "", size: str = "") -> list[models.ReserveItem]:
+    """Lo que hay en la reserva de un codigo: con su codigo y, si se dan la
+    referencia y la talla, lo guardado a mano sin codigo igual (como lo cuenta
+    la app). Bloqueado: se va a descontar."""
+    q = db.query(models.ReserveItem).filter(models.ReserveItem.qty > 0).with_for_update()
+    items = q.filter(models.ReserveItem.sku == sku).order_by(models.ReserveItem.id).all()
+    if name:
+        want = ref_key(name, size)
+        items += [it for it in q.filter(models.ReserveItem.sku.is_(None)).order_by(models.ReserveItem.id).all()
+                  if ref_key(it.name, it.size) == want]
+    return items
+
+
+def usable_out(db: Session, sku: str) -> int:
+    """Lo que una salida sin ubicacion puede sacar de la bodega (el outlet no)."""
+    outlet = {k for k, v in _locations(db).items() if v.get("outlet")}
+    return sum(r.qty for r in db.query(models.Stock).filter(models.Stock.sku == sku, models.Stock.qty > 0).all()
+               if r.location_id not in outlet)
+
+
+def out_from_reserve(db: Session, sku: str, qty: int, user: models.User, note: str) -> list[models.Movement]:
+    """Lo que sale en un pedido o una factura y no esta en la bodega, sino en
+    la reserva: se descuenta de la reserva y queda en el historial como esa
+    salida (pasa por Despacho, como al despachar desde la reserva). Si el
+    codigo no estaba registrado, se registra. No confirma."""
+    product = db.get(models.Product, sku)
+    items = reserve_items(db, sku, product.name if product else "", product.size if product else "")
+    have = sum(it.qty for it in items)
+    if have < qty:
+        label = f"{product.name} {product.size}".strip() if product else sku
+        raise InventoryError(f"De {label} solo hay {usable_out(db, sku)} en la bodega y {have} en la reserva.")
+    first = items[0]
+    left = qty
+    for it in items:
+        take = min(left, it.qty)
+        it.qty -= take
+        left -= take
+        if it.qty <= 0:
+            db.delete(it)  # se acabo: sale sola de la reserva
+        if not left:
+            break
+    if product:
+        apply_movement(db, sku, "in", qty, user, location_id=DISPATCH, note=FROM_RESERVE, commit=False)
+    else:
+        register_product(db, sku, first.name, first.size, DISPATCH, qty, 0, user, image_url=first.image_url,
+                         note=FROM_RESERVE, commit=False)
+    _, movs = apply_movement(db, sku, "out", qty, user, location_id=DISPATCH, note=note, commit=False)
+    return movs
+
+
+def back_to_reserve(db: Session, sku: str, qty: int) -> models.ReserveItem:
+    """Lo que habia salido de la reserva vuelve a la reserva (deshacer un
+    pedido o devolverlo al anexar la factura). No confirma."""
+    product = db.get(models.Product, sku)
+    return add_to_reserve(db, product.name if product else sku, product.size if product else "", sku, qty)
+
+
 def apply_movement(db: Session, sku: str, type_: str, qty: int, user: models.User,
                    location_id: str | None = None, note: str | None = None,
                    commit: bool = True) -> tuple[models.Product, list[models.Movement]]:

@@ -174,6 +174,7 @@ function Detail({ doc: initial }) {
 
   const where = (l) => {
     if (record) return isRem ? (l.qty ? 'Solo registro: no se sumó' : 'No llegó') : 'Solo registro: no se descontó'
+    if (!isRem && l.location_id === 'RESERVA') return 'Salió de la reserva'
     if (!isRem) return l.location_id ? `Salió de ${locName.get(l.location_id) || l.location_id}` : 'Salió de donde había'
     if (!l.qty) return 'No llegó'
     if (l.dest === 'reserva') return 'Quedó en la reserva'

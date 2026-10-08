@@ -12,6 +12,7 @@ import { fromMissing, outAvailable, outParts, outletIdsOf, pedidoLabel, placesOf
 import FromPick from '../../ui/FromPick'
 import ScanBox from '../escaneo/ScanBox'
 import { AttachBody } from './AttachFactura'
+import { availText, useInReserve, useReserveOnly } from './reserveOut'
 import { PhotoButtons, ProofPhoto, ReadMoreButton, ReadingStep, photoNote, readFactura, savePhotos } from './FacturaParts'
 import { useCrop } from '../../ui/PhotoCrop'
 import { itemsText, sendNotice, useNotifyPick } from '../avisos/Notices'
@@ -23,9 +24,10 @@ function toRow(line, m) {
 }
 
 // incluida por defecto solo si se reconocio y hay con que descontar (sin
-// contar el outlet: una salida sin elegir de donde no lo toca)
-function withDefault(row, outlet) {
-  return { ...row, include: !!row.product && outAvailable(row.product, outlet, row.from) >= row.qty }
+// contar el outlet: una salida sin elegir de donde no lo toca; con la reserva,
+// que cubre lo que no alcanza en la bodega)
+function withDefault(row, outlet, inRes) {
+  return { ...row, include: !!row.product && outAvailable(row.product, outlet, row.from) + inRes(row.product) >= row.qty }
 }
 
 // Lo primero: ¿ya esta la factura? Si no, se arma el pedido y la factura se
@@ -97,7 +99,10 @@ function PedidoStep({ onSaved, onBack }) {
   const { data: products } = useProducts()
   const { data: layout } = useLayout()
   const outlet = outletIdsOf(layout)
-  const bySku = useMemo(() => new Map((products || []).map((p) => [p.sku, p])), [products])
+  const inBodega = useMemo(() => new Map((products || []).map((p) => [p.sku, p])), [products])
+  // con lo de la reserva que no esta registrado en la bodega (tambien se empaca)
+  const bySku = useReserveOnly(inBodega)
+  const inRes = useInReserve()
   const saved = useMemo(() => {
     try { return JSON.parse(localStorage.getItem(PEDIDO_KEY) || 'null') || {} } catch { return {} }
   }, [])
@@ -153,11 +158,11 @@ function PedidoStep({ onSaved, onBack }) {
     if (term.length < 2) return []
     const words = term.split(/\s+/)
     const code = term.replace(/\s+/g, '')
-    return (products || []).filter((p) => p.sku.includes(code) || words.every((w) => p.name.includes(w))).slice(0, 6)
-  }, [term, products])
+    return [...bySku.values()].filter((p) => p.sku.includes(code) || words.every((w) => p.name.includes(w))).slice(0, 6)
+  }, [term, bySku])
 
   const units = lines.reduce((t, l) => t + l.qty, 0)
-  const short = lines.find((l) => { const p = bySku.get(l.sku); return !p || outAvailable(p, outlet, l.from) < l.qty })
+  const short = lines.find((l) => { const p = bySku.get(l.sku); return !p || outAvailable(p, outlet, l.from) + inRes(p) < l.qty })
   const missingFrom = lines.filter((l) => { const p = bySku.get(l.sku); return p && fromMissing(l.from, l.qty, placesOf(p, outlet)) }).length
   const problem = !lines.length ? 'Escanea o busca lo que vas empacando.'
     : short ? `No alcanza: ${bySku.get(short.sku)?.name || short.sku}${bySku.get(short.sku)?.size ? ` · ${bySku.get(short.sku).size}` : ''}.`
@@ -215,7 +220,7 @@ function PedidoStep({ onSaved, onBack }) {
                 {p.image_url ? <img src={p.image_url} alt="" /> : null}
                 <span className="ref-result-t">
                   <b>{p.name}{p.size ? ` · ${p.size}` : ''}</b>
-                  <small><span className="mono">{p.sku}</span> · hay {outAvailable(p, outlet)}</small>
+                  <small><span className="mono">{p.sku}</span> · hay {outAvailable(p, outlet)}{inRes(p) ? ` + ${inRes(p)} en la reserva` : ''}</small>
                 </span>
                 <Icon name="plus" size={18} stroke={2.2} />
               </button>
@@ -232,14 +237,15 @@ function PedidoStep({ onSaved, onBack }) {
               const p = bySku.get(l.sku)
               const places = p ? placesOf(p, outlet) : []
               const avail = p ? outAvailable(p, outlet, l.from) : 0
+              const res = inRes(p) // lo que no alcanza en la bodega sale de la reserva
               return (
-                <div key={l.sku} className={`doc-line ${avail < l.qty ? 'short' : 'ok'}`}>
+                <div key={l.sku} className={`doc-line ${avail + res < l.qty ? 'short' : 'ok'}`}>
                   <button type="button" className="doc-check rm" aria-label="Quitar del pedido" onClick={() => remove(l.sku)}>
                     <Icon name="x" size={14} stroke={3} />
                   </button>
                   <div className="doc-line-t">
                     <b>{p ? `${p.name}${p.size ? ` · ${p.size}` : ''}` : l.sku}</b>
-                    <small><span className="mono">{l.sku}</span> · {avail < l.qty ? `solo hay ${avail}` : `hay ${avail}`}</small>
+                    <small><span className="mono">{l.sku}</span> · {availText(avail, res, l.qty)}</small>
                   </div>
                   <Stepper
                     value={l.qty}
@@ -248,6 +254,7 @@ function PedidoStep({ onSaved, onBack }) {
                     disabledMinus={l.qty <= 1}
                   />
                   {places.length > 0 && <FromPick places={places} value={l.from} qty={l.qty} onChange={(v) => update(l.sku, { from: v })} />}
+                  {!places.length && res > 0 && <div className="from-pick from-one" role="note" aria-label="De dónde sale"><span>Sale de</span><b>la reserva<small>hay {res}</small></b></div>}
                 </div>
               )
             })}
@@ -296,6 +303,7 @@ function Body({ onDone }) {
   const { data: products } = useProducts()
   const { data: layout } = useLayout()
   const outlet = outletIdsOf(layout)
+  const inRes = useInReserve() // lo que no alcanza en la bodega sale de la reserva
   const [step, setStep] = useState('start') // start | pick | reading | review | pedido | attach
   const [stage, setStage] = useState('preparing')
   const [progress, setProgress] = useState(0)
@@ -338,7 +346,7 @@ function Body({ onDone }) {
         const fresh = read.filter((x) => !rows.some((y) => (x.product
           ? y.product && y.sku === x.sku
           : !y.product && sameLine(x, y))))
-        setRows([...rows, ...fresh.map((x) => withDefault(x, outlet))])
+        setRows([...rows, ...fresh.map((x) => withDefault(x, outlet, inRes))])
         if (!number.trim() && r.number) setNumber(r.number)
         const again = read.length - fresh.length
         showToast(fresh.length
@@ -347,7 +355,7 @@ function Body({ onDone }) {
         if (fresh.length) setReads((rs) => [...rs, file]) // una foto repetida no se guarda
       } else {
         setNumber(r.number)
-        setRows(read.map((x) => withDefault(x, outlet)))
+        setRows(read.map((x) => withDefault(x, outlet, inRes)))
         setReads([file])
       }
       setStep('review')
@@ -379,21 +387,21 @@ function Body({ onDone }) {
     const claimed = new Set(rows.filter((r) => r.id !== row.id && r.product).map((r) => r.sku))
     const m = matchLine(line, known, claimed)
     update(row.id, { code: line.code, sku: m.sku, product: m.product, how: m.how, from: undefined,
-                     include: !!m.product && outAvailable(m.product, outlet, undefined) >= row.qty })
+                     include: !!m.product && outAvailable(m.product, outlet, undefined) + inRes(m.product) >= row.qty })
   }
 
   // solo registro: van todas las reconocidas (ya se descontaron, aunque hoy no haya existencias)
   const toggleRecord = () => {
     const next = !recordOnly
     setRecordOnly(next)
-    setRows((rs) => rs.map((r) => (next ? { ...r, include: !!r.product } : withDefault(r, outlet))))
+    setRows((rs) => rs.map((r) => (next ? { ...r, include: !!r.product } : withDefault(r, outlet, inRes))))
   }
 
   const chosen = rows.filter((r) => r.include && r.product)
   const units = chosen.reduce((t, r) => t + r.qty, 0)
   const pending = rows.filter((r) => !r.include).length
   // solo registro: no se descuenta, asi que no importa cuanto hay ni de donde sale
-  const blocked = !recordOnly && chosen.some((r) => outAvailable(r.product, outlet, r.from) < r.qty)
+  const blocked = !recordOnly && chosen.some((r) => outAvailable(r.product, outlet, r.from) + inRes(r.product) < r.qty)
   // prendas que estan en varios lugares: hay que decir de cual salen
   const missingFrom = recordOnly ? 0 : chosen.filter((r) => fromMissing(r.from, r.qty, placesOf(r.product, outlet))).length
 
@@ -471,7 +479,8 @@ function Body({ onDone }) {
           const fromOutlet = places.find((x) => x.outlet && x.id === r.from)
           // lo del outlet solo cuenta si se eligio que sale de ahi
           const outletNote = !inOutlet ? '' : fromOutlet ? ` (con ${fromOutlet.qty} del outlet)` : ` · ${inOutlet} más en outlet`
-          const short = !recordOnly && r.product && avail < r.qty
+          const res = inRes(r.product)
+          const short = !recordOnly && r.product && avail + res < r.qty
           const state = !r.product ? 'unknown' : short ? 'short' : 'ok'
           const shown = r.product ? r.sku : r.code
           return (
@@ -500,8 +509,9 @@ function Body({ onDone }) {
                 <b>{r.product ? `${r.product.name}${r.product.size ? ` · ${r.product.size}` : ''}` : r.description}</b>
                 <small>
                   {state === 'unknown' && 'No está en la bodega. Corrige el código o déjala por fuera.'}
-                  {state === 'short' && `Solo hay ${avail} para sacar${inOutlet && !fromOutlet ? ` (y ${inOutlet} en outlet: elígelo abajo si salen de ahí)` : ''}.`}
-                  {state === 'ok' && (recordOnly ? 'Solo se anota: no se descuenta' : `Hay ${avail}${outletNote}${r.how === 'fixed' && r.read.replace(/\s/g, '') !== r.sku ? ` · se leyó ${r.read}` : ''}`)}
+                  {state === 'short' && `Solo hay ${avail} para sacar${res ? ` y ${res} en la reserva` : ''}${inOutlet && !fromOutlet ? ` (y ${inOutlet} en outlet: elígelo abajo si salen de ahí)` : ''}.`}
+                  {state === 'ok' && (recordOnly ? 'Solo se anota: no se descuenta'
+                    : `${res ? availText(avail, res, r.qty).replace(/^h/, 'H') : `Hay ${avail}`}${outletNote}${r.how === 'fixed' && r.read.replace(/\s/g, '') !== r.sku ? ` · se leyó ${r.read}` : ''}`)}
                 </small>
               </div>
               <Stepper
@@ -513,6 +523,7 @@ function Body({ onDone }) {
               {!recordOnly && r.include && places.length > 0 && (
                 <FromPick places={places} value={r.from} qty={r.qty} onChange={(v) => update(r.id, { from: v })} />
               )}
+              {!recordOnly && r.include && !places.length && res > 0 && <div className="from-pick from-one" role="note" aria-label="De dónde sale"><span>Sale de</span><b>la reserva<small>hay {res}</small></b></div>}
             </div>
           )
         })}
