@@ -1,12 +1,12 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
-import './install.js'
+import './core/install.js'
 import App from './App.jsx'
-import { AuthProvider } from './context/AuthContext.jsx'
-import { ToastProvider } from './components/ToastContext.jsx'
-import { ConfirmProvider } from './components/ConfirmContext.jsx'
-import { NotificationPrefsProvider } from './context/NotificationPrefsContext.jsx'
+import { AuthProvider } from './core/AuthContext.jsx'
+import { ToastProvider } from './ui/ToastContext.jsx'
+import { ConfirmProvider } from './ui/ConfirmContext.jsx'
+import { NotificationPrefsProvider } from './modules/avisos/NotificationPrefsContext.jsx'
 import './styles/global.css'
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {

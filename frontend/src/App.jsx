@@ -1,24 +1,24 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
-import { WELCOME, useAuth } from './context/AuthContext'
-import NavBar from './components/NavBar'
-import NotificationBell from './components/NotificationBell'
-import Icon, { BrandMark } from './components/Icon'
-import Sheet, { SheetHeader } from './components/Sheet'
-import { useMovementNotifications } from './hooks/useMovementNotifications'
-import { useInstall } from './install'
-import { useToast } from './components/ToastContext'
-import Login from './pages/Login'
-import Scan from './pages/Scan'
-import Inventory from './pages/Inventory'
-import Reserve from './pages/Reserve'
-import Summary from './pages/Summary'
-import Count from './pages/Count'
-import Reports from './pages/Reports'
+import { WELCOME, useAuth } from './core/AuthContext'
+import NavBar from './ui/NavBar'
+import NotificationBell from './modules/avisos/NotificationBell'
+import Icon, { BrandMark } from './ui/Icon'
+import Sheet, { SheetHeader } from './ui/Sheet'
+import { useMovementNotifications } from './modules/avisos/useMovementNotifications'
+import { useInstall } from './core/install'
+import { useToast } from './ui/ToastContext'
+import Login from './modules/auth/Login'
+import Scan from './modules/escaneo/Scan'
+import Inventory from './modules/inventario/Inventory'
+import Reserve from './modules/reserva/Reserve'
+import Summary from './modules/resumen/Summary'
+import Count from './modules/conteo/Count'
+import Reports from './modules/reportes/Reports'
 
 // el 3D (three.js) es lo mas pesado: se descarga aparte, asi el login y las
 // demas pantallas abren rapido en el celular
-const Warehouse = lazy(() => import('./pages/Warehouse'))
+const Warehouse = lazy(() => import('./modules/bodega/Warehouse'))
 
 function RequireAuth({ children }) {
   const { token, ready } = useAuth()

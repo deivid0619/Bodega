@@ -56,19 +56,24 @@ frontend (React + Vite + Three.js)  →  backend (FastAPI)  →  PostgreSQL
         Netlify / Vercel / Render         Render / Railway     Supabase / Render
 ```
 
+- **Ordenado por módulos** (remisiones, facturas, inventario, bodega,
+  reserva, avisos...): cada módulo tiene su carpeta en el servidor
+  (`backend/app/modules/`) y en la página (`frontend/src/modules/`), con
+  un README. El de remisiones explica sus datos, rutas y reglas para
+  llevarlo a otra app.
 - **Backend**: FastAPI + SQLAlchemy + JWT. Mismo stack que Turify.
-  - `layout_service.py`: agregar/mover/redimensionar/borrar muebles,
+  - `modules/bodega/service.py`: agregar/mover/redimensionar/borrar muebles,
     protegiendo el inventario (nunca deja una prenda con existencias sin
     ubicación).
-  - `inventory_service.py`: entradas, salidas, conteos y deshacer, con
+  - `modules/inventario/service.py`: entradas, salidas, conteos y deshacer, con
     `SELECT ... FOR UPDATE` para que dos personas escaneando el mismo
     código al mismo tiempo no se pisen los datos.
-  - `layout_logic.py`: traduce cada mueble a sus ubicaciones concretas
+  - `modules/bodega/logic.py`: traduce cada mueble a sus ubicaciones concretas
     (p. ej. la pared de canastas C con 9 columnas y 8 filas → 72
     ubicaciones `C-1-1` … `C-8-9`). El frontend nunca recalcula esto por su
     cuenta: siempre usa los nombres e IDs que devuelve `GET /api/layout`,
     así que backend y visor 3D no se pueden desincronizar.
-- **Frontend**: React + Vite. El visor 3D (`src/three/WarehouseScene.js`)
+- **Frontend**: React + Vite. El visor 3D (`src/modules/bodega/WarehouseScene.js`)
   es una clase de Three.js aislada de React; React solo le pasa datos
   (`setLayout`, `setProducts`) y escucha eventos de toque/arrastre.
   Los datos compartidos (inventario, movimientos, pedidos) se refrescan
@@ -219,28 +224,30 @@ variables de arriba.
 ```
 backend/
   app/
-    models.py            modelos de la base de datos
-    schemas.py            forma de los datos de entrada/salida de la API
-    layout_logic.py       muebles → ubicaciones concretas
-    layout_service.py     agregar/mover/redimensionar/borrar muebles
-    inventory_service.py  entradas/salidas/conteos/deshaces/pedidos
-    catalog.py            catálogo de pigmalionmoto.com (nombre, talla, foto, precio)
-    push.py               avisos al celular (Web Push)
-    migrations.py         columnas nuevas en bases que ya existen
-    security.py, deps.py  JWT y control de acceso
-    routers/              auth, layout, products, movements, reports, reserve,
-                          documents, parcels, catalog, push
+    main.py               arranque: crea las tablas y junta las rutas de cada modulo
+    core/                 lo comun: configuracion, base de datos, sesion (JWT),
+                          permisos, migraciones y datos iniciales
+    modules/              un modulo por carpeta (ver modules/README.md):
+      auth/ inventario/ bodega/ reserva/ documentos/ remisiones/ facturas/
+      conteo/ despacho/ reportes/ catalogo/ avisos/
+                          cada uno con router.py (rutas), models.py (tablas),
+                          schemas.py (datos) y service.py si tiene logica propia
+    models.py, schemas.py reunen las tablas y los datos de todos los modulos
   tests/                  pruebas con pytest (flujo completo, documentos,
                           de paso, reportes, avisos...)
 
 frontend/
   src/
-    three/WarehouseScene.js   motor 3D (clase, sin dependencias de React)
-    components/WarehouseCanvas.jsx   puente React ↔ Three.js
-    pages/                     Login, Warehouse, Scan, Inventory, Reserve,
-                               Summary, Count, Reports
-    hooks/useApi.js            sondeo de datos compartidos
-    context/AuthContext.jsx    sesión y token JWT
+    main.jsx, App.jsx     arranque y rutas de la app
+    core/                 api (sesion y llamadas), AuthContext, useApi (sondeo
+                          y cache), utils
+    ui/                   piezas compartidas: hojas, iconos, botones, elegir
+                          ubicacion, recortar foto...
+    modules/              las mismas partes que el servidor (ver modules/README.md):
+                          bodega (visor 3D), inventario, escaneo, remisiones,
+                          facturas, documentos, conteo, reserva, despacho,
+                          resumen, reportes, avisos, auth
+    styles/global.css     estilos generales (cada modulo puede traer los suyos)
 ```
 
 ## Variables del servidor (`backend/.env`)
