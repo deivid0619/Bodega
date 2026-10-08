@@ -7,6 +7,7 @@ import { useConfirm } from '../../ui/ConfirmContext'
 import { locationGroups } from '../../core/locationGroups'
 import NewProductModal from '../inventario/NewProductModal'
 import NewReserveModal from '../reserva/NewReserveModal'
+import { readDraft as readRemisionDraft } from '../remisiones/draft'
 import { ProductSearchSheet } from '../reserva/ProductSearch'
 import FacturaSheet from '../facturas/FacturaSheet'
 import RemisionSheet from '../remisiones/RemisionSheet'
@@ -136,6 +137,7 @@ export default function Scan() {
   const [lastMove, setLastMove] = useState(null)
   const [factura, setFactura] = useState(false)
   const [remision, setRemision] = useState(false)
+  const remisionDraft = !remision && !!readRemisionDraft() // una remision a medias
   const [parcel, setParcel] = useState(false)
   const [session, setSession] = useState([])
   const [hit, setHit] = useState(null) // lo ultimo registrado, para mostrarlo encima de la camara
@@ -541,7 +543,7 @@ export default function Scan() {
         <div className="doc-cards">
           <button className="doc-card in" onClick={() => setRemision(true)}>
             <span className="doc-ico"><Icon name="boxIn" size={22} /></span>
-            <span className="doc-card-t"><b>Recibir remisión</b><small>Lo que llega del proveedor</small></span>
+            <span className="doc-card-t"><b>Recibir remisión</b><small>{remisionDraft ? 'Tienes una a medias: sigue donde ibas' : 'Lo que llega del proveedor'}</small></span>
           </button>
           <button className="doc-card" onClick={() => setFactura(true)}>
             <span className="doc-ico"><Icon name="receipt" size={22} /></span>

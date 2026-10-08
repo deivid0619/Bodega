@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api, ApiError } from '../../core/api'
 import { refreshInventory, revalidate, useLayout, usePolling, useProducts, useReserve } from '../../core/useApi'
 import { locationGroups } from '../../core/locationGroups'
@@ -7,6 +7,7 @@ import { guessSizeFromSku } from '../../core/utils'
 import { saveDocPhoto } from '../documentos/docPhotos'
 import { beep } from '../../core/feedback'
 import { useToast } from '../../ui/ToastContext'
+import { useConfirm } from '../../ui/ConfirmContext'
 import Sheet, { SheetHeader, useSheet } from '../../ui/Sheet'
 import Icon from '../../ui/Icon'
 import { Stepper, plural } from '../../ui/Bits'
@@ -17,14 +18,18 @@ import { itemsText, sendNotice, useNotifyPick } from '../avisos/Notices'
 import LocationPicker from '../../ui/LocationPicker'
 import { blockId, buildRefs, localToday, newRow, norm, rowsOf, shopRef } from './refs'
 import PickStep from './PickStep'
+import { agoText, clearDraft, readDraft, readDraftPhoto, saveDraftPhoto, writeDraft } from './draft'
 import RefPicker from './RefPicker'
 import SizeRow from './SizeRow'
 import './remisiones.css'
 
 // Recibir una remision: la foto, lo que llego (por referencia y talla),
-// donde queda y confirmar. Ver README.md de este modulo.
+// donde queda y confirmar. Lo que se va anotando queda guardado en el
+// celular (draft.js): salirse no lo borra; solo "Descartar cambios" o
+// confirmarla. Ver README.md de este modulo.
 function Body() {
   const showToast = useToast()
+  const ask = useConfirm()
   const notify = useNotifyPick('remision') // a quien de los enlaces se le avisa
   const { close } = useSheet()
   const { data: products } = useProducts()
@@ -38,21 +43,23 @@ function Body() {
   const groups = useMemo(() => locationGroups(layout?.elements, { dispatch: false }), [layout])
   const suppliers = useMemo(() => [...new Set((recent || []).map((d) => d.supplier).filter(Boolean))], [recent])
 
-  const [step, setStep] = useState('pick')
+  // la que se dejo a medias: se sigue donde iba
+  const [draft] = useState(readDraft)
+  const [step, setStep] = useState(draft ? 'form' : 'pick')
   const [photo, setPhoto] = useState(null)
   const [photoFile, setPhotoFile] = useState(null) // se guarda como prueba al confirmar
   const [zoom, setZoom] = useState(false)
-  const [number, setNumber] = useState('')
-  const [supplier, setSupplier] = useState('')
-  const [date, setDate] = useState(localToday)
-  const [blocks, setBlocks] = useState([])
-  const [picking, setPicking] = useState(true)
-  const [showPending, setShowPending] = useState(false)
-  const [dest, setDest] = useState('bodega')
+  const [number, setNumber] = useState(draft?.number ?? '')
+  const [supplier, setSupplier] = useState(draft?.supplier ?? '')
+  const [date, setDate] = useState(draft?.date ?? localToday)
+  const [blocks, setBlocks] = useState(() => (draft?.blocks || []).map((b) => ({ ...b, id: blockId() })))
+  const [picking, setPicking] = useState(draft ? !!draft.picking : true)
+  const [showPending, setShowPending] = useState(!!draft?.showPending)
+  const [dest, setDest] = useState(draft?.dest ?? 'bodega')
   const [history, setHistory] = useState(null)
-  const [delivery, setDelivery] = useState(0)
+  const [delivery, setDelivery] = useState(draft?.delivery ?? 0)
   const [addingSize, setAddingSize] = useState(null)
-  const [notes, setNotes] = useState('')
+  const [notes, setNotes] = useState(draft?.notes ?? '')
   const [saving, setSaving] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [flash, setFlash] = useState(null) // lo ultimo que se escaneo
@@ -61,10 +68,44 @@ function Body() {
 
   useEffect(() => () => { if (photo) URL.revokeObjectURL(photo) }, [photo])
 
+  // la foto de la que se dejo a medias
+  const photoLoading = useRef(!!draft?.hasPhoto)
+  useEffect(() => {
+    if (!draft?.hasPhoto) return
+    readDraftPhoto().then((blob) => {
+      photoLoading.current = false
+      if (!blob) return
+      setPhotoFile(blob)
+      setPhoto(URL.createObjectURL(blob))
+    })
+  }, [draft])
+  const takePhoto = (f) => {
+    setPhoto(URL.createObjectURL(f))
+    setPhotoFile(f)
+    saveDraftPhoto(f)
+  }
+
+  // todo lo anotado queda guardado al instante (hasta confirmar o descartar)
+  const finished = useRef(false)
+  const dirty = step === 'form' && !!(blocks.length || number.trim() || supplier.trim() || notes.trim() || photoFile)
+  useEffect(() => {
+    if (finished.current || step !== 'form') return
+    if (!dirty && !photoLoading.current) {
+      clearDraft()
+      return
+    }
+    writeDraft({ number, supplier, date, blocks, picking, showPending, dest, delivery, notes,
+                 hasPhoto: !!photoFile || photoLoading.current })
+  }, [dirty, step, number, supplier, date, blocks, picking, showPending, dest, delivery, notes, photoFile])
+
   // entregas anteriores de la misma orden (OPR77, OPR77#2...)
   const base = norm(number).split('#')[0]
+  const lastBase = useRef(base) // al seguir una guardada, se queda su entrega
   useEffect(() => {
-    setDelivery(0)
+    if (lastBase.current !== base) {
+      lastBase.current = base
+      setDelivery(0)
+    }
     if (base.length < 2) { setHistory(null); return undefined }
     const t = setTimeout(() => {
       api.get(`/api/documents?kind=remision&base=${encodeURIComponent(base)}&limit=20`)
@@ -242,6 +283,19 @@ function Body() {
               : noCode ? `Las prendas de paso necesitan su código (talla ${noCode.size || 'única'}).`
                 : ''
 
+  const discard = async () => {
+    const ok = await ask({
+      title: '¿Descartar los cambios?',
+      body: `Se borra lo que llevas de esta remisión${units ? ` (${plural(units, 'prenda', 'prendas')})` : ''}${photoFile ? ' y su foto' : ''}. No entra nada al inventario.`,
+      confirmLabel: 'Sí, descartar',
+    })
+    if (!ok) return
+    finished.current = true
+    await clearDraft()
+    showToast('Remisión descartada')
+    close()
+  }
+
   const confirm = async () => {
     setSaving(true)
     try {
@@ -254,6 +308,8 @@ function Body() {
         })),
       })
       refreshInventory()
+      finished.current = true
+      clearDraft() // ya entro: el borrador no sigue
       const d = res.document
       // la foto queda como prueba (dos meses); si no sube, la remision igual entro
       let kept = false
@@ -288,7 +344,7 @@ function Body() {
   if (step === 'pick') {
     return (
       <PickStep
-        onFile={(f) => { setPhoto(URL.createObjectURL(f)); setPhotoFile(f); setStep('form') }}
+        onFile={(f) => { takePhoto(f); setStep('form') }}
         onSkip={() => setStep('form')}
       />
     )
@@ -299,8 +355,17 @@ function Body() {
       <SheetHeader
         eyebrow={<div className="sheet-eyebrow"><span className="tag tag-in">Entrada de mercancía</span></div>}
         title="Revisa lo que llegó"
-        subtitle="Cuenta las prendas y pon lo que contaste."
+        subtitle="Cuenta las prendas y pon lo que contaste. Si te sales, lo que llevas queda guardado."
       />
+      {draft && (
+        <div className="rem-resumed" role="note">
+          <Icon name="check" size={18} stroke={2.6} />
+          <span>
+            <b>Sigues con la remisión que dejaste {agoText(draft.at)}</b>
+            <small>Todo lo que anotaste sigue aquí. Si no la vas a terminar, abajo está «Descartar cambios».</small>
+          </span>
+        </div>
+      )}
       {photo && (
         <button type="button" className="rem-photo" onClick={() => setZoom(true)} aria-label="Ver la foto en grande">
           <img src={photo} alt="" />
@@ -531,6 +596,11 @@ function Body() {
         <button className="btn btn-lime btn-lg btn-block" disabled={!!problem || saving} onClick={confirm}>
           {saving ? 'Guardando…' : record ? `Guardar registro de ${plural(units, 'prenda', 'prendas')}` : units ? `Confirmar entrada de ${plural(units, 'prenda', 'prendas')}` : 'Guardar remisión'}
         </button>
+        {dirty && (
+          <button type="button" className="link-btn rem-discard" disabled={saving} onClick={discard}>
+            Descartar cambios
+          </button>
+        )}
       </div>
       {zoom && photo && <PhotoZoom src={photo} onClose={() => setZoom(false)} />}
     </>
@@ -538,8 +608,14 @@ function Body() {
 }
 
 export default function RemisionSheet({ onClose }) {
+  const showToast = useToast()
+  // al salirse a medias: queda guardada (confirmada o descartada ya no hay borrador)
+  const closed = () => {
+    if (readDraft()) showToast('La remisión quedó guardada: ábrela otra vez para seguir donde ibas.')
+    onClose()
+  }
   return (
-    <Sheet modal onClose={onClose} label="Recibir una remisión">
+    <Sheet modal onClose={closed} label="Recibir una remisión">
       <Body />
     </Sheet>
   )

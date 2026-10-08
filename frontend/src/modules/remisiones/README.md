@@ -6,10 +6,11 @@
 
 | Archivo | Qué es |
 |---|---|
-| `RemisionSheet.jsx` | La hoja completa, en pasos: foto → qué llegó → dónde queda → confirmar. Arma las líneas y llama a `POST /api/documents/remision`. Después sube la foto y manda los avisos elegidos. |
+| `RemisionSheet.jsx` | La hoja completa, en pasos: foto → qué llegó → dónde queda → confirmar. Si se sale a medias, queda guardada (`draft.js`). Arma las líneas y llama a `POST /api/documents/remision`. Después sube la foto y manda los avisos elegidos. |
 | `PickStep.jsx` | Primer paso: tomar la foto del papel (con recorte), elegir una guardada o seguir sin foto. |
 | `RefPicker.jsx` | Buscar la referencia que llegó: en la bodega, en la reserva o en la tienda en línea. También permite escribir una nueva. |
 | `SizeRow.jsx` | Una talla: cuántas llegaron, cuántas quedaron debiendo y el código si es nueva. |
+| `draft.js` | La remisión a medias: se guarda en el celular mientras se llena (la foto en IndexedDB) y se sigue al abrirla otra vez. Se borra al confirmar o con «Descartar cambios». |
 | `refs.js` | La lógica sin pantalla: las referencias conocidas, las tallas de la plantilla y las filas. **Se puede llevar tal cual a otra app.** |
 | `remisiones.css` | Los estilos propios de la remisión (clases `.rem-*`). |
 
