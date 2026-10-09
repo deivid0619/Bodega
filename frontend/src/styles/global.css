@@ -1321,3 +1321,6 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .tcw-tip em{flex:none;font-style:normal;font-weight:800;color:var(--lime-deep)}
 /* renombrar toda la referencia (la ficha de la prenda) */
 .rename-all{margin-top:8px;padding:10px 12px;border-radius:var(--r-sm);background:var(--lime-soft)}
+/* busqueda del 3D: lo que solo esta en la reserva */
+.wh-result.res{background:var(--lime-soft)}
+.code.res-tag{background:var(--lime-deep);color:#fff}

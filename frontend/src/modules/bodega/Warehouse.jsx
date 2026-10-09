@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../../core/api'
 import { useAuth } from '../../core/AuthContext'
-import { useLayout, useProducts, useRestock } from '../../core/useApi'
+import { useLayout, useProducts, useReserve, useRestock } from '../../core/useApi'
 import WarehouseCanvas from './WarehouseCanvas'
 import LocationSheet from './LocationSheet'
 import EditPanel from './EditPanel'
@@ -10,7 +10,7 @@ import ProductModal from '../inventario/ProductModal'
 import Icon from '../../ui/Icon'
 import { Count, ProductThumb, SearchField, plural } from '../../ui/Bits'
 import { locationGroups } from '../../core/locationGroups'
-import { outletIdsOf, stockSplit } from '../../core/utils'
+import { outletIdsOf, refKey, stockSplit } from '../../core/utils'
 
 const STORAGE = ['bins', 'shelf', 'rack', 'boxes', 'table']
 const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase()
@@ -83,6 +83,8 @@ export default function Warehouse() {
     return [...by].map(([id, n]) => ({ id, qty: `+${n}` }))
   }, [supply])
 
+  // lo de la reserva: si lo que se busca no esta en ninguna ubicacion, sale igual (con el aviso)
+  const { data: reserve } = useReserve()
   const results = useMemo(() => {
     const q = norm(query.trim())
     if (!q) return []
@@ -108,8 +110,17 @@ export default function Warehouse() {
       if (f.stocked >= 2) hits.push({ type: 'all', p: f.p, n: f.stocked, total: f.total })
       hits.push(...f.rows)
     }
-    return [...out, ...hits.slice(0, 10)]
-  }, [query, products, locIndex, storageEls])
+    // en la reserva y no en la bodega (o en 0): una fila que lleva a la Reserva
+    const stockedHere = (p) => (p?.stock || []).some((s) => s.qty > 0 && locIndex.has(s.location_id))
+    const bySku = new Map((products || []).map((p) => [p.sku, p]))
+    const res = (reserve || []).filter((it) => {
+      if (!(it.qty > 0)) return false
+      if (!q.split(/\s+/).every((w) => norm(`${it.name} ${it.sku || ''} ${it.size || ''}`).includes(w))) return false
+      const p = (it.sku && bySku.get(it.sku)) || (products || []).find((x) => refKey(x.name) === refKey(it.name) && refKey(x.size) === refKey(it.size))
+      return !stockedHere(p)
+    }).slice(0, 5).map((it) => ({ type: 'res', it }))
+    return [...out, ...hits.slice(0, 10), ...res]
+  }, [query, products, reserve, locIndex, storageEls])
 
   const prevEdit = useRef(editMode)
   useEffect(() => {
@@ -343,6 +354,15 @@ export default function Warehouse() {
                     </span>
                     <span className="qty">{r.total}</span>
                   </button>
+                ) : r.type === 'res' ? (
+                  <button key={`res-${r.it.id}`} className="wh-result res" role="option" onClick={() => navigate(`/reserve?buscar=${encodeURIComponent(r.it.name)}`)}>
+                    <ProductThumb src={r.it.image_url} alt="" size="sm" />
+                    <span className="wh-result-t">
+                      <b>{r.it.name}{r.it.size ? ` · ${r.it.size}` : ''}</b>
+                      <small><span className="code res-tag"><Icon name="reserve" size={12} stroke={2.2} />Solo en la reserva</span>No está en la bodega · ver en Reserva</small>
+                    </span>
+                    <span className="qty">{r.it.qty}</span>
+                  </button>
                 ) : r.type === 'prod' ? (
                   <button key={`${r.p.sku}-${r.loc}`} className="wh-result" role="option" onClick={() => locate(r.loc, r.p.sku)}>
                     <ProductThumb src={r.p.image_url} alt="" size="sm" />
@@ -358,7 +378,7 @@ export default function Warehouse() {
                     <span className="wh-result-t"><b>{r.label}</b><small>{r.type === 'loc' ? 'Ubicación' : 'Mueble completo'}</small></span>
                   </button>
                 )
-              )) : <p className="wh-noresult">Nada con “{query.trim()}” en la bodega.</p>}
+              )) : <p className="wh-noresult">Nada con “{query.trim()}” en la bodega ni en la reserva.</p>}
             </div>
           )}
           {!showResults && (
