@@ -10,7 +10,7 @@ Registra la mercancía que llega de un proveedor con su remisión (el papel), ya
 1. Se toma la foto del papel (opcional) y se recorta.
 2. Se agrega lo que llegó, referencia por referencia y talla por talla. Se puede escanear la etiqueta, buscar en la bodega o en la tienda en línea, o escribirlo.
 3. Se elige **dónde queda**:
-   - **Bodega:** cada referencia en su ubicación. Una talla se puede repartir en varias ubicaciones y la reserva, con una línea por cada una: por ejemplo, de 45 riñoneras, 15 a C-1-1, 15 a C-1-2, 10 a C-2-1 y 5 a la reserva.
+   - **Bodega:** cada talla va a donde ya hay de esa talla (la ubicación con más), para no mezclar tallas en una canasta. Si hoy no hay de esa talla, va a su ubicación de siempre. Si es una talla nueva, va con las otras tallas, y la app avisa que ahí se mezclan. La app muestra, talla por talla, dónde hay de ella y deja elegir otra ubicación para esa talla o para toda la referencia. Una talla se puede repartir en varias ubicaciones y la reserva, con una línea por cada una: por ejemplo, de 45 riñoneras, 15 a C-1-1, 15 a C-1-2, 10 a C-2-1 y 5 a la reserva.
    - **Reserva:** todo queda guardado aparte.
    - **De paso (despacho):** llega solo para despacharse en unos días.
    - **Registro:** solo se guarda el papel; lo que llegó ya se había entrado escaneando y no se suma otra vez.
@@ -47,7 +47,7 @@ Recibe (`RemisionIn`):
 | `lines[].sku` | Código de la etiqueta. Sin código, esa talla queda en la reserva hasta que se le ponga. |
 | `lines[].qty` | Lo que llegó y se contó. |
 | `lines[].pending` | Lo que el proveedor quedó debiendo: **solo se anota, nunca se suma**. |
-| `lines[].location_id` | Bodega: dónde se guarda esa referencia. Sin elegir, donde ya está cada talla. Si la talla es nueva, con sus otras tallas. |
+| `lines[].location_id` | Bodega: dónde se guarda esa talla. La app manda la de cada talla: donde ya hay de ella, la elegida o la de toda la referencia. Si viene vacía: la ubicación principal de la talla; si es nueva, con sus otras tallas. |
 | `lines[].to_reserve` | Bodega: esta parte de la talla va a la reserva (repartir). |
 
 Responde `201` con (`DocumentResult`):

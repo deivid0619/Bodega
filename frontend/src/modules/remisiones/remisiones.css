@@ -68,6 +68,19 @@
 .rem-part-add{display:flex;flex-wrap:wrap;gap:4px 14px;padding-top:2px}
 .rem-part-add .link-btn{font-size:13px;padding:6px 2px}
 .rem-part-add .link-btn:disabled{opacity:.4}
+/* talla por talla: a donde va y donde ya hay de ella (para no mezclar tallas) */
+.rem-size-places{display:grid;gap:6px}
+.rem-size-place{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px 10px;padding:9px 10px;border-radius:var(--r-sm);background:var(--paper)}
+.rsp-t{min-width:0}
+.rsp-t b{display:block;font-weight:700;font-size:13.5px;line-height:1.25}
+.rsp-t small{display:block;margin-top:2px;font-size:12px;line-height:1.3;color:var(--muted)}
+.rsp-other{font-size:13px;padding:6px 2px}
+.rsp-here,.rsp-auto{grid-column:2/-1}
+.rsp-auto{justify-self:start;padding:2px 0;font-size:12.5px}
+.rem-size-place.mix{background:var(--amber-soft);box-shadow:inset 0 0 0 1.5px var(--amber)}
+.rem-size-place.mix .rsp-t small{color:#A9480A;font-weight:600}
+.rem-size-place.need{box-shadow:inset 0 0 0 1.5px var(--amber)}
+.rem-split-size .tcw-here{margin-top:-2px}
 /* "Otra referencia": buscarla o escanear su etiqueta ahi mismo */
 .rem-pick-top.with-scan{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
 .rem-pick-scan{height:52px;padding:0 16px}

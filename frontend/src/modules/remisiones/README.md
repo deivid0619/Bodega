@@ -9,8 +9,10 @@
 | `RemisionSheet.jsx` | La hoja completa, en pasos: foto → qué llegó → dónde queda → confirmar. Si se sale a medias, queda guardada (`draft.js`). Arma las líneas y llama a `POST /api/documents/remision`. Después sube la foto y manda los avisos elegidos. |
 | `PickStep.jsx` | Primer paso: tomar la foto del papel (con recorte), elegir una guardada o seguir sin foto. |
 | `RefPicker.jsx` | Buscar la referencia que llegó: en la bodega, en la reserva o en la tienda en línea. También permite escribir una nueva. |
-| `SplitRow.jsx` | Repartir una talla en varias ubicaciones (o una parte a la reserva): ubicación + cuántas, por parte. Lo que no se reparte va a la ubicación de la referencia. |
+| `SplitRow.jsx` | Repartir una talla en varias ubicaciones (o una parte a la reserva): ubicación + cuántas, por parte. Lo que no se reparte va a donde va esa talla. |
 | `SizeRow.jsx` | Una talla: cuántas llegaron, cuántas quedaron debiendo y el código si es nueva. |
+| `SizePlaceRow.jsx` | En «Dónde queda», una talla que llegó: a dónde va, por qué, y dónde ya hay de esa talla (se toca para guardarla ahí, o «Otra»). |
+| `sizePlace.js` | A dónde va cada talla sin mezclar tallas: donde ya hay de ella (la que tiene más); si hoy no hay, su ubicación de siempre; si es nueva, con las otras tallas, avisando que se mezclan. **Sin pantalla.** |
 | `draft.js` | La remisión a medias: se guarda en el celular mientras se llena (la foto en IndexedDB) y se sigue al abrirla otra vez. Se borra al confirmar o con «Descartar cambios». |
 | `orderSummary.js` | La orden con todas sus entregas (OPR77, OPR77#2…): qué llegó de cada talla (sumado), qué sigue faltando (lo que dijo la última entrega) y dónde quedó. **Sin pantalla.** |
 | `remisionPdf.js` | El PDF de la remisión con eso (jsPDF, se carga solo al pedirlo). Se arma en el celular y se descarga; no se guarda. El botón está en el detalle de la remisión (`documentos/DocumentSheet.jsx`). |

@@ -3,7 +3,7 @@ import { api, ApiError } from '../../core/api'
 import { refreshInventory, revalidate, useLayout, usePolling, useProducts, useReserve } from '../../core/useApi'
 import { locationGroups } from '../../core/locationGroups'
 import { cleanCode } from '../facturas/facturaParser'
-import { guessSizeFromSku } from '../../core/utils'
+import { guessSizeFromSku, outletIdsOf } from '../../core/utils'
 import { saveDocPhoto } from '../documentos/docPhotos'
 import { beep } from '../../core/feedback'
 import { useToast } from '../../ui/ToastContext'
@@ -15,12 +15,14 @@ import ScanBox from '../escaneo/ScanBox'
 import NearPick from '../../ui/NearPick'
 import PhotoZoom from '../../ui/PhotoZoom'
 import { itemsText, sendNotice, useNotifyPick } from '../avisos/Notices'
-import LocationPicker from '../../ui/LocationPicker'
+import LocationPicker, { LocationPickerSheet } from '../../ui/LocationPicker'
 import { RESERVA, blockId, buildRefs, localToday, newRow, norm, partsTotal, rowsOf, shopRef, splitRow } from './refs'
+import { sizePlace } from './sizePlace'
 import PickStep from './PickStep'
 import { agoText, clearDraft, readDraft, readDraftPhoto, saveDraftPhoto, writeDraft } from './draft'
 import RefPicker from './RefPicker'
 import SizeRow from './SizeRow'
+import SizePlaceRow from './SizePlaceRow'
 import SplitRow from './SplitRow'
 import './remisiones.css'
 
@@ -42,6 +44,7 @@ function Body() {
   const inBodega = useMemo(() => new Set((products || []).map((p) => p.name)), [products])
   // la ubicacion de la bodega; Despacho es su propio destino (de paso)
   const groups = useMemo(() => locationGroups(layout?.elements, { dispatch: false }), [layout])
+  const outlet = useMemo(() => outletIdsOf(layout), [layout])
   const suppliers = useMemo(() => [...new Set((recent || []).map((d) => d.supplier).filter(Boolean))], [recent])
 
   // la que se dejo a medias: se sigue donde iba
@@ -70,6 +73,7 @@ function Body() {
   const [flash, setFlash] = useState(null) // lo ultimo que se escaneo
   const [unknown, setUnknown] = useState(null) // un codigo que no esta en ningun lado: { code, near, newRef, ref }
   const [recentIn, setRecentIn] = useState([]) // lo que ya entro escaneando de estos codigos
+  const [pickFor, setPickFor] = useState(null) // la talla a la que se le elige otra ubicacion: { bid, size }
 
   useEffect(() => () => { if (photo) URL.revokeObjectURL(photo) }, [photo])
 
@@ -141,7 +145,8 @@ function Body() {
     // place: la ubicacion de esta referencia ('' = donde ya esta cada talla)
     setBlocks((bs) => [...bs, { id: blockId(), name: ref.name, isNew: !!ref.isNew, shop: !!ref.shop, rows: rowsOf(ref), place: '' }])
   }
-  const setPlace = (bid, place) => setBlocks((bs) => bs.map((b) => (b.id === bid ? { ...b, place } : b)))
+  // la ubicacion de toda la referencia: lo elegido por talla se reemplaza
+  const setPlace = (bid, place) => setBlocks((bs) => bs.map((b) => (b.id === bid ? { ...b, place, rows: b.rows.map((r) => ({ ...r, loc: '' })) } : b)))
   // dos toques seguidos suman dos: cada cambio parte del valor actual
   const setRow = (bid, size, patch) =>
     setBlocks((bs) => bs.map((b) => (b.id !== bid ? b : {
@@ -256,6 +261,22 @@ function Body() {
     })
   }
 
+  // donde hay de cada talla y a donde va si no se elige otra (sin mezclar tallas)
+  const autos = useMemo(() => {
+    const m = new Map()
+    for (const b of blocks) {
+      for (const r of b.rows) {
+        const code = r.sku || cleanCode(r.code)
+        if (code) m.set(`${b.id}|${r.size}`, sizePlace(known.get(code), b.name, products, outlet))
+      }
+    }
+    return m
+  }, [blocks, known, products, outlet])
+  const setRowLoc = (bid, size, loc) => setRow(bid, size, { loc })
+  // a donde va una talla: la elegida para ella, la de toda la referencia o la automatica de esa talla
+  const destOf = (b, r) => r.loc || b.place || autos.get(`${b.id}|${r.size}`)?.auto?.id || ''
+  const nameOf = (id) => groups.flatMap((g) => g.options).find((o) => o.id === id)?.name || id
+
   // repartida: una linea por ubicacion (el servidor junta la misma talla si va al mismo lugar)
   const splitting = (b) => dest === 'bodega' && !!b.split
   const coded = (r) => !!(r.sku || cleanCode(r.code)) // sin codigo va a la reserva: no se reparte
@@ -264,7 +285,7 @@ function Body() {
     .flatMap((r) => {
       const base = { name: b.name, size: r.size, sku: r.sku || cleanCode(r.code) || null, isNew: b.isNew }
       const { parts, rest } = splitRow(r, splitting(b) && coded(r))
-      const out = rest > 0 || r.pending > 0 ? [{ ...base, place: b.place, qty: Math.max(0, rest), pending: r.pending }] : []
+      const out = rest > 0 || r.pending > 0 ? [{ ...base, place: destOf(b, r), qty: Math.max(0, rest), pending: r.pending }] : []
       return [...out, ...parts.map((x) => (x.loc === RESERVA
         ? { ...base, place: '', qty: x.qty, pending: 0, toReserve: true }
         : { ...base, place: x.loc, qty: x.qty, pending: 0 }))]
@@ -288,29 +309,21 @@ function Body() {
   // de paso se cuenta por codigo: una talla sin codigo no puede quedar en Despacho
   const noCode = passing && lines.find((l) => l.qty > 0 && !l.sku)
   const clash = lines.some((l) => l.sku && known.get(l.sku) && known.get(l.sku).name !== l.name)
-  // un codigo nuevo se guarda junto a las otras tallas; si la referencia no tiene ninguna en la bodega, hay que elegir
-  const withKnown = new Set(blocks.filter((b) => b.rows.some((r) => r.sku && known.has(r.sku))).map((b) => b.name))
-  const homeless = (b) => !inBodega.has(b.name) && !withKnown.has(b.name)
+  // cada talla que entra a la bodega necesita a donde ir (lo repartido ya tiene su ubicacion)
   const needsPlace = dest === 'bodega'
-    ? blocks.find((b) => !b.place && homeless(b) && b.rows.some((r) => {
-      const code = r.sku || cleanCode(r.code) // de la tienda o escrito
-      return splitRow(r, splitting(b) && coded(r)).rest > 0 && code && !known.get(code) // lo repartido ya tiene su ubicacion
-    }))
+    ? blocks.find((b) => b.rows.some((r) => coded(r) && splitRow(r, splitting(b)).rest > 0 && !destOf(b, r)))
     : null
   // repartida: que no pase de lo que llego y que cada parte diga a donde va
   const overSplit = blocks.find((b) => splitting(b) && b.rows.some((r) => coded(r) && partsTotal(r.parts) > r.qty))
   const unplaced = blocks.find((b) => splitting(b) && b.rows.some((r) => coded(r) && r.qty > 0 && (r.parts || []).some((x) => x.qty > 0 && !x.loc)))
-  // lo que dice "automatica" en cada referencia: donde estan hoy sus tallas
-  const autoLabel = (b) => {
-    const here = [...new Set(b.rows.map((r) => known.get(r.sku)).filter(Boolean).map((p) => p.location_name || p.location_id))]
-    if (here.length) return `Automática: donde ya está (${here.slice(0, 2).join(', ')}${here.length > 2 ? '…' : ''})`
-    return homeless(b) ? 'Elige dónde guardarla' : 'Automática: con sus otras tallas'
-  }
-  // a donde va lo que no se repartio ("Quedan 5 → ...")
-  const mainLabel = (b) => {
-    if (b.place) return groups.flatMap((g) => g.options).find((o) => o.id === b.place)?.name || b.place
-    const auto = autoLabel(b)
-    return auto.startsWith('Automática: ') ? auto.slice(12) : 'la ubicación de arriba (elígela)'
+  // lo que dice "automatica" en cada referencia: cada talla va a donde ya hay de ella (abajo, talla por talla)
+  const autoLabel = (b) => (b.rows.some((r) => autos.get(`${b.id}|${r.size}`)?.auto)
+    ? 'Automática: cada talla donde ya hay de ella'
+    : 'Elige dónde guardarla')
+  // a donde va lo que no se repartio de una talla ("Quedan 5 → ...")
+  const restLabel = (b, r) => {
+    const id = destOf(b, r)
+    return id ? nameOf(id) : 'la ubicación de arriba (elígela)'
   }
 
   const problem = dup ? 'Esta remisión ya entró.'
@@ -582,17 +595,55 @@ function Body() {
                     <span className="rem-place-name">{b.name}</span>
                     <LocationPicker value={b.place} onChange={(v) => setPlace(b.id, v)} groups={groups}
                                     emptyLabel={autoLabel(b)} ariaLabel={`Ubicación de ${b.name}`} />
+                    {/* talla por talla: a donde va y donde ya hay de ella, para no mezclar tallas */}
+                    {!b.split && arrived.length > 0 && (
+                      <div className="rem-size-places" aria-label={`Dónde queda cada talla de ${b.name}`}>
+                        {arrived.map((r) => {
+                          const a = autos.get(`${b.id}|${r.size}`)
+                          const to = destOf(b, r)
+                          const auto = !r.loc && !b.place
+                          return (
+                            <SizePlaceRow key={r.size} size={r.size} qty={r.qty} here={a?.here || []} to={to} toName={nameOf(to)}
+                                          how={r.loc ? 'la elegiste' : b.place ? 'la de toda la referencia' : a?.auto?.why}
+                                          mix={auto && !!a?.auto?.mix} chosen={!!r.loc}
+                                          onPick={(id) => setRowLoc(b.id, r.size, id)}
+                                          onOther={() => setPickFor({ bid: b.id, size: r.size })}
+                                          onAuto={() => setRowLoc(b.id, r.size, '')} />
+                          )
+                        })}
+                      </div>
+                    )}
                     {arrived.length > 0 && (
                       <button type="button" className="link-btn rem-split-toggle" onClick={() => toggleSplit(b.id)}>
                         <Icon name={b.split ? 'x' : 'pin'} size={14} stroke={2.4} />
-                        {b.split ? 'No repartir: todo a la ubicación de arriba' : 'Repartir en varias ubicaciones'}
+                        {b.split ? 'No repartir: cada talla a un solo lugar' : 'Repartir en varias ubicaciones'}
                       </button>
                     )}
-                    {b.split && arrived.map((r) => (
-                      <SplitRow key={r.size} row={r} size={r.size} mainLabel={mainLabel(b)} groups={groups}
-                                onChange={(parts) => setParts(b.id, r.size, parts)} />
-                    ))}
-                    {b.split && <small className="rem-split-hint">Pon cuántas van a cada canasta o percha (o a la reserva). Las que no repartas entran a la ubicación de arriba.</small>}
+                    {b.split && arrived.map((r) => {
+                      const here = autos.get(`${b.id}|${r.size}`)?.here || []
+                      // tocar donde ya hay de esa talla llena la parte que falta (o agrega una)
+                      const toPart = (id) => {
+                        const parts = r.parts || []
+                        const empty = parts.find((x) => !x.loc)
+                        setParts(b.id, r.size, empty ? parts.map((x) => (x === empty ? { ...x, loc: id } : x)) : [...parts, { key: blockId(), loc: id, qty: 0 }])
+                      }
+                      return (
+                        <SplitRow key={r.size} row={r} size={r.size} mainLabel={restLabel(b, r)} groups={groups}
+                                  onChange={(parts) => setParts(b.id, r.size, parts)}
+                                  hint={here.length > 0 && (
+                                    <span className="tcw-here">
+                                      Hay de esta talla:
+                                      {here.slice(0, 4).map((h) => (
+                                        <button key={h.id} type="button" className="tcw-chip" onClick={() => toPart(h.id)}
+                                                aria-label={`Poner una parte de la talla ${r.size || 'única'} en ${h.name}: ahí hay ${h.qty}`}>
+                                          {h.id}<b>{h.qty}</b>
+                                        </button>
+                                      ))}
+                                    </span>
+                                  )} />
+                      )
+                    })}
+                    {b.split && <small className="rem-split-hint">Pon cuántas van a cada canasta o percha (o a la reserva). Las que no repartas van a donde dice «Quedan».</small>}
                   </div>
                 )
               })}
@@ -623,6 +674,19 @@ function Body() {
         )}
       </div>
       {zoom && photo && <PhotoZoom src={photo} onClose={() => setZoom(false)} />}
+      {pickFor && (() => {
+        const b = blocks.find((x) => x.id === pickFor.bid)
+        const r = b?.rows.find((x) => x.size === pickFor.size)
+        if (!r) return null
+        const a = autos.get(`${b.id}|${r.size}`)
+        // sin elegir para la talla: la de toda la referencia o la automatica de esa talla
+        const fallback = b.place ? `Igual que la referencia: ${nameOf(b.place)}`
+          : a?.auto ? `Automática: ${a.auto.name} (${a.auto.why})` : undefined
+        return (
+          <LocationPickerSheet value={r.loc || ''} groups={groups} onClose={() => setPickFor(null)}
+                               emptyLabel={fallback} onChange={(v) => setRowLoc(b.id, r.size, v)} />
+        )
+      })()}
     </>
   )
 }

@@ -8,7 +8,8 @@ import './remisiones.css' // tambien se usa al escanear
 // reserva): cuantas van a cada una. Lo que no se reparte entra a la ubicacion
 // de la referencia (la de arriba). Ej.: 45 rinoneras, 15 a cada canasta.
 // allowReserve: ofrecer "Una parte a la reserva" (en la remision si; al escanear una entrada, no)
-export default function SplitRow({ row, size, mainLabel, groups, onChange, allowReserve = true }) {
+// hint: lo que va debajo del titulo (en la remision, donde ya hay de esa talla)
+export default function SplitRow({ row, size, mainLabel, groups, onChange, allowReserve = true, hint }) {
   const parts = row.parts || []
   const given = partsTotal(parts)
   const rest = row.qty - given
@@ -26,6 +27,7 @@ export default function SplitRow({ row, size, mainLabel, groups, onChange, allow
           {rest < 0 ? `Repartiste ${-rest} de más` : rest === 0 ? 'Todas repartidas' : `Quedan ${rest} → ${mainLabel}`}
         </small>
       </div>
+      {hint}
       {parts.map((p, i) => {
         const max = p.qty + Math.max(0, rest) // lo suyo y lo que queda sin repartir
         const put = (n) => set(p.key, { qty: Math.max(0, Math.min(max, Math.floor(n) || 0)) })
