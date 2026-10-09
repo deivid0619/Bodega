@@ -1299,3 +1299,4 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 /* la foto del papel: descargar y borrar (una subida por error) */
 .doc-photo-acts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
 .doc-photo .doc-photo-del{width:40px;padding:0;color:var(--red)}
+.doc-pdf{margin-top:14px}

@@ -12,6 +12,8 @@
 | `SplitRow.jsx` | Repartir una talla en varias ubicaciones (o una parte a la reserva): ubicación + cuántas, por parte. Lo que no se reparte va a la ubicación de la referencia. |
 | `SizeRow.jsx` | Una talla: cuántas llegaron, cuántas quedaron debiendo y el código si es nueva. |
 | `draft.js` | La remisión a medias: se guarda en el celular mientras se llena (la foto en IndexedDB) y se sigue al abrirla otra vez. Se borra al confirmar o con «Descartar cambios». |
+| `orderSummary.js` | La orden con todas sus entregas (OPR77, OPR77#2…): qué llegó de cada talla (sumado), qué sigue faltando (lo que dijo la última entrega) y dónde quedó. **Sin pantalla.** |
+| `remisionPdf.js` | El PDF de la remisión con eso (jsPDF, se carga solo al pedirlo). Se arma en el celular y se descarga; no se guarda. El botón está en el detalle de la remisión (`documentos/DocumentSheet.jsx`). |
 | `refs.js` | La lógica sin pantalla: las referencias conocidas, las tallas de la plantilla y las filas. **Se puede llevar tal cual a otra app.** |
 | `remisiones.css` | Los estilos propios de la remisión (clases `.rem-*`). |
 

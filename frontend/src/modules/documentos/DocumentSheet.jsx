@@ -11,6 +11,7 @@ import Icon from '../../ui/Icon'
 import { Empty, SearchField, plural } from '../../ui/Bits'
 import AttachSheet from '../facturas/AttachFactura'
 import { useCrop } from '../../ui/PhotoCrop'
+import { orderBase, orderSummary } from '../remisiones/orderSummary'
 
 // un pedido que espera su factura todavia no tiene numero (PED-...)
 export const waiting = (d) => d.kind === 'factura' && d.status === 'espera'
@@ -189,6 +190,34 @@ function Detail({ doc: initial }) {
   const isRem = doc.kind === 'remision'
   const created = new Date(doc.created_at)
 
+  // el PDF de la remision: la orden con todas sus entregas (OPR77, OPR77#2...),
+  // que llego, que falta y donde quedo. Se arma aqui y se descarga; no se guarda.
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const makePdf = async () => {
+    setPdfBusy(true)
+    try {
+      const base = orderBase(doc.number)
+      let deliveries = [doc]
+      if (!doc.number.startsWith('SN-')) {
+        const list = await api.get(`/api/documents?kind=remision&base=${encodeURIComponent(base)}&limit=20`)
+        const same = list.filter((d) => orderBase(d.number) === base)
+        if (same.length) deliveries = same.some((d) => d.id === doc.id) ? same : [...same, doc]
+      }
+      const multi = deliveries.length > 1
+      const title = doc.number.startsWith('SN-') ? 'Remisión sin número'
+        : multi ? `Orden ${base} · ${deliveries.length} entregas` : `Remisión ${doc.number}`
+      const { remisionPdf } = await import('../remisiones/remisionPdf')
+      const blob = await remisionPdf(orderSummary(deliveries, (id) => locName.get(id)), {
+        title, registered: multi ? '' : `${fmtWhen(doc.created_at)} · ${doc.user_name}`,
+      })
+      await downloadPhoto(blob, `remision-${base.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`)
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No se pudo armar el PDF. Intenta otra vez.', 'err')
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   const groups = useMemo(() => {
     const map = new Map()
     for (const l of doc.lines || []) {
@@ -271,6 +300,12 @@ function Detail({ doc: initial }) {
           </div>
         ))}
       </div>
+      {isRem && (
+        <button type="button" className="btn btn-ink btn-block doc-pdf" onClick={makePdf} disabled={pdfBusy}>
+          <Icon name="download" size={18} />{pdfBusy ? 'Armando el PDF…' : 'Descargar PDF de la remisión'}
+        </button>
+      )}
+      {isRem && <p className="mode-hint">Lo que llegó de cada talla, lo que falta y dónde quedó (con las otras entregas de la misma orden). Se arma en el momento: no se guarda.</p>}
       {attaching && <AttachSheet pedido={doc} onClose={() => setAttaching(false)} onDone={(d) => setDoc(d)} />}
     </>
   )
