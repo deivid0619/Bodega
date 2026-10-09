@@ -15,8 +15,11 @@ import { orderBase, orderSummary } from '../remisiones/orderSummary'
 
 // un pedido que espera su factura todavia no tiene numero (PED-...)
 export const waiting = (d) => d.kind === 'factura' && d.status === 'espera'
+// un pedido que se confirmo sin factura (se queda con su PED-...)
+export const noFactura = (d) => d.kind === 'factura' && d.mode === 'sin_factura'
 
-export const docTitle = (d) => (waiting(d) ? pedidoLabel(d) : d.kind === 'factura' ? `Factura ${d.number}`
+export const docTitle = (d) => (waiting(d) ? pedidoLabel(d) : noFactura(d) ? `${pedidoLabel(d)} · sin factura`
+  : d.kind === 'factura' ? `Factura ${d.number}`
   : d.number.startsWith('SN-') ? 'Remisión sin número' : `Remisión ${d.number}`)
 
 const fmtWhen = (iso) => {
@@ -162,6 +165,44 @@ function Detail({ doc: initial }) {
   const [undoing, setUndoing] = useState(false)
   const isWaiting = waiting(doc)
   const record = doc.mode === 'registro'
+  const sinFactura = noFactura(doc)
+  const [closing, setClosing] = useState(false)
+
+  // un pedido que no va a tener factura: queda cerrado como salida
+  const confirmNoFactura = async () => {
+    const ok = await confirm({
+      title: '¿Confirmar sin factura?',
+      body: 'El pedido queda cerrado como salida, sin número de factura. Ya se descontó al empacarlo: el inventario no cambia. Si al final llega la factura, puedes volver a dejarlo esperando.',
+      confirmLabel: 'Sí, confirmar',
+      danger: false,
+    })
+    if (!ok) return
+    setClosing(true)
+    try {
+      setDoc(await api.post(`/api/documents/${doc.id}/sin-factura`))
+      revalidate('/api/documents')
+      revalidate('/api/movements')
+      showToast('Pedido confirmado sin factura')
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No se pudo confirmar. Intenta otra vez.', 'err')
+    } finally {
+      setClosing(false)
+    }
+  }
+  // al final si llego la factura: vuelve a esperarla para anexarla
+  const waitAgain = async () => {
+    setClosing(true)
+    try {
+      setDoc(await api.post(`/api/documents/${doc.id}/esperar-factura`))
+      revalidate('/api/documents')
+      revalidate('/api/movements')
+      showToast('El pedido volvió a esperar su factura')
+    } catch (e) {
+      showToast(e instanceof ApiError ? e.message : 'No se pudo cambiar. Intenta otra vez.', 'err')
+    } finally {
+      setClosing(false)
+    }
+  }
 
   // deshacer un pedido que espera factura: todo vuelve a donde salio
   const undo = async () => {
@@ -246,6 +287,7 @@ function Detail({ doc: initial }) {
           <div className="sheet-eyebrow">
             <span className={`tag ${isRem ? 'tag-in' : 'tag-out'}`}>{isRem ? 'Entrada' : 'Salida'}</span>
             {isWaiting && <span className="tag tag-warn">Esperando factura</span>}
+            {sinFactura && <span className="tag tag-set">Sin factura</span>}
             {record && <span className="tag tag-set">Solo registro</span>}
           </div>
         }
@@ -270,12 +312,25 @@ function Detail({ doc: initial }) {
           <button type="button" className="btn btn-lime btn-block" onClick={() => setAttaching(true)}>
             <Icon name="receipt" size={18} />Anexar factura
           </button>
+          <button type="button" className="btn btn-ghost btn-block" style={{ marginTop: 8 }} disabled={closing || undoing} onClick={confirmNoFactura}>
+            <Icon name="check" size={18} stroke={2.4} />{closing ? 'Confirmando…' : 'Confirmar sin factura'}
+          </button>
           <button type="button" className="btn btn-quiet btn-block" style={{ marginTop: 8 }} disabled={undoing} onClick={undo}>
             {undoing ? 'Deshaciendo…' : 'Deshacer pedido (las prendas vuelven)'}
           </button>
         </div>
       )}
-      {doc.closed_at && (
+      {sinFactura && (
+        <div className="doc-banner">
+          <p>Se armó como pedido el {fmtWhen(doc.created_at)} y se confirmó sin factura el {fmtWhen(doc.closed_at)}.</p>
+          {!isViewOnly() && (
+            <button type="button" className="link-btn" style={{ marginTop: 6 }} disabled={closing} onClick={waitAgain}>
+              Al final llegó la factura: volver a esperarla
+            </button>
+          )}
+        </div>
+      )}
+      {doc.closed_at && !sinFactura && (
         <p className="doc-banner">Se armó como pedido el {fmtWhen(doc.created_at)} y la factura se anexó el {fmtWhen(doc.closed_at)}</p>
       )}
 
@@ -326,16 +381,17 @@ export function DocItem({ doc, onOpen, time = fmtTime }) {
   const isRem = doc.kind === 'remision'
   const sn = doc.number.startsWith('SN-')
   const wait = waiting(doc)
+  const sinF = noFactura(doc)
   const owed = isRem ? (doc.lines || []).filter((l) => l.pending > 0) : []
   return (
     <button type="button" className="need doc-item" onClick={() => onOpen(doc)}>
       <span className="need-t">
-        <b className={sn || wait ? '' : 'mono'}>
-          {wait ? pedidoLabel(doc) : sn ? 'Sin número' : doc.number}
+        <b className={sn || wait || sinF ? '' : 'mono'}>
+          {wait || sinF ? pedidoLabel(doc) : sn ? 'Sin número' : doc.number}
           {doc.photo_count > 0 && <Icon name="camera" size={14} stroke={2.2} className="doc-cam" aria-label="Con foto" role="img" aria-hidden={false} />}
         </b>
-        {(wait || doc.mode === 'registro') && (
-          <span className={`doc-flag ${wait ? 'wait' : ''}`}>{wait ? 'Esperando factura' : 'Solo registro'}</span>
+        {(wait || sinF || doc.mode === 'registro') && (
+          <span className={`doc-flag ${wait ? 'wait' : ''}`}>{wait ? 'Esperando factura' : sinF ? 'Sin factura' : 'Solo registro'}</span>
         )}
         <small>{[isRem ? doc.supplier : plural((doc.lines || []).length, 'referencia', 'referencias'), doc.user_name, time(doc.created_at)].filter(Boolean).join(' · ')}</small>
         {owed.length > 0 && <small className="owed">Quedaron debiendo {owed.map((l) => `${l.size || 'única'} ${l.pending}`).join(', ')}</small>}

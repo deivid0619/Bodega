@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/documents", tags=["facturas"])
 
 
 PEDIDO_NOTE = "Pedido "  # nota de las salidas de un pedido que espera su factura
+NO_FACTURA_NOTE = "Pedido sin factura "  # las de un pedido que se confirmo sin factura
 
 
 def _merge_out(db: Session, lines: list[schemas.DocumentLineIn]) -> dict[tuple[str, Optional[str]], int]:
@@ -234,6 +235,38 @@ def attach_factura(doc_id: int, payload: schemas.AttachIn, background: Backgroun
                         f"Anexada al pedido: {doc.units} prendas · {user.name}", "/summary", f"doc-{number}", user.id)
     products = _warn_low(background, db, touched, first_before)
     return schemas.DocumentResult(document=doc, products=ser.products_out(db, products))
+
+
+@router.post("/{doc_id}/sin-factura", response_model=schemas.DocumentOut)
+def confirm_without_factura(doc_id: int, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Un pedido que no va a tener factura: queda cerrado como salida, sin
+    numero de factura. Ya se desconto al empacarlo: el inventario no cambia."""
+    doc = _waiting(db, doc_id)
+    db.query(models.Movement).filter(models.Movement.note == f"{PEDIDO_NOTE}{doc.number}").update(
+        {models.Movement.note: f"{NO_FACTURA_NOTE}{doc.number}"}, synchronize_session=False)
+    doc.status = None
+    doc.mode = "sin_factura"
+    doc.closed_at = models.now()
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
+@router.post("/{doc_id}/esperar-factura", response_model=schemas.DocumentOut)
+def wait_for_factura_again(doc_id: int, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
+    """Al final si llego la factura: el pedido confirmado sin factura vuelve a
+    esperarla (para anexarla). El inventario no cambia."""
+    doc = db.get(models.Document, doc_id)
+    if not doc or doc.kind != "factura" or doc.mode != "sin_factura":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ese pedido no se confirmó sin factura.")
+    db.query(models.Movement).filter(models.Movement.note == f"{NO_FACTURA_NOTE}{doc.number}").update(
+        {models.Movement.note: f"{PEDIDO_NOTE}{doc.number}"}, synchronize_session=False)
+    doc.status = "espera"
+    doc.mode = None
+    doc.closed_at = None
+    db.commit()
+    db.refresh(doc)
+    return doc
 
 
 @router.delete("/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)

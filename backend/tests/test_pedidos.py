@@ -192,3 +192,37 @@ def test_pedido_saca_de_la_reserva_lo_que_no_esta_en_la_bodega():
         r = client.post("/api/documents/factura", headers=h, json={"number": f"FRESB{tag}", "lines": [{"sku": zero, "qty": 1}]})
         assert r.status_code == 201, r.text
         assert _reserve_qty(client, h, zero) == 2
+
+
+def test_pedido_confirmado_sin_factura():
+    """Un pedido que no va a tener factura se confirma sin ella: queda cerrado,
+    el inventario no cambia y, si al final llega la factura, vuelve a esperarla."""
+    import uuid
+
+    with TestClient(app) as client:
+        h = _h(client)
+        tag = uuid.uuid4().hex[:5].upper()
+        sku = f"SINF-{tag}"
+        _new(client, h, sku, "F-2-1", 5, name=f"CHAQUETA SIN FACTURA {tag}")
+        doc = client.post("/api/documents/pedido", headers=h, json={"lines": [{"sku": sku, "qty": 2}]}).json()["document"]
+        assert doc["status"] == "espera" and _stock(client, h, sku) == {"F-2-1": 3}
+
+        r = client.post(f"/api/documents/{doc['id']}/sin-factura", headers=h)
+        assert r.status_code == 200, r.text
+        done = r.json()
+        assert done["status"] is None and done["mode"] == "sin_factura" and done["closed_at"]
+        assert _stock(client, h, sku) == {"F-2-1": 3}  # ya se habia descontado
+        outs = [m for m in client.get("/api/movements?limit=50", headers=h).json() if m["sku"] == sku and m["type"] == "out"]
+        assert outs[0]["note"] == f"Pedido sin factura {doc['number']}"
+        # ya no espera: no se anexa factura ni se deshace, y no cuenta como pendiente
+        assert client.post(f"/api/documents/{doc['id']}/factura", headers=h, json={"number": f"F{tag}"}).status_code == 404
+        assert client.delete(f"/api/documents/{doc['id']}", headers=h).status_code == 404
+        assert client.post(f"/api/documents/{doc['id']}/sin-factura", headers=h).status_code == 404
+        assert all(d["id"] != doc["id"] for d in client.get("/api/documents?kind=factura&status=espera", headers=h).json())
+
+        # al final llego la factura: vuelve a esperarla y se anexa
+        r = client.post(f"/api/documents/{doc['id']}/esperar-factura", headers=h)
+        assert r.status_code == 200 and r.json()["status"] == "espera" and r.json()["mode"] is None
+        r = client.post(f"/api/documents/{doc['id']}/factura", headers=h, json={"number": f"FSF{tag}"})
+        assert r.status_code == 200, r.text
+        assert client.post(f"/api/documents/{doc['id']}/esperar-factura", headers=h).status_code == 404
