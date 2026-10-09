@@ -6,6 +6,7 @@ import NotificationBell from './modules/avisos/NotificationBell'
 import OfflineBar from './ui/OfflineBar'
 import Icon, { BrandMark } from './ui/Icon'
 import Sheet, { SheetHeader } from './ui/Sheet'
+import Boot from './ui/Boot'
 import { useMovementNotifications } from './modules/avisos/useMovementNotifications'
 import { useInstall } from './core/install'
 import { useToast } from './ui/ToastContext'
@@ -23,7 +24,7 @@ const Warehouse = lazy(() => import('./modules/bodega/Warehouse'))
 
 function RequireAuth({ children }) {
   const { token, ready } = useAuth()
-  if (!ready) return null
+  if (!ready) return <Boot /> // nunca en blanco: la marca y la barra mientras se conecta
   if (!token) return <Navigate to="/login" replace />
   return children
 }
@@ -126,7 +127,7 @@ function Shell() {
       <OfflineBar />
       <main>
         <Routes>
-          <Route path="/" element={<Suspense fallback={<div className="page full wh" />}><Warehouse /></Suspense>} />
+          <Route path="/" element={<Suspense fallback={<div className="page full wh"><Boot variant="page" label="Cargando la bodega 3D…" /></div>}><Warehouse /></Suspense>} />
           <Route path="/inventory" element={<Inventory />} />
           <Route path="/scan" element={<Scan />} />
           <Route path="/reserve" element={<Reserve />} />

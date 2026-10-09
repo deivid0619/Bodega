@@ -117,6 +117,15 @@ export function AuthProvider({ children }) {
         if (isNetworkError(e)) setUser((cur) => cur || readUser() || { name: '', role: 'operator' })
         else expired()
       })
+    // ya habia entrado: la app abre de una con lo guardado en el celular y el
+    // servidor confirma por detras (dormido en Render tarda hasta un minuto;
+    // antes la pantalla quedaba en blanco esperandolo). Si la sesion vencio,
+    // lleva a entrar.
+    const saved = readUser()
+    if (saved) {
+      setUser((cur) => cur || saved)
+      setReady(true)
+    }
     me().finally(() => setReady(true))
     window.addEventListener('online', me) // al volver la señal, se confirma
     return () => window.removeEventListener('online', me)
