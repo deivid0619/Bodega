@@ -2,11 +2,13 @@ import Icon from '../../ui/Icon'
 import { Stepper } from '../../ui/Bits'
 import LocationPicker from '../../ui/LocationPicker'
 import { RESERVA, blockId, partsTotal } from './refs'
+import './remisiones.css' // tambien se usa al escanear
 
 // Repartir una talla que llego en varias ubicaciones (o una parte a la
 // reserva): cuantas van a cada una. Lo que no se reparte entra a la ubicacion
 // de la referencia (la de arriba). Ej.: 45 rinoneras, 15 a cada canasta.
-export default function SplitRow({ row, size, mainLabel, groups, onChange }) {
+// allowReserve: ofrecer "Una parte a la reserva" (en la remision si; al escanear una entrada, no)
+export default function SplitRow({ row, size, mainLabel, groups, onChange, allowReserve = true }) {
   const parts = row.parts || []
   const given = partsTotal(parts)
   const rest = row.qty - given
@@ -51,7 +53,7 @@ export default function SplitRow({ row, size, mainLabel, groups, onChange }) {
         <button type="button" className="link-btn" onClick={() => add('')} disabled={rest <= 0 && parts.length > 0}>
           <Icon name="plus" size={14} stroke={2.4} />Otra ubicación
         </button>
-        {!hasReserve && (
+        {allowReserve && !hasReserve && (
           <button type="button" className="link-btn" onClick={() => add(RESERVA)} disabled={rest <= 0 && parts.length > 0}>
             <Icon name="plus" size={14} stroke={2.4} />Una parte a la reserva
           </button>

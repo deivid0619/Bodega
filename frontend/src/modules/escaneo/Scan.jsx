@@ -17,10 +17,12 @@ import { PageHead, Stepper, plural } from '../../ui/Bits'
 import { useBarcodeScanner } from './useBarcodeScanner'
 import Viewfinder, { PhotoRead } from './Viewfinder'
 import { beep } from '../../core/feedback'
-import { fmtTime, fromMissing, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../../core/utils'
+import { fmtTime, fromMissing, isSplit, outAvailable, outParts, outletIdsOf, placesOf, reserveFor, reserveIndex } from '../../core/utils'
 import FromPick from '../../ui/FromPick'
 import { itemsText, sendNotice, useNotifyPick } from '../avisos/Notices'
-import LocationPicker from '../../ui/LocationPicker'
+import LocationPicker, { LocationPickerSheet } from '../../ui/LocationPicker'
+import SplitRow from '../remisiones/SplitRow'
+import { blockId, partsTotal, splitRow } from '../remisiones/refs'
 
 const MODES = [
   { m: 'in', label: 'Entrada', icon: 'boxIn', hint: 'Cada código suma prendas a su ubicación.' },
@@ -208,17 +210,28 @@ export default function Scan() {
   // entradas de algo que esta en la reserva: falta decir si viene de alla
   const needsRes = (l) => l.type === 'in' && l.res && l.fromRes === undefined
   const missingRes = toConfirm.filter(needsRes).length
+  // repartida: que no pase de las que hay y que cada parte diga a donde va
+  const badSplit = (l) => l.type === 'in' && !!l.parts && (partsTotal(l.parts) > l.qty || l.parts.some((x) => x.qty > 0 && !x.loc))
+  const splitIssues = toConfirm.filter(badSplit).length
 
   const [params] = useSearchParams()
   const navigate = useNavigate()
   const groups = useMemo(() => (layout ? locationGroups(layout.elements) : []), [layout])
+  // "Escanear aqui" desde una ubicacion (?loc=C-4-1): lo que se escanee va
+  // ahi, aunque se escanee antes de que cargue el plano o se llegue otra vez
+  const urlLoc = params.get('loc') || ''
+  const appliedLoc = useRef(null)
   useEffect(() => {
-    if (place !== null || !groups.length) return
-    const wanted = params.get('loc')
-    const exists = wanted && groups.some((g) => g.options.some((l) => l.id === wanted))
-    setPlace(exists ? wanted : '')
-  }, [groups, place, params])
+    if (!groups.length) return
+    const exists = urlLoc && groups.some((g) => g.options.some((l) => l.id === urlLoc))
+    if (exists && appliedLoc.current !== urlLoc) {
+      appliedLoc.current = urlLoc
+      setPlace(urlLoc)
+    } else if (place === null) setPlace('')
+  }, [groups, urlLoc, place])
+  const curPlace = place ?? urlLoc
   const firstLoc = groups[0]?.options[0]?.id || ''
+  const locNames = useMemo(() => new Map(groups.flatMap((g) => g.options).map((o) => [o.id, o.name])), [groups])
 
   const pendingRef = useRef(null)
   pendingRef.current = pendingSku || newReserve?.sku || null
@@ -257,7 +270,7 @@ export default function Scan() {
         afterRead()
         return
       }
-      const res = await moveStock(sku, mode, qty, place || undefined)
+      const res = await moveStock(sku, mode, qty, curPlace || undefined)
       beep(true)
       record(res)
       showHit(res)
@@ -335,7 +348,7 @@ export default function Scan() {
 
   // una lectura a la lista: el mismo codigo (y tipo y lugar) se va sumando
   const stage = (p) => {
-    const loc = place || ''
+    const loc = curPlace || ''
     const key = `${mode}|${p.sku}|${loc}`
     const list = toConfirmRef.current
     const old = list.find((l) => l.key === key)
@@ -370,6 +383,45 @@ export default function Scan() {
     setToConfirm(toConfirmRef.current.map((l) => (l.key === key ? { ...l, fromRes, err: null } : l)))
   }
 
+  // repartir una entrada en varias ubicaciones (lo que no se reparte va a la de la linea)
+  const setParts = (key, parts) => {
+    setToConfirm(toConfirmRef.current.map((l) => (l.key === key ? { ...l, parts, err: null } : l)))
+  }
+
+  // lleva lineas de la lista a otra ubicacion; las que quedan iguales se juntan
+  const relocate = (pick, v) => {
+    const list = toConfirmRef.current
+    const moves = list.filter((l) => pick(l) && (l.loc || '') !== (v || ''))
+    if (!moves.length) return 0
+    const merged = []
+    for (const l of list) {
+      const m = moves.includes(l) ? { ...l, loc: v || '', key: `${l.type}|${l.sku}|${v || ''}`, from: l.type === 'out' ? undefined : l.from, err: null } : { ...l }
+      const same = merged.find((x) => x.key === m.key)
+      if (same) {
+        same.qty += m.qty
+        same.n += m.n
+      } else merged.push(m)
+    }
+    setToConfirm(merged)
+    return moves.reduce((t, l) => t + l.qty, 0)
+  }
+  const placeLabel = (v, l) => (v ? locNames.get(v) || v : l ? `su ubicación principal (${l.main})` : 'su ubicación principal')
+
+  // cambiar "¿Dónde?" tambien mueve lo que ya esta en la lista (sin repartir):
+  // si no, lo de arriba seguia yendo a donde estaba al escanearlo
+  const changePlace = (v) => {
+    setPlace(v)
+    const units = relocate((l) => (l.type === 'in' || l.type === 'out') && !l.parts, v)
+    if (units) showToast(`${plural(units, 'prenda de la lista pasa', 'prendas de la lista pasan')} a ${placeLabel(v)}`)
+  }
+
+  // tocar la ubicacion de una entrada en la lista: elegir otra
+  const [locFor, setLocFor] = useState(null) // la linea
+  const setLineLoc = (key, v) => {
+    const l = toConfirmRef.current.find((x) => x.key === key)
+    if (relocate((x) => x.key === key, v)) showToast(`${l.name}${l.size ? ` ${l.size}` : ''} entra en ${placeLabel(v, l)}`)
+  }
+
   const setFrom = (key, from) => {
     setToConfirm(toConfirmRef.current.map((l) => (l.key === key ? { ...l, from, err: null } : l)))
   }
@@ -381,7 +433,7 @@ export default function Scan() {
   }
 
   const confirmAll = async () => {
-    if (savingRef.current || !toConfirmRef.current.length || toConfirmRef.current.some((l) => needsFrom(l) || needsRes(l))) return
+    if (savingRef.current || !toConfirmRef.current.length || toConfirmRef.current.some((l) => needsFrom(l) || needsRes(l) || badSplit(l))) return
     savingRef.current = true
     setSaving(true)
     setHit(null)
@@ -399,15 +451,27 @@ export default function Scan() {
         if (l.type === 'reserve') {
           recordReserve(await api.post('/api/reserve/scan', { sku: l.sku, qty: l.qty }))
           done = l.qty
-        } else if (l.type === 'in' && l.fromRes && l.res) {
-          // viene de la reserva: se descuenta de alla (no queda contada dos veces)
-          const take = Math.min(l.qty, l.res.qty)
-          const tr = await api.post(`/api/reserve/${l.res.id}/transfer`, { qty: take, location_id: l.loc || l.main, sku: l.sku })
-          record({ product: tr.product, movement: tr.movement, movements: tr.movements })
-          done += take
-          if (l.qty > take) {
-            record(await moveStock(l.sku, 'in', l.qty - take, l.loc || undefined))
-            done += l.qty - take
+        } else if (l.type === 'in') {
+          // repartida: cada parte a su ubicacion; el resto, a la de la linea.
+          // Si viene de la reserva, se descuenta de alla (no queda contada dos veces)
+          const { parts: split, rest } = splitRow({ qty: l.qty, parts: l.parts }, !!l.parts)
+          const dests = [...split.map((x) => ({ qty: x.qty, loc: x.loc })), ...(rest > 0 ? [{ qty: rest, loc: l.loc }] : [])]
+          let fromRes = l.fromRes && l.res ? Math.min(l.qty, l.res.qty) : 0
+          for (const d of dests) {
+            const take = Math.min(d.qty, fromRes)
+            if (take > 0) {
+              const tr = await api.post(`/api/reserve/${l.res.id}/transfer`, { qty: take, location_id: d.loc || l.main, sku: l.sku })
+              record({ product: tr.product, movement: tr.movement, movements: tr.movements })
+              fromRes -= take
+              done += take
+            }
+            if (d.qty > take) {
+              const r = await moveStock(l.sku, 'in', d.qty - take, d.loc || undefined)
+              record(r)
+              if (r?.queued) offline += d.qty - take
+              done += d.qty - take
+            }
+            entered.push({ name: l.name, size: l.size, qty: d.qty, loc: d.loc || l.main })
           }
         } else for (const part of parts) {
           const r = await moveStock(l.sku, l.type, part.qty, part.loc || undefined)
@@ -416,10 +480,10 @@ export default function Scan() {
           done += part.qty
         }
       } catch (e) {
-        failed.unshift({ ...l, qty: l.qty - done, err: e instanceof ApiError ? e.message : 'No hay conexión con el servidor.' })
+        // lo que falto queda en la lista (sin el reparto: ya se guardo una parte)
+        failed.unshift({ ...l, qty: l.qty - done, parts: undefined, err: e instanceof ApiError ? e.message : 'No hay conexión con el servidor.' })
       }
       units += done
-      if (l.type === 'in' && done > 0) entered.push({ name: l.name, size: l.size, qty: done, loc: l.loc || l.main })
       if (l.type === 'out' && done > 0) left.push({ name: l.name, size: l.size, qty: done })
     }
     setToConfirm(failed)
@@ -612,12 +676,15 @@ export default function Scan() {
                   {missingRes === 1 ? 'Falta decir si una prenda viene de la reserva' : `Falta decir si ${missingRes} prendas vienen de la reserva`}
                 </p>
               )}
+              {splitIssues > 0 && (
+                <p className="to-confirm-ask">Revisa el reparto: cada parte con su ubicación y sin pasar de las que hay</p>
+              )}
               {missingFrom > 0 && (
                 <p className="to-confirm-ask">
                   {missingFrom === 1 ? 'Falta elegir de dónde sale una prenda' : `Falta elegir de dónde salen ${missingFrom} prendas`}: está en varios lugares
                 </p>
               )}
-              <button type="button" className="btn btn-lime" onClick={confirmAll} disabled={saving || missingFrom > 0 || missingRes > 0}>
+              <button type="button" className="btn btn-lime" onClick={confirmAll} disabled={saving || missingFrom > 0 || missingRes > 0 || splitIssues > 0}>
                 <Icon name="check" size={18} stroke={2.4} />
                 {saving ? 'Guardando…' : toConfirmTypes.size > 1 ? 'Confirmar'
                   : toConfirmTypes.has('out') ? 'Confirmar salida' : toConfirmTypes.has('reserve') ? 'Guardar en la reserva' : 'Confirmar entrada'}
@@ -634,7 +701,14 @@ export default function Scan() {
                     <span className={`to-confirm-type ${l.type}`}>{l.type === 'out' ? 'Salida' : l.type === 'reserve' ? 'Reserva' : 'Entrada'}</span>
                     {l.type === 'reserve'
                       ? (l.inReserve ? ` · ya hay ${l.inReserve}` : ' · nueva')
-                      : <>{l.type === 'out' ? ' de ' : ' en '}{l.loc || (l.type === 'out' ? (l.from || 'donde haya') : l.main)}</>}
+                      : l.type === 'in'
+                        ? <>{' en '}{l.parts ? 'varias ubicaciones' : (
+                          <button type="button" className="to-confirm-loc" disabled={saving} onClick={() => setLocFor(l.key)}
+                                  aria-label={`Cambiar dónde entra: ${l.loc || l.main}`}>
+                            {l.loc || l.main}<Icon name="pencil" size={11} stroke={2.4} />
+                          </button>
+                        )}</>
+                        : <>{' de '}{l.loc || (isSplit(l.from) ? 'varias ubicaciones' : l.from || 'donde haya')}</>}
                     {' · '}{l.edited ? 'cantidad ajustada' : plural(l.n, 'lectura', 'lecturas')}
                   </small>
                   {l.err ? <small className="to-confirm-msg">{l.err}</small>
@@ -651,6 +725,22 @@ export default function Scan() {
                 </button>
                 {places.length > 0 && (
                   <FromPick places={places} value={l.from} qty={l.qty} disabled={saving} onChange={(v) => setFrom(l.key, v)} />
+                )}
+                {l.type === 'in' && l.qty > 1 && !l.parts && (
+                  <button type="button" className="link-btn to-confirm-split" disabled={saving}
+                          onClick={() => setParts(l.key, [{ key: blockId(), loc: '', qty: 0 }])}>
+                    <Icon name="pin" size={13} stroke={2.4} />Repartir en varias ubicaciones
+                  </button>
+                )}
+                {l.type === 'in' && l.parts && (
+                  <div className="to-confirm-splitbox">
+                    <SplitRow row={{ qty: l.qty, parts: l.parts }} size={l.size} groups={groups} allowReserve={false}
+                              mainLabel={locNames.get(l.loc || l.main) || l.loc || l.main}
+                              onChange={(parts) => setParts(l.key, parts)} />
+                    <button type="button" className="link-btn" disabled={saving} onClick={() => setParts(l.key, undefined)}>
+                      <Icon name="x" size={13} stroke={2.4} />No repartir: todas a {l.loc || l.main}
+                    </button>
+                  </div>
                 )}
                 {l.type === 'in' && l.res && (
                   <div className="from-pick" role="group" aria-label={`${l.name}: vienen de la reserva`}>
@@ -700,7 +790,7 @@ export default function Scan() {
 
         {mode !== 'reserve' && <div className="field">
           <span className="field-label">¿Dónde?</span>
-          <LocationPicker value={place || ''} onChange={setPlace} groups={groups} ariaLabel="¿Dónde?"
+          <LocationPicker value={place || ''} onChange={changePlace} groups={groups} ariaLabel="¿Dónde?"
                           emptyLabel="Automática: la ubicación principal de cada código" />
           <span className="field-hint">
             {mode === 'out'
@@ -787,6 +877,13 @@ export default function Scan() {
       {factura && <FacturaSheet onClose={() => setFactura(false)} />}
       {remision && <RemisionSheet onClose={() => setRemision(false)} />}
       {parcel && <ParcelSheet defaultLocation={place || undefined} onClose={() => setParcel(false)} />}
+      {locFor && (() => {
+        const l = toConfirm.find((x) => x.key === locFor)
+        return l ? (
+          <LocationPickerSheet value={l.loc} groups={groups} emptyLabel={`Automática: su ubicación principal (${l.main})`}
+                               onChange={(v) => setLineLoc(l.key, v)} onClose={() => setLocFor(null)} />
+        ) : null
+      })()}
       {searching && (
         <ProductSearchSheet
           subtitle={staged ? 'Toca la talla: queda en la lista como si la escanearas.'

@@ -1300,3 +1300,9 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .doc-photo-acts{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
 .doc-photo .doc-photo-del{width:40px;padding:0;color:var(--red)}
 .doc-pdf{margin-top:14px}
+/* Escanear: repartir una entrada de la lista en varias ubicaciones */
+.to-confirm-split{grid-column:1/-1;justify-self:start;display:inline-flex;align-items:center;gap:5px;padding:4px 0 2px}
+.to-confirm-splitbox{grid-column:1/-1;display:grid;gap:6px;margin-top:4px}
+.to-confirm-splitbox > .link-btn{justify-self:start;display:inline-flex;align-items:center;gap:5px}
+.to-confirm-loc{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;margin:-1px 0;border-radius:var(--r-xs);background:var(--fog-2);font:inherit;font-weight:700;color:var(--ink)}
+.to-confirm-loc svg{color:var(--muted)}

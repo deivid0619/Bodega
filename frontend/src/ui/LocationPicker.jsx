@@ -76,6 +76,16 @@ function PickerBody({ value, onPick, groups, emptyLabel }) {
   )
 }
 
+// Solo la hoja de elegir (sin el boton): para abrirla desde otro lado, como
+// la ubicacion de una prenda en la lista de Escanear. onClose al cerrarla.
+export function LocationPickerSheet({ value, onChange, groups, emptyLabel, onClose }) {
+  return (
+    <Sheet modal onClose={onClose} label="Elegir ubicación">
+      <PickerBody value={value} onPick={onChange} groups={groups || []} emptyLabel={emptyLabel} />
+    </Sheet>
+  )
+}
+
 // value: id de la ubicacion ('' = automatica, si hay emptyLabel)
 export default function LocationPicker({ value, onChange, groups, emptyLabel, fallbackLabel, placeholder = 'Elige la ubicación', ariaLabel = 'Ubicación', className = '' }) {
   const [open, setOpen] = useState(false)
