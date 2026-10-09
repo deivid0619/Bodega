@@ -158,7 +158,17 @@ def update_product(sku: str, payload: schemas.ProductUpdateIn, db: Session = Dep
             db.refresh(p)
         p.location_id = payload.location_id
     if payload.name is not None and payload.name.strip():
-        p.name = payload.name.strip().upper()
+        new = " ".join(payload.name.split()).upper()
+        if payload.rename_all and inv.ref_key(new)[0] != inv.ref_key(p.name)[0]:
+            # toda la referencia: cada talla (en todas sus ubicaciones) y lo de la reserva
+            old = inv.ref_key(p.name)[0]
+            for q in db.query(models.Product).all():
+                if inv.ref_key(q.name)[0] == old:
+                    q.name = new
+            for it in db.query(models.ReserveItem).all():
+                if inv.ref_key(it.name)[0] == old:
+                    it.name = new
+        p.name = new
     if payload.size is not None:
         p.size = payload.size.strip().upper()
     if payload.min_qty is not None:

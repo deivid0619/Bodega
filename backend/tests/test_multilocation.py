@@ -116,3 +116,42 @@ def test_backfill_moves_old_single_location_data():
             assert db.query(models.Stock).filter(models.Stock.sku == "ML-OLD-1").count() == 1
         finally:
             db.close()
+
+
+def test_rename_a_whole_reference():
+    """Cambiar el nombre de una referencia: todas sus tallas (en todas sus
+    ubicaciones) y lo de la reserva, aunque esten escritas con o sin tilde.
+    Sin rename_all, solo esa talla."""
+    import uuid
+
+    from app.core.config import settings
+
+    with TestClient(app) as client:
+        r = client.post("/api/auth/login", json={"email": settings.admin_email, "password": settings.admin_password})
+        h = {"Authorization": f"Bearer {r.json()['access_token']}"}
+        tag = uuid.uuid4().hex[:5].upper()
+        old = f"CHAQUETA PROTECCIÓN {tag}"
+        for sku, size, loc in [(f"RN-{tag}-S", "S", "F-1-1"), (f"RN-{tag}-M", "M", "F-2-1"), (f"RN-{tag}-L", "L", "F-1-1")]:
+            assert client.post("/api/products", headers=h, json={"sku": sku, "name": old, "size": size, "location_id": loc, "qty": 1}).status_code == 201
+        # la talla L tambien en otra ubicacion; y en la reserva escrita sin tilde
+        assert client.post(f"/api/products/RN-{tag}-L/move", headers=h, json={"from_location": "F-1-1", "to_location": "F-3-1", "qty": 1}).status_code == 200
+        assert client.post("/api/reserve", headers=h, json={"name": f"chaqueta proteccion {tag}", "size": "XL", "qty": 2}).status_code == 201
+
+        # solo esa talla
+        r = client.patch(f"/api/products/RN-{tag}-S", headers=h, json={"name": f"SOLO S {tag}"})
+        assert r.status_code == 200 and r.json()["name"] == f"SOLO S {tag}"
+        assert client.get(f"/api/products/RN-{tag}-M", headers=h).json()["name"] == old
+        client.patch(f"/api/products/RN-{tag}-S", headers=h, json={"name": old})
+
+        # toda la referencia
+        new = f"CHAQUETA TOURING NUEVA {tag}"
+        r = client.patch(f"/api/products/RN-{tag}-M", headers=h, json={"name": new.lower(), "rename_all": True})
+        assert r.status_code == 200, r.text
+        names = {client.get(f"/api/products/RN-{tag}-{s}", headers=h).json()["name"] for s in ("S", "M", "L")}
+        assert names == {new}
+        reserve = [i for i in client.get("/api/reserve", headers=h).json() if i["size"] == "XL" and tag in i["name"]]
+        assert [i["name"] for i in reserve] == [new]
+        for s in ("S", "M", "L"):
+            assert client.delete(f"/api/products/RN-{tag}-{s}", headers=h).status_code == 204
+        for i in reserve:
+            client.delete(f"/api/reserve/{i['id']}", headers=h)

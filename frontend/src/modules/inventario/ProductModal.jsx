@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, ApiError, isNetworkError } from '../../core/api'
 import { useAuth } from '../../core/AuthContext'
 import { useToast } from '../../ui/ToastContext'
 import { useConfirm } from '../../ui/ConfirmContext'
-import { applyLocally, bumpStock, cachedProduct, useLayout, useReserve } from '../../core/useApi'
-import { outletIdsOf, reserveIndex, stockSplit } from '../../core/utils'
+import { applyLocally, bumpStock, cachedProduct, refreshInventory, useLayout, useProducts, useReserve } from '../../core/useApi'
+import { outletIdsOf, refKey, reserveIndex, stockSplit } from '../../core/utils'
 import Sheet, { SheetHeader, useSheet } from '../../ui/Sheet'
 import MoveSheet from './MoveSheet'
 import Icon from '../../ui/Icon'
@@ -31,6 +31,9 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
   const [form, setForm] = useState(null)
   const [busy, setBusy] = useState(false)
   const [moving, setMoving] = useState(null)
+  // el nombre nuevo, para toda la referencia (todas sus tallas y lo de la reserva)
+  const { data: allProducts } = useProducts()
+  const [renameAll, setRenameAll] = useState(true)
 
   useEffect(() => {
     const show = (p) => {
@@ -63,15 +66,26 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
     else api.get(`/api/products/${encodeURIComponent(sku)}`).then(setProduct).catch(() => {})
   }
 
+  const renamed = !!form && !!product && refKey(form.name) !== refKey(product.name) && !!form.name.trim()
+  const sameRef = useMemo(() => {
+    if (!product) return { sizes: 0, reserve: 0, total: 0 }
+    const key = refKey(product.name)
+    const sizes = (allProducts || []).filter((q) => refKey(q.name) === key).length || 1
+    const res = (reserve || []).filter((it) => refKey(it.name) === key && !(allProducts || []).some((q) => q.sku === it.sku)).length
+    return { sizes, reserve: res, total: sizes + res }
+  }, [product, allProducts, reserve])
+
   const save = async () => {
     setBusy(true)
     try {
+      const all = renamed && renameAll && sameRef.total > 1
       const p = await api.patch(`/api/products/${encodeURIComponent(sku)}`, {
-        name: form.name, size: form.size, min_qty: Number(form.min_qty), location_id: form.location_id,
+        name: form.name, size: form.size, min_qty: Number(form.min_qty), location_id: form.location_id, rename_all: all,
       })
       setProduct(p)
-      onChanged()
-      showToast('Cambios guardados')
+      refreshInventory() // el nombre nuevo en el inventario, la reserva y el 3D
+      onChanged?.()
+      showToast(all ? `Referencia renombrada: ${p.name} (${sameRef.sizes} ${sameRef.sizes === 1 ? 'talla' : 'tallas'}${sameRef.reserve ? ' y la reserva' : ''})` : 'Cambios guardados')
       close()
     } catch (e) {
       showToast(e instanceof ApiError ? e.message : 'No se pudo guardar.', 'err')
@@ -174,6 +188,16 @@ function Body({ sku, locations, onChanged, onLocate, onShowAll }) {
         <span className="field-label">Referencia</span>
         <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
       </label>
+      {renamed && sameRef.total > 1 && (
+        <label className="menu-check rename-all">
+          <span>
+            Cambiar el nombre en toda la referencia
+            <small>{sameRef.sizes} {sameRef.sizes === 1 ? 'talla' : 'tallas'} en todas sus ubicaciones{sameRef.reserve ? ' y lo de la reserva' : ''}. Si no, solo esta talla.</small>
+          </span>
+          <button type="button" className="switch" role="switch" aria-checked={renameAll} aria-label="Cambiar el nombre en toda la referencia"
+                  onClick={() => setRenameAll((v) => !v)} />
+        </label>
+      )}
       <div className="grid-2">
         <label className="field">
           <span className="field-label">Talla</span>

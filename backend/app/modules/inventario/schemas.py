@@ -55,6 +55,8 @@ class ProductUpdateIn(BaseModel):
     min_qty: Optional[int] = Field(default=None, ge=0)
     location_id: Optional[str] = None
     image_url: Optional[str] = None
+    # el nombre nuevo para toda la referencia: todas sus tallas y lo de la reserva
+    rename_all: bool = False
 
 
 # ---------- movements ----------
