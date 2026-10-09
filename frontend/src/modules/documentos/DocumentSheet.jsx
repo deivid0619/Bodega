@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { api, ApiError } from '../../core/api'
+import { api, ApiError, isViewOnly } from '../../core/api'
 import { refreshInventory, revalidate, useLayout, usePolling, useProducts } from '../../core/useApi'
 import { docPhotoBlob, downloadPhoto, saveDocPhoto } from './docPhotos'
 import PhotoZoom from '../../ui/PhotoZoom'
@@ -32,9 +32,11 @@ const DAYS = 60
 const fmtDate = (d) => d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })
 
 // La foto del papel: la prueba de lo que llego o salio. Se guarda dos meses;
-// se ve en grande, se descarga y, si falta, se puede agregar.
+// se ve en grande, se descarga y, si falta, se puede agregar. Una que se subio
+// por error se borra (preguntando antes).
 function Photos({ doc, onChange }) {
   const showToast = useToast()
+  const confirm = useConfirm()
   const input = useRef(null)
   const [shots, setShots] = useState([]) // [{ blob, url }]
   const [zoom, setZoom] = useState(null)
@@ -51,7 +53,7 @@ function Photos({ doc, onChange }) {
       for (let i = 0; i < count; i++) {
         try {
           const blob = await docPhotoBlob(doc.id, i)
-          const shot = { blob, url: URL.createObjectURL(blob) }
+          const shot = { blob, url: URL.createObjectURL(blob), index: i } // su numero en el servidor
           made.push(shot)
           if (alive) setShots([...made])
         } catch {
@@ -84,19 +86,46 @@ function Photos({ doc, onChange }) {
     }
   }
 
+  const remove = async (s) => {
+    const ok = await confirm({
+      title: '¿Borrar esta foto?',
+      body: `Se borra la foto${count > 1 ? ` ${s.index + 1} de ${count}` : ''} de ${docTitle(doc)}. Lo registrado (las prendas) no cambia.`,
+      confirmLabel: 'Sí, borrar',
+    })
+    if (!ok) return
+    setBusy(true)
+    try {
+      onChange(await api.delete(`/api/documents/${doc.id}/photos/${s.index}`))
+      revalidate('/api/documents')
+      showToast('Foto borrada')
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : 'No se pudo borrar la foto.', 'err')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <>
       <h3 className="h-sec">Foto del papel {doc.photos_until && <small>hasta el {fmtDate(new Date(doc.photos_until))}</small>}</h3>
       {count > 0 ? (
         <div className="doc-photos">
-          {shots.map((s, i) => (
+          {shots.map((s) => (
             <div className="doc-photo" key={s.url}>
               <button type="button" className="doc-photo-img" onClick={() => setZoom(s.url)} aria-label="Ver la foto en grande">
                 <img src={s.url} alt="" />
               </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => downloadPhoto(s.blob, name(i))}>
-                <Icon name="download" size={16} />Descargar
-              </button>
+              <div className="doc-photo-acts">
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => downloadPhoto(s.blob, name(s.index))}>
+                  <Icon name="download" size={16} />Descargar
+                </button>
+                {!isViewOnly() && (
+                  <button type="button" className="btn btn-ghost btn-sm doc-photo-del" onClick={() => remove(s)} disabled={busy}
+                          aria-label={`Borrar la foto${count > 1 ? ` ${s.index + 1}` : ''}`}>
+                    <Icon name="trash" size={17} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
           {shots.length < count && <div className="doc-photo skeleton" />}

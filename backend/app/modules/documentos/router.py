@@ -59,6 +59,26 @@ async def add_photo(doc_id: int, request: Request, db: Session = Depends(get_db)
     return doc
 
 
+@router.delete("/{doc_id}/photos/{index}", response_model=schemas.DocumentOut)
+async def delete_photo(doc_id: int, index: int, db: Session = Depends(get_db),
+                       _: models.User = Depends(get_current_user)):
+    """Quitar una foto que se subio por error (otra hoja, borrosa, repetida).
+    Se borra del almacenamiento; el documento y lo registrado no cambian."""
+    doc = db.get(models.Document, doc_id)
+    photos = list((doc.photos or []) if doc else [])
+    if not 0 <= index < len(photos):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Esa foto ya no está.")
+    gone = photos.pop(index)
+    try:
+        await run_in_threadpool(photo_store.delete, [gone["path"]])
+    except Exception:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "No se pudo borrar la foto. Intenta otra vez.")
+    doc.photos = photos
+    db.commit()
+    db.refresh(doc)
+    return doc
+
+
 @router.get("/{doc_id}/photos/{index}")
 def get_photo(doc_id: int, index: int, db: Session = Depends(get_db), _: models.User = Depends(get_current_user)):
     """La foto (para verla o descargarla). Solo con sesion: nunca es publica."""

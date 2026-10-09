@@ -81,3 +81,31 @@ def test_where_the_photos_go(monkeypatch):
     # en el computador (SQLite): carpeta local
     monkeypatch.setattr(settings, "database_url", "sqlite:///./bodega.db")
     assert photo_store.usable() and photo_store.status()["where"] == "local"
+
+
+def test_delete_a_photo_uploaded_by_mistake(tmp_path, monkeypatch):
+    """Una foto subida por error se borra (del almacenamiento y del documento);
+    lo registrado no cambia. Solo con sesion de la bodega."""
+    import uuid
+
+    monkeypatch.setattr(settings, "photos_dir", str(tmp_path))
+    monkeypatch.setattr(settings, "supabase_url", "")
+    with TestClient(app) as client:
+        h = _h(client)
+        tag = uuid.uuid4().hex[:6].upper()
+        sku = f"FOTOB-{tag}"
+        assert client.post("/api/products", headers=h, json={"sku": sku, "name": "CHAQUETA FOTO BORRAR", "size": "M",
+                                                              "location_id": "C-1-1", "qty": 2}).status_code == 201
+        doc = client.post("/api/documents/factura", headers=h, json={"number": f"FEVB{tag}", "lines": [{"sku": sku, "qty": 1}]}).json()["document"]
+        for body in (b"\xff\xd8\xff\xe0 una", b"\xff\xd8\xff\xe0 dos"):
+            assert client.post(f"/api/documents/{doc['id']}/photos", headers={**h, "Content-Type": "image/jpeg"}, content=body).status_code == 200
+        assert len(list(tmp_path.rglob("*.jpg"))) == 2
+
+        r = client.delete(f"/api/documents/{doc['id']}/photos/0", headers=h)
+        assert r.status_code == 200, r.text
+        assert r.json()["photo_count"] == 1 and r.json()["units"] == 1
+        assert len(list(tmp_path.rglob("*.jpg"))) == 1
+        # la que queda es la segunda
+        assert client.get(f"/api/documents/{doc['id']}/photos/0", headers=h).content.endswith(b"dos")
+        assert client.delete(f"/api/documents/{doc['id']}/photos/5", headers=h).status_code == 404
+        assert client.delete(f"/api/documents/{doc['id']}/photos/0").status_code == 401
