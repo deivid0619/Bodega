@@ -1306,3 +1306,16 @@ html[data-nav="back"]::view-transition-new(root){animation-name:vt-in-left}
 .to-confirm-splitbox > .link-btn{justify-self:start;display:inline-flex;align-items:center;gap:5px}
 .to-confirm-loc{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;margin:-1px 0;border-radius:var(--r-xs);background:var(--fog-2);font:inherit;font-weight:700;color:var(--ink)}
 .to-confirm-loc svg{color:var(--muted)}
+/* Escanear una entrada: donde hay de esa talla y donde conviene guardarla */
+.to-confirm-where{grid-column:1/-1;display:grid;gap:6px;margin-top:2px}
+.tcw-here{display:flex;flex-wrap:wrap;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--muted)}
+.tcw-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px;border-radius:var(--r-xs);background:var(--fog-2);font:600 12px/1.2 var(--mono);color:var(--ink);transition:transform 160ms var(--ease-out)}
+.tcw-chip b{font-family:var(--font);font-weight:800;color:var(--lime-deep)}
+.tcw-chip.on{background:var(--ink);color:#fff}
+.tcw-chip.on b{color:var(--lime)}
+.tcw-chip:active{transform:scale(.96)}
+.tcw-tip{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;border-radius:var(--r-sm);background:var(--lime-soft);text-align:left;font-size:12.5px;color:var(--ink);transition:transform 160ms var(--ease-out)}
+.tcw-tip:active{transform:scale(.99)}
+.tcw-tip svg{flex:none;color:var(--lime-deep)}
+.tcw-tip span{flex:1;min-width:0}
+.tcw-tip em{flex:none;font-style:normal;font-weight:800;color:var(--lime-deep)}

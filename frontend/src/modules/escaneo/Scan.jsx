@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError, isNetworkError } from '../../core/api'
-import { cachedProduct, moveStock, refreshInventory, setReserveQty, undoQueued, useLayout, useReserve } from '../../core/useApi'
+import { cachedProduct, moveStock, refreshInventory, setReserveQty, undoQueued, useLayout, useProducts, useReserve } from '../../core/useApi'
 import { useToast } from '../../ui/ToastContext'
 import { useConfirm } from '../../ui/ConfirmContext'
 import { locationGroups } from '../../core/locationGroups'
@@ -22,6 +22,7 @@ import FromPick from '../../ui/FromPick'
 import { itemsText, sendNotice, useNotifyPick } from '../avisos/Notices'
 import LocationPicker, { LocationPickerSheet } from '../../ui/LocationPicker'
 import SplitRow from '../remisiones/SplitRow'
+import { whereToStore } from './whereToStore'
 import { blockId, partsTotal, splitRow } from '../remisiones/refs'
 
 const MODES = [
@@ -232,6 +233,9 @@ export default function Scan() {
   const curPlace = place ?? urlLoc
   const firstLoc = groups[0]?.options[0]?.id || ''
   const locNames = useMemo(() => new Map(groups.flatMap((g) => g.options).map((o) => [o.id, o.name])), [groups])
+  // lo de la bodega hoy: para decir en cada entrada donde hay y donde guardarla
+  const { data: allProducts } = useProducts()
+  const productBySku = useMemo(() => new Map((allProducts || []).map((p) => [p.sku, p])), [allProducts])
 
   const pendingRef = useRef(null)
   pendingRef.current = pendingSku || newReserve?.sku || null
@@ -726,6 +730,35 @@ export default function Scan() {
                 {places.length > 0 && (
                   <FromPick places={places} value={l.from} qty={l.qty} disabled={saving} onChange={(v) => setFrom(l.key, v)} />
                 )}
+                {l.type === 'in' && !l.parts && (() => {
+                  // donde hay de esa talla y donde conviene guardarla (se toca para guardarla ahi)
+                  const p = productBySku.get(l.sku) || { sku: l.sku, name: l.name, size: l.size, stock: l.stock, location_id: l.main }
+                  const w = whereToStore(p, allProducts, outlet)
+                  const cur = l.loc || l.main
+                  return (
+                    <div className="to-confirm-where">
+                      {w.here.length > 0 ? (
+                        <span className="tcw-here">
+                          Hay:
+                          {w.here.slice(0, 4).map((h) => (
+                            <button key={h.id} type="button" className={`tcw-chip${h.id === cur ? ' on' : ''}`} disabled={saving}
+                                    onClick={() => setLineLoc(l.key, h.id)} aria-label={`Guardarla en ${h.name}: ahí hay ${h.qty}`}>
+                              {h.id}<b>{h.qty}</b>
+                            </button>
+                          ))}
+                          {w.here.length > 4 && <small>y {w.here.length - 4} más</small>}
+                        </span>
+                      ) : <span className="tcw-here">De esta talla no hay en la bodega todavía</span>}
+                      {w.best && w.best.id !== cur && (
+                        <button type="button" className="tcw-tip" disabled={saving} onClick={() => setLineLoc(l.key, w.best.id)}>
+                          <Icon name="sparkle" size={14} stroke={2.2} />
+                          <span>Mejor en <b>{w.best.id}</b>: {w.best.why}</span>
+                          <em>Usar</em>
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
                 {l.type === 'in' && l.qty > 1 && !l.parts && (
                   <button type="button" className="link-btn to-confirm-split" disabled={saving}
                           onClick={() => setParts(l.key, [{ key: blockId(), loc: '', qty: 0 }])}>
